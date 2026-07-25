@@ -97,6 +97,22 @@ fn esc_bang_double_size_scales_font_a_cells_and_line_advance() {
 }
 
 #[test]
+fn gs_bang_scales_character_width_and_height_independently_up_to_eight_times() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [GS, b'!', 0x23, GS, b'B', 1, b' ', LF];
+
+    let rendered = render(&input, &profile).expect("GS ! should scale the character");
+    let surface = &rendered.sheets[0].surface;
+
+    // 23h selects width x3 (bits 4–6 = 2) and height x4 (bits 0–2 = 3).
+    // A reversed space exposes the complete scaled 12×24-dot Font A cell.
+    assert_eq!((surface.width(), surface.height()), (384, 96));
+    assert_eq!(count_printed_dots(surface, 0, 36, 96), 36 * 96);
+}
+
+#[test]
 fn esc_e_emphasizes_text_without_changing_cell_advance() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")
@@ -197,6 +213,102 @@ fn esc_t_uses_the_encoding_mapped_to_each_profile_slot() {
         render(&[ESC, b't', 2, 0xbd, LF], &profile).expect("profile slot 2 should decode CP850");
 
     assert_eq!(cp437.sheets[0].surface, cp850.sheets[0].surface);
+}
+
+#[test]
+fn esc_t_decodes_a_windows_code_page_selected_by_the_profile() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+
+    // The cent sign is byte 9Bh in CP437 and A2h in Windows-1252.
+    let cp437 =
+        render(&[ESC, b't', 0, 0x9b, LF], &profile).expect("profile slot 0 should decode CP437");
+    let cp1252 =
+        render(&[ESC, b't', 16, 0xa2, LF], &profile).expect("profile slot 16 should decode CP1252");
+
+    assert_eq!(cp437.sheets[0].surface, cp1252.sheets[0].surface);
+}
+
+#[test]
+fn esc_t_accepts_the_profiles_supported_single_byte_code_pages() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let supported_slots = [
+        0,  // CP437
+        2,  // CP850
+        3,  // CP860
+        4,  // CP863
+        5,  // CP865
+        16, // CP1252
+        17, // CP866
+        18, // CP852
+        19, // CP858
+        25, // CP1257
+        27, // CP1258
+        28, // CP864
+        32, // CP1255
+        56, // CP861
+        60, // CP855
+        61, // CP857
+        62, // CP862
+        64, // CP737
+        66, // CP869
+        72, // CP1250
+        73, // CP1251
+        90, // CP1253
+        91, // CP1254
+        92, // CP1256
+        93, // CP720
+        95, // CP775
+    ];
+
+    for code_page in supported_slots {
+        render(&[ESC, b't', code_page, b'A', LF], &profile)
+            .unwrap_or_else(|error| panic!("profile slot {code_page} should render: {error}"));
+    }
+}
+
+#[test]
+fn undefined_code_page_bytes_return_a_diagnostic_instead_of_a_replacement_glyph() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+
+    let error = render(&[ESC, b't', 28, 0xa6], &profile)
+        .expect_err("A6h is undefined in the profile's CP864 table");
+
+    assert!(
+        matches!(
+            error,
+            RenderError::UndefinedCodePageByte {
+                byte: 0xa6,
+                code_page: 28,
+                ref encoding,
+                offset: 3,
+            } if encoding == "CP864"
+        ),
+        "unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn characters_missing_from_the_bundled_font_return_a_diagnostic() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+
+    let error = render(&[ESC, b't', 62, 0x80], &profile)
+        .expect_err("CP862 80h is Hebrew alef, which is not in the current font asset");
+
+    assert!(matches!(
+        error,
+        RenderError::MissingGlyph {
+            character: 'א',
+            offset: 3,
+        }
+    ));
 }
 
 #[test]

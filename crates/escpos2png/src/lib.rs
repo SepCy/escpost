@@ -1,8 +1,15 @@
 //! Dot-accurate ESC/POS rendering.
 
+use encoding_rs::{
+    Encoding, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255,
+    WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
+};
 use escpos2png_profiles::{Font as ProfileFont, PrinterProfile};
 use fontdue::{Font, FontSettings};
-use oem_cp::{Cp437, Cp850};
+use oem_cp::{
+    Cp437, Cp720, Cp737, Cp775, Cp850, Cp852, Cp855, Cp857, Cp858, Cp860, Cp861, Cp862, Cp863,
+    Cp864, Cp865, Cp866, Cp869, Cp874,
+};
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 use thiserror::Error;
@@ -89,6 +96,19 @@ pub enum RenderError {
         encoding: String,
         offset: usize,
     },
+
+    #[error(
+        "byte {byte:#04x} is undefined in code page {code_page} ({encoding}) at byte offset {offset}"
+    )]
+    UndefinedCodePageByte {
+        byte: u8,
+        code_page: u8,
+        encoding: String,
+        offset: usize,
+    },
+
+    #[error("bundled font has no glyph for {character:?} at byte offset {offset}")]
+    MissingGlyph { character: char, offset: usize },
 
     #[error("unsupported GS v 0 raster bit-image mode {mode} at byte offset {offset}")]
     UnsupportedRasterBitImageMode { mode: u8, offset: usize },
@@ -385,6 +405,16 @@ fn execute_gs_command(
     };
 
     match command {
+        0x21 => {
+            let Some(size) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS !",
+                    offset,
+                });
+            };
+            state.set_character_size(size);
+            Ok(3)
+        }
         0x42 => {
             let Some(reverse) = data.get(2).copied() else {
                 return Err(RenderError::TruncatedCommand {
@@ -601,6 +631,13 @@ impl PrinterState {
         self.underline_thickness = u32::from(mode & 0x80 != 0);
     }
 
+    fn set_character_size(&mut self, size: u8) {
+        // GS ! stores height minus one in bits 0–2 and width minus one in
+        // bits 4–6. Bits 3 and 7 are reserved and do not affect either value.
+        self.character_height_multiplier = u32::from(size & 0x07) + 1;
+        self.character_width_multiplier = u32::from((size >> 4) & 0x07) + 1;
+    }
+
     fn set_absolute_print_position(&mut self, motion_units: u16) {
         let position = self.horizontal_motion_units_to_dots(motion_units);
         // Epson specifies that out-of-area settings are ignored, leaving the
@@ -781,7 +818,20 @@ impl PrinterState {
             });
         }
 
-        let character = decode_printable_byte(byte, encoding);
+        let Some(character) = decode_printable_byte(byte, encoding) else {
+            return Err(RenderError::UndefinedCodePageByte {
+                byte,
+                code_page: self.active_code_page,
+                encoding: encoding.to_owned(),
+                offset,
+            });
+        };
+        // fontdue uses glyph index zero for the font's generic .notdef box.
+        // Report it instead of silently making unrelated scripts look equal.
+        if default_font().lookup_glyph_index(character) == 0 {
+            return Err(RenderError::MissingGlyph { character, offset });
+        }
+
         self.print_character(character);
         Ok(())
     }
@@ -962,15 +1012,76 @@ fn default_font() -> &'static Font {
 }
 
 fn is_supported_code_page_encoding(encoding: &str) -> bool {
-    matches!(encoding, "CP437" | "CP850")
+    matches!(
+        encoding,
+        "CP437"
+            | "CP720"
+            | "CP737"
+            | "CP775"
+            | "CP850"
+            | "CP852"
+            | "CP855"
+            | "CP857"
+            | "CP858"
+            | "CP860"
+            | "CP861"
+            | "CP862"
+            | "CP863"
+            | "CP864"
+            | "CP865"
+            | "CP866"
+            | "CP869"
+            | "CP874"
+            | "CP1250"
+            | "CP1251"
+            | "CP1252"
+            | "CP1253"
+            | "CP1254"
+            | "CP1255"
+            | "CP1256"
+            | "CP1257"
+            | "CP1258"
+    )
 }
 
-fn decode_printable_byte(byte: u8, encoding: &str) -> char {
+fn decode_printable_byte(byte: u8, encoding: &str) -> Option<char> {
     match encoding {
-        "CP437" => char::from(Cp437::from(byte)),
-        "CP850" => char::from(Cp850::from(byte)),
+        "CP437" => Some(char::from(Cp437::from(byte))),
+        "CP720" => Some(char::from(Cp720::from(byte))),
+        "CP737" => Some(char::from(Cp737::from(byte))),
+        "CP775" => Some(char::from(Cp775::from(byte))),
+        "CP850" => Some(char::from(Cp850::from(byte))),
+        "CP852" => Some(char::from(Cp852::from(byte))),
+        "CP855" => Some(char::from(Cp855::from(byte))),
+        "CP857" => Cp857::try_from(byte).ok().map(char::from),
+        "CP858" => Some(char::from(Cp858::from(byte))),
+        "CP860" => Some(char::from(Cp860::from(byte))),
+        "CP861" => Some(char::from(Cp861::from(byte))),
+        "CP862" => Some(char::from(Cp862::from(byte))),
+        "CP863" => Some(char::from(Cp863::from(byte))),
+        "CP864" => Cp864::try_from(byte).ok().map(char::from),
+        "CP865" => Some(char::from(Cp865::from(byte))),
+        "CP866" => Some(char::from(Cp866::from(byte))),
+        "CP869" => Some(char::from(Cp869::from(byte))),
+        "CP874" => Cp874::try_from(byte).ok().map(char::from),
+        "CP1250" => decode_with_encoding_rs(byte, WINDOWS_1250),
+        "CP1251" => decode_with_encoding_rs(byte, WINDOWS_1251),
+        "CP1252" => decode_with_encoding_rs(byte, WINDOWS_1252),
+        "CP1253" => decode_with_encoding_rs(byte, WINDOWS_1253),
+        "CP1254" => decode_with_encoding_rs(byte, WINDOWS_1254),
+        "CP1255" => decode_with_encoding_rs(byte, WINDOWS_1255),
+        "CP1256" => decode_with_encoding_rs(byte, WINDOWS_1256),
+        "CP1257" => decode_with_encoding_rs(byte, WINDOWS_1257),
+        "CP1258" => decode_with_encoding_rs(byte, WINDOWS_1258),
         _ => unreachable!("code-page support is checked when ESC t is executed"),
     }
+}
+
+fn decode_with_encoding_rs(byte: u8, encoding: &'static Encoding) -> Option<char> {
+    let bytes = [byte];
+    let (decoded, had_errors) = encoding.decode_without_bom_handling(&bytes);
+
+    (!had_errors).then(|| decoded.chars().next()).flatten()
 }
 
 impl MonoSurface {

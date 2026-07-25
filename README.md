@@ -11,12 +11,16 @@ resident font glyphs.
 
 ## Status
 
-The renderer currently supports profile-driven Font A/B text with CP437 and
-CP850 selection, wrapping, combined character sizing, emphasis, underline,
-reverse printing, justification, line spacing and feeds, all four `ESC *`
-bit-image modes, all `GS v 0` raster-image scaling modes, absolute and relative
-horizontal positioning, motion units, margins, and print-area widths. It emits
-one-bit grayscale PNG.
+The renderer currently supports profile-driven Font A/B text with common OEM
+and Windows single-byte code pages, wrapping, character sizing up to 8×,
+emphasis, underline, reverse printing, justification, line spacing and feeds,
+all four `ESC *` bit-image modes, all `GS v 0` raster-image scaling modes,
+absolute and relative horizontal positioning, motion units, margins, and
+print-area widths. It emits one-bit grayscale PNG.
+
+The bundled representative font currently covers Latin, Greek, and Cyrillic.
+A decoded character outside that asset returns a diagnostic rather than a
+misleading replacement glyph.
 
 The Python binding and conformance-case CLI can render, raw-print, or calibrate
 the same verified byte stream.

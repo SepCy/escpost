@@ -6,6 +6,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+encoding_rs.workspace = true
 escpos2png-profiles = { path = "../escpos2png-profiles" }
 fontdue.workspace = true
 oem_cp.workspace = true

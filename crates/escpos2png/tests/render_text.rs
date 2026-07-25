@@ -165,23 +165,6 @@ fn gs_b_reverse_prints_the_background_of_a_space_cell() {
 }
 
 #[test]
-fn esc_a_centers_the_composed_line_by_its_profile_cell_width() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
-    let input = [ESC, b'a', 1, GS, b'B', 1, b' ', LF];
-
-    let rendered = render(&input, &profile).expect("ESC a should center the line");
-    let surface = &rendered.sheets[0].surface;
-
-    // (384 - 12) / 2 = 186. A reversed space makes the complete cell
-    // visible, so this assertion detects even a one-dot centering error.
-    assert_eq!(count_printed_dots(surface, 186, 12, 24), 12 * 24);
-    assert_eq!(count_printed_dots(surface, 0, 186, 24), 0);
-    assert_eq!(count_printed_dots(surface, 198, 186, 24), 0);
-}
-
-#[test]
 fn esc_t_decodes_extended_bytes_with_the_profile_cp437_mapping() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")

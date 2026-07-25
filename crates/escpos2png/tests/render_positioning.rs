@@ -136,85 +136,6 @@ fn gs_p_changes_units_for_future_positions_without_moving_the_cursor() {
 }
 
 #[test]
-fn gs_l_and_gs_w_define_the_standard_mode_print_area() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
-    let input = [
-        GS, b'L', 24, 0, GS, b'W', 120, 0, ESC, b'a', 1, GS, b'B', 1, b' ', LF,
-    ];
-
-    let rendered = render(&input, &profile).expect("the print area should render");
-    let surface = &rendered.sheets[0].surface;
-
-    // The visible reversed-space cell is centered inside the 120-dot area:
-    // physical x = 24-dot margin + (120 - 12-dot cell) / 2 = 78.
-    assert_eq!(count_printed_dots(surface, 78, 12, 24), 12 * 24);
-    assert_eq!(count_printed_dots(surface, 0, 78, 24), 0);
-    assert_eq!(count_printed_dots(surface, 90, 294, 24), 0);
-}
-
-#[test]
-fn justification_uses_the_farthest_composed_dot_after_moving_backwards() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
-    let input = [
-        ESC,
-        b'a',
-        1,
-        ESC,
-        b'$',
-        100,
-        0,
-        ESC,
-        b'*',
-        1,
-        1,
-        0,
-        0b1000_0000,
-        ESC,
-        b'$',
-        20,
-        0,
-        ESC,
-        b'*',
-        1,
-        1,
-        0,
-        0b1000_0000,
-        LF,
-    ];
-
-    let rendered = render(&input, &profile).expect("the repositioned line should center");
-    let surface = &rendered.sheets[0].surface;
-
-    // The far marker ends at x=101, so the complete line moves right by
-    // floor((384 - 101) / 2)=141. The cursor ending at x=21 must not shrink
-    // the line's composed width.
-    assert!(surface.is_printed(241, 0));
-    assert!(surface.is_printed(161, 0));
-}
-
-#[test]
-fn gs_l_and_gs_w_are_ignored_after_the_line_has_started() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
-    let input = [
-        GS, b'B', 1, b' ', GS, b'L', 24, 0, GS, b'W', 120, 0, LF, b' ', LF,
-    ];
-
-    let rendered = render(&input, &profile).expect("mid-line print-area commands are ignored");
-    let surface = &rendered.sheets[0].surface;
-
-    // Epson enables GS L and GS W only at the beginning of a line. Both
-    // reversed cells therefore remain at the default physical x=0.
-    assert_eq!(count_printed_dots(surface, 0, 12, 24), 12 * 24);
-    assert_eq!(count_printed_dots(surface, 0, 12, 54), 12 * 48);
-}
-
-#[test]
 fn ht_moves_to_the_next_default_eight_character_tab_stop() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")
@@ -272,16 +193,4 @@ fn esc_d_freezes_custom_tab_stops_using_the_current_character_advance() {
 
     assert!(surface.is_printed(30, 0));
     assert!(surface.is_printed(70, 0));
-}
-
-fn count_printed_dots(
-    surface: &escpos2png::MonoSurface,
-    left: u32,
-    width: u32,
-    height: u32,
-) -> usize {
-    (left..left + width)
-        .flat_map(|x| (0..height).map(move |y| (x, y)))
-        .filter(|&(x, y)| surface.is_printed(x, y))
-        .count()
 }

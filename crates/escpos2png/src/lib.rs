@@ -1149,7 +1149,19 @@ impl PrinterState {
         vertical_scale: u32,
     ) {
         // GS v 0 is row-major, unlike ESC *. Its image is printed immediately
-        // from the left edge and advances the paper by the rendered height.
+        // and advances the paper by the rendered height.
+        let image_width = (width_bytes as u32)
+            .saturating_mul(8)
+            .saturating_mul(horizontal_scale);
+        let remaining_width = self.print_area_width.saturating_sub(image_width);
+        let image_left = match self.justification {
+            Justification::Left => 0,
+            Justification::Center => remaining_width / 2,
+            Justification::Right => remaining_width,
+        };
+        let physical_left = self.print_area_left.saturating_add(image_left);
+        let print_area_right = self.print_area_left.saturating_add(self.print_area_width);
+
         for (source_y, row) in payload.chunks_exact(width_bytes).enumerate() {
             for (byte_index, byte) in row.iter().copied().enumerate() {
                 for bit in 0..8 {
@@ -1158,9 +1170,15 @@ impl PrinterState {
                     }
 
                     let source_x = byte_index as u32 * 8 + bit;
-                    let left = source_x * horizontal_scale;
+                    let left =
+                        physical_left.saturating_add(source_x.saturating_mul(horizontal_scale));
                     let top = self.line_top + source_y as u32 * vertical_scale;
                     for x in left..left + horizontal_scale {
+                        // The printer drops image dots beyond the active print
+                        // area instead of letting them spill into its margins.
+                        if x >= print_area_right {
+                            continue;
+                        }
                         for y in top..top + vertical_scale {
                             self.roll.print_dot(x, y);
                         }

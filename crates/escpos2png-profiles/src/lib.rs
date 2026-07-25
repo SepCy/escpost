@@ -24,6 +24,7 @@ pub struct PrinterProfile {
     pub motion: MotionUnits,
     pub defaults: PrinterDefaults,
     pub fonts: Fonts,
+    pub features: Features,
     /// Maps each printer-specific `ESC t n` slot to a named encoding.
     pub code_pages: BTreeMap<u8, String>,
     pub sources: Vec<String>,
@@ -70,6 +71,24 @@ pub struct Font {
     pub cell_height_dots: u32,
     /// Baseline measured down from the top of the unscaled cell.
     pub baseline_dots: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Features {
+    pub barcode_a: bool,
+    pub barcode_b: bool,
+    pub bit_image_column: bool,
+    pub bit_image_raster: bool,
+    pub graphics: bool,
+    pub high_density: bool,
+    pub paper_full_cut: bool,
+    pub paper_part_cut: bool,
+    pub pdf417_code: bool,
+    pub pulse_bel: bool,
+    pub pulse_standard: bool,
+    pub qr_code: bool,
+    pub star_commands: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,6 +192,7 @@ struct UpstreamCapabilities {
 struct ImportedProfile {
     media: ImportedMedia,
     fonts: BTreeMap<String, ImportedFont>,
+    features: Features,
     #[serde(rename = "codePages")]
     code_pages: BTreeMap<String, String>,
 }
@@ -231,6 +251,7 @@ pub fn compile_profile(
             motion: enrichment.motion,
             defaults: enrichment.defaults,
             fonts: enrichment.fonts,
+            features: imported.features,
             code_pages,
             sources: enrichment.sources,
             approximations: enrichment.approximations,

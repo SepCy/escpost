@@ -1,6 +1,6 @@
 schema_version = 1
 profile = "NT-5890K"
-revision = 4
+revision = 5
 upstream_profile_sha256 = "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
 
 sources = [

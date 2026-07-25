@@ -6,6 +6,7 @@ const CAPABILITIES_JSON: &[u8] =
 const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
+const HT: u8 = 0x09;
 const LF: u8 = 0x0a;
 
 #[test]
@@ -211,6 +212,66 @@ fn gs_l_and_gs_w_are_ignored_after_the_line_has_started() {
     // reversed cells therefore remain at the default physical x=0.
     assert_eq!(count_printed_dots(surface, 0, 12, 24), 12 * 24);
     assert_eq!(count_printed_dots(surface, 0, 12, 54), 12 * 48);
+}
+
+#[test]
+fn ht_moves_to_the_next_default_eight_character_tab_stop() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [HT, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+
+    let rendered = render(&input, &profile).expect("HT should use the default tab stops");
+    let surface = &rendered.sheets[0].surface;
+
+    // Default tab stops are every eight default-font cells. Font A advances
+    // 12 dots, so the first marker begins at 8 × 12 = 96.
+    assert!(surface.is_printed(96, 0));
+    assert!(surface.is_printed(96, 1));
+    assert!(surface.is_printed(96, 2));
+}
+
+#[test]
+fn esc_d_freezes_custom_tab_stops_using_the_current_character_advance() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        // Font B is 9 dots wide; one dot of ESC SP makes a 10-dot advance.
+        ESC,
+        b'M',
+        1,
+        ESC,
+        b' ',
+        1,
+        // Store tab columns 3 and 7 as fixed dot positions 30 and 70.
+        ESC,
+        b'D',
+        3,
+        7,
+        0,
+        HT,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        HT,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        LF,
+    ];
+
+    let rendered = render(&input, &profile).expect("ESC D should define both tab stops");
+    let surface = &rendered.sheets[0].surface;
+
+    assert!(surface.is_printed(30, 0));
+    assert!(surface.is_printed(70, 0));
 }
 
 fn count_printed_dots(

@@ -113,6 +113,16 @@ pub enum RenderError {
     #[error("unsupported GS v 0 raster bit-image mode {mode} at byte offset {offset}")]
     UnsupportedRasterBitImageMode { mode: u8, offset: usize },
 
+    #[error("unsupported GS V cut mode {mode} at byte offset {offset}")]
+    UnsupportedCutMode { mode: u8, offset: usize },
+
+    #[error("{command} is not supported by printer profile {profile:?} at byte offset {offset}")]
+    CommandUnsupportedByProfile {
+        command: &'static str,
+        profile: String,
+        offset: usize,
+    },
+
     #[error(
         "invalid GS v 0 raster dimensions {width_bytes} byte(s) by {height_dots} dot(s) \
          at byte offset {offset}"
@@ -136,6 +146,10 @@ pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, Ren
 
     while offset < data.len() {
         offset += match data[offset] {
+            0x09 => {
+                state.horizontal_tab();
+                1
+            }
             0x0a => {
                 state.line_feed();
                 1
@@ -152,14 +166,13 @@ pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, Ren
         };
     }
 
-    let png = encode_png(&state.roll)?;
+    let mut sheets = Vec::new();
+    for surface in state.into_surfaces() {
+        let png = encode_png(&surface)?;
+        sheets.push(RenderedSheet { surface, png });
+    }
 
-    Ok(RenderResult {
-        sheets: vec![RenderedSheet {
-            surface: state.roll,
-            png,
-        }],
-    })
+    Ok(RenderResult { sheets })
 }
 
 fn encode_png(surface: &MonoSurface) -> Result<Vec<u8>, png::EncodingError> {
@@ -267,6 +280,7 @@ fn execute_esc_command(
             state.set_line_spacing(spacing);
             Ok(3)
         }
+        0x44 => execute_esc_d(data, offset, state),
         0x45 => {
             let Some(emphasis) = data.get(2).copied() else {
                 return Err(RenderError::TruncatedCommand {
@@ -275,6 +289,16 @@ fn execute_esc_command(
                 });
             };
             state.set_emphasis(emphasis & 0x01 != 0);
+            Ok(3)
+        }
+        0x4a => {
+            let Some(distance) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC J",
+                    offset,
+                });
+            };
+            state.print_and_feed_motion_units(distance);
             Ok(3)
         }
         0x4d => {
@@ -355,6 +379,41 @@ fn execute_esc_command(
         }
         command => Err(RenderError::UnsupportedEscCommand { command, offset }),
     }
+}
+
+fn execute_esc_d(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    let mut columns = Vec::new();
+    let mut command_length = 2;
+
+    loop {
+        let Some(column) = data.get(command_length).copied() else {
+            return Err(RenderError::TruncatedCommand {
+                command: "ESC D",
+                offset,
+            });
+        };
+        if column == 0 {
+            command_length += 1;
+            break;
+        }
+
+        let no_longer_ascending = columns.last().is_some_and(|&previous| column <= previous);
+        if columns.len() == 32 || no_longer_ascending {
+            // Epson treats the first excess or non-ascending byte as normal
+            // input, so leave it for the outer parser instead of consuming it.
+            break;
+        }
+
+        columns.push(column);
+        command_length += 1;
+    }
+
+    state.set_tab_positions(&columns);
+    Ok(command_length)
 }
 
 fn execute_esc_star(
@@ -455,8 +514,43 @@ fn execute_gs_command(
             state.set_print_area_width(u16::from_le_bytes([low, high]));
             Ok(4)
         }
+        0x56 => execute_gs_v(data, offset, state),
         0x76 => execute_gs_v0(data, offset, state),
         command => Err(RenderError::UnsupportedGsCommand { command, offset }),
+    }
+}
+
+fn execute_gs_v(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    let Some(mode) = data.get(2).copied() else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS V",
+            offset,
+        });
+    };
+
+    match mode {
+        0 | 48 => {
+            state.cut(false, offset)?;
+            Ok(3)
+        }
+        1 | 49 => {
+            state.cut(true, offset)?;
+            Ok(3)
+        }
+        65 | 66 | 97 | 98 | 103 | 104 => {
+            if data.get(3).is_none() {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS V",
+                    offset,
+                });
+            }
+            Err(RenderError::UnsupportedCutMode { mode, offset })
+        }
+        mode => Err(RenderError::UnsupportedCutMode { mode, offset }),
     }
 }
 
@@ -518,6 +612,8 @@ fn execute_gs_v0(
 
 #[derive(Debug)]
 struct PrinterState {
+    profile_id: String,
+    completed_sheets: Vec<MonoSurface>,
     roll: MonoSurface,
     // Text and ESC * data are composed on a line first because ESC a applies
     // justification when the printer receives the line feed, not per glyph.
@@ -545,6 +641,8 @@ struct PrinterState {
     default_code_page: u8,
     active_code_page: u8,
     right_side_character_spacing: u32,
+    default_tab_positions: Vec<u32>,
+    tab_positions: Vec<u32>,
     character_width_multiplier: u32,
     character_height_multiplier: u32,
     emphasized: bool,
@@ -552,6 +650,8 @@ struct PrinterState {
     reversed: bool,
     justification: Justification,
     line_height: u32,
+    supports_full_cut: bool,
+    supports_partial_cut: bool,
 }
 
 impl PrinterState {
@@ -560,8 +660,15 @@ impl PrinterState {
         let default_line_spacing = profile.defaults.line_spacing_dots;
         let font_a = profile.fonts.a.clone();
         let font_b = profile.fonts.b.clone();
+        // ESC/POS defaults to columns 8, 16, ... 248 measured with the
+        // power-on font and size.
+        let default_tab_positions = (1..=31)
+            .map(|index| index * 8 * font_a.cell_width_dots)
+            .collect::<Vec<_>>();
 
         Self {
+            profile_id: profile.id.clone(),
+            completed_sheets: Vec::new(),
             roll: MonoSurface::new(width),
             line: MonoSurface::new(width),
             print_area_left: 0,
@@ -585,6 +692,8 @@ impl PrinterState {
             default_code_page: profile.defaults.code_page,
             active_code_page: profile.defaults.code_page,
             right_side_character_spacing: 0,
+            tab_positions: default_tab_positions.clone(),
+            default_tab_positions,
             character_width_multiplier: 1,
             character_height_multiplier: 1,
             emphasized: false,
@@ -592,6 +701,8 @@ impl PrinterState {
             reversed: false,
             justification: Justification::Left,
             line_height: 0,
+            supports_full_cut: profile.features.paper_full_cut,
+            supports_partial_cut: profile.features.paper_part_cut,
         }
     }
 
@@ -610,6 +721,7 @@ impl PrinterState {
         self.active_font = self.font_a.clone();
         self.active_code_page = self.default_code_page;
         self.right_side_character_spacing = 0;
+        self.tab_positions.clone_from(&self.default_tab_positions);
         self.character_width_multiplier = 1;
         self.character_height_multiplier = 1;
         self.emphasized = false;
@@ -699,6 +811,46 @@ impl PrinterState {
         self.line_used_width = 0;
     }
 
+    fn horizontal_tab(&mut self) {
+        let next_position = self
+            .tab_positions
+            .iter()
+            .copied()
+            .find(|&position| position > self.print_x);
+
+        match next_position {
+            Some(position) if position <= self.line.width => {
+                self.print_x = position;
+                self.line_used_width = self.line_used_width.max(position);
+            }
+            Some(_) => {
+                // Epson performs buffer-full printing and applies HT again
+                // from the next line when the next stop is outside the area.
+                self.line_feed();
+                if let Some(position) = self
+                    .tab_positions
+                    .iter()
+                    .copied()
+                    .find(|&position| position <= self.line.width)
+                {
+                    self.print_x = position;
+                    self.line_used_width = position;
+                }
+            }
+            None => {}
+        }
+
+        self.at_beginning_of_line = false;
+    }
+
+    fn set_tab_positions(&mut self, columns: &[u8]) {
+        let character_advance = self.current_character_advance_width();
+        self.tab_positions = columns
+            .iter()
+            .map(|&column| u32::from(column).saturating_mul(character_advance))
+            .collect();
+    }
+
     fn set_relative_print_position(&mut self, motion_units: i16) {
         let distance = self.horizontal_motion_units_to_dots(motion_units.unsigned_abs());
         let position = if motion_units.is_negative() {
@@ -732,6 +884,17 @@ impl PrinterState {
 
     fn restore_default_line_spacing(&mut self) {
         self.line_spacing = self.default_line_spacing;
+    }
+
+    fn print_and_feed_motion_units(&mut self, motion_units: u8) {
+        let feed_dots = (u64::from(motion_units) * u64::from(self.vertical_dpi)
+            / u64::from(self.vertical_motion_units_per_inch)) as u32;
+        // ESC J is a one-off feed. Reuse the normal line commit so tall data
+        // cannot overlap, then restore the persistent ESC 2/ESC 3 spacing.
+        let line_spacing = self.line_spacing;
+        self.line_spacing = feed_dots;
+        self.feed_lines(1);
+        self.line_spacing = line_spacing;
     }
 
     fn set_emphasis(&mut self, emphasized: bool) {
@@ -837,11 +1000,7 @@ impl PrinterState {
     }
 
     fn print_character(&mut self, character: char) {
-        let cell_width = self
-            .active_font
-            .cell_width_dots
-            .saturating_add(self.right_side_character_spacing)
-            .saturating_mul(self.character_width_multiplier);
+        let cell_width = self.current_character_advance_width();
         let cell_height = self
             .active_font
             .cell_height_dots
@@ -921,6 +1080,13 @@ impl PrinterState {
         self.at_beginning_of_line = false;
     }
 
+    fn current_character_advance_width(&self) -> u32 {
+        self.active_font
+            .cell_width_dots
+            .saturating_add(self.right_side_character_spacing)
+            .saturating_mul(self.character_width_multiplier)
+    }
+
     fn paint_bit_image(
         &mut self,
         payload: &[u8],
@@ -997,8 +1163,48 @@ impl PrinterState {
         self.at_beginning_of_line = true;
     }
 
+    fn cut(&mut self, partial: bool, offset: usize) -> Result<(), RenderError> {
+        if !self.at_beginning_of_line {
+            return Ok(());
+        }
+
+        let supported = if partial {
+            self.supports_partial_cut
+        } else {
+            self.supports_full_cut
+        };
+        if !supported {
+            return Err(RenderError::CommandUnsupportedByProfile {
+                command: if partial {
+                    "GS V partial cut"
+                } else {
+                    "GS V full cut"
+                },
+                profile: self.profile_id.clone(),
+                offset,
+            });
+        }
+
+        // Function A cuts at the current paper position; it does not add a
+        // model-dependent feed-to-cutter distance.
+        let next_roll = MonoSurface::new(self.roll.width);
+        self.completed_sheets
+            .push(std::mem::replace(&mut self.roll, next_roll));
+        self.line_top = 0;
+        Ok(())
+    }
+
     fn line_feed(&mut self) {
         self.feed_lines(1);
+    }
+
+    fn into_surfaces(mut self) -> Vec<MonoSurface> {
+        // A cut already finalized the preceding roll. Do not invent a blank
+        // trailing receipt when the job ends immediately after that cut.
+        if self.roll.height > 0 {
+            self.completed_sheets.push(self.roll);
+        }
+        self.completed_sheets
     }
 }
 

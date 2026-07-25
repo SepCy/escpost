@@ -94,6 +94,12 @@ An upstream update that changes only an unrelated profile therefore does not
 invalidate `NT-5890K`. A change to `NT-5890K`, `POS-5890`, or another ancestor
 changes its resolved hash and requires review.
 
+The compiled runtime profile also imports upstream command-capability flags,
+such as raster-image, barcode, QR-code, and cutter support. Rendering uses
+these flags to reject commands that the selected printer cannot execute. They
+remain protected by the same resolved-profile hash, so an upstream capability
+change cannot silently alter a compiled profile.
+
 ## Enrichment document
 
 Enrichments are partial, typed TOML documents:

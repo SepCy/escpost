@@ -43,3 +43,37 @@ fn esc_d_feeds_n_current_lines_without_changing_line_spacing() {
 
     assert_eq!((surface.width(), surface.height()), (384, 28));
 }
+
+#[test]
+fn esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        0x1b,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        0x1b,
+        b'J',
+        10,
+        0x1b,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        0x0a,
+    ];
+
+    let rendered = render(&input, &profile).expect("ESC J should print and feed");
+    let surface = &rendered.sheets[0].surface;
+
+    // The profile uses one dot per vertical motion unit. ESC J places the
+    // second marker at y=10 without replacing the 30-dot line-spacing state.
+    assert_eq!((surface.width(), surface.height()), (384, 40));
+    assert!(surface.is_printed(0, 0));
+    assert!(surface.is_printed(0, 10));
+}

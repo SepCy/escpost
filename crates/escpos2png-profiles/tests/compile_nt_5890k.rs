@@ -26,7 +26,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         ),
         (
             "NT-5890K",
-            4,
+            5,
             384,
             203,
             203,
@@ -58,6 +58,16 @@ fn nt_5890k_compiles_to_rendering_geometry() {
     assert_eq!(
         compiled.profile.code_pages.get(&0).map(String::as_str),
         Some("CP437")
+    );
+    assert_eq!(
+        (
+            compiled.profile.features.bit_image_column,
+            compiled.profile.features.bit_image_raster,
+            compiled.profile.features.paper_full_cut,
+            compiled.profile.features.paper_part_cut,
+            compiled.profile.features.qr_code,
+        ),
+        (true, true, false, false, false)
     );
 }
 

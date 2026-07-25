@@ -77,3 +77,34 @@ fn esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
     assert!(surface.is_printed(0, 0));
     assert!(surface.is_printed(0, 10));
 }
+
+#[test]
+fn gs_v0_feeds_by_image_height_instead_of_the_selected_line_spacing() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        0x1b,
+        b'3',
+        50,
+        0x1d,
+        b'v',
+        b'0',
+        0,
+        1,
+        0,
+        2,
+        0,
+        0b1000_0000,
+        0b1000_0000,
+    ];
+
+    let rendered = render(&input, &profile).expect("GS v 0 should ignore line spacing");
+    let surface = &rendered.sheets[0].surface;
+
+    // GS v 0 advances by its two rendered rows. ESC 3 remains active for the
+    // next text line but must not add a 50-dot feed to this image.
+    assert_eq!(surface.height(), 2);
+    assert!(surface.is_printed(0, 0));
+    assert!(surface.is_printed(0, 1));
+}

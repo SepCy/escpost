@@ -17,8 +17,8 @@ a focused checklist, not a request to test every possible command ordering.
 
 | Governing state or event | Affected behavior | Required coverage | Status |
 |---|---|---|---|
-| `ESC a` justification | Text and `ESC *` graphics | Left, center, and right placement inside the active print area | Partial |
-| `ESC a` justification | `GS v 0` raster graphics | Left, center, and right placement inside the active print area | Partial |
+| `ESC a` justification | Text and `ESC *` graphics | Left, center, and right placement inside the active print area | Covered |
+| `ESC a` justification | `GS v 0` raster graphics | Left, center, and right placement inside the active print area | Covered |
 | `ESC a` justification | Barcodes and two-dimensional symbols | Left, center, and right placement inside the active print area | Planned |
 | `GS L` and `GS W` print area | Text and `ESC *` graphics | Origin, width, justification, clipping, and oversized data | Partial |
 | `GS L` and `GS W` print area | `GS v 0` raster graphics | Origin, width, justification, clipping, and oversized data | Partial |
@@ -26,8 +26,8 @@ a focused checklist, not a request to test every possible command ordering.
 | `ESC !`, `ESC M`, and `GS !` text metrics | Tabs, wrapping, spacing, and absolute or relative positioning | Cursor movement uses the active character cell and size at the documented time | Partial |
 | `ESC 2` and `ESC 3` line spacing | Text, `ESC *`, and raster graphics | Persistent spacing, tall-content clearance, and commands that feed independently | Partial |
 | Beginning-of-line state | Justification, print-area, raster, and cut commands | Commands are accepted, ignored, or treated as data exactly as documented | Partial |
-| `ESC @` initialization | Persistent modes, motion units, tabs, print area, and pending data | Defaults are restored, pending data is cleared, and already-fed paper remains | Partial |
-| Text print modes | Raster graphics, barcodes, and two-dimensional symbols | Modes that the specification excludes do not alter graphics or symbols | Planned |
+| `ESC @` initialization | Persistent modes, motion units, tabs, print area, and pending data | Defaults are restored, pending data is cleared, and already-fed paper remains | Covered |
+| Text print modes | Raster graphics, barcodes, and two-dimensional symbols | Modes that the specification excludes do not alter graphics or symbols | Partial |
 | Cuts | Buffered data, paper position, and sheet boundaries | Documented flush/order behavior and full versus partial sheet results | Partial |
 
 ## Test-file ownership

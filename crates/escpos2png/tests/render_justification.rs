@@ -26,6 +26,39 @@ fn esc_a_centers_text_by_its_profile_cell_width() {
 }
 
 #[test]
+fn esc_a_right_justifies_text_by_its_profile_cell_width() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [ESC, b'a', 2, GS, b'B', 1, b' ', LF];
+
+    let rendered = render(&input, &profile).expect("ESC a should right-justify the line");
+    let surface = &rendered.sheets[0].surface;
+
+    // A 12-dot reversed space occupies x=372..383 in the 384-dot print area.
+    assert_eq!(count_printed_dots(surface, 372, 12, 24), 12 * 24);
+    assert_eq!(count_printed_dots(surface, 0, 372, 24), 0);
+}
+
+#[test]
+fn esc_a_right_justifies_column_format_graphics() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [ESC, b'a', 2, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+
+    let rendered = render(&input, &profile).expect("ESC * should use line justification");
+    let surface = &rendered.sheets[0].surface;
+
+    // Mode 1 produces one horizontal printer dot. Right justification moves
+    // that complete one-dot image to the final x coordinate.
+    assert!(surface.is_printed(383, 0));
+    assert!(surface.is_printed(383, 1));
+    assert!(surface.is_printed(383, 2));
+    assert!(!surface.is_printed(0, 0));
+}
+
+#[test]
 fn esc_a_centers_a_raster_image_inside_the_active_print_area() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")

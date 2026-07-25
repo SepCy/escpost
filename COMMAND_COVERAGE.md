@@ -41,7 +41,7 @@ rather than guess.
 | `HT` | Move to the next horizontal tab stop | Implemented | Implemented | Pending |
 | `LF` | Print and feed one line | Implemented | Implemented | Pending |
 | `CR` | Carriage-return behavior selected by the profile | Planned | Planned | Pending |
-| `ESC @` | Initialize printer state and clear pending print data | Partial | Partial | Pending |
+| `ESC @` | Initialize printer state and clear pending print data | Implemented | Implemented | Pending |
 | `ESC SP` | Set right-side character spacing | Implemented | Implemented | Pending |
 | `ESC !` | Select Font A/B and common print modes | Implemented | Implemented | Pending |
 | `ESC -` | Select underline thickness | Implemented | Implemented | Pending |
@@ -52,7 +52,7 @@ rather than guess.
 | `ESC J` | Print and feed by vertical motion units | Implemented | Implemented | Pending |
 | `ESC M` | Select Font A/B | Implemented | Implemented | Pending |
 | `ESC R` | Select international character substitutions | Planned | Planned | Pending |
-| `ESC a` | Select line justification | Partial | Partial | Pending |
+| `ESC a` | Select line justification | Implemented | Implemented | Pending |
 | `ESC d` | Print and feed whole lines | Implemented | Implemented | Pending |
 | `ESC t` | Select a profile-defined character-code table | Implemented | Implemented | Pending |
 | `GS !` | Select character width and height multipliers | Implemented | Implemented | Pending |

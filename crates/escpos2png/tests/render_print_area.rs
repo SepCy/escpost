@@ -65,6 +65,25 @@ fn gs_l_and_gs_w_bound_right_justified_raster_graphics() {
     assert!(!surface.is_printed(0, 0));
 }
 
+#[test]
+fn gs_w_clips_raster_graphics_at_the_print_area_edge() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        GS, b'L', 24, 0, GS, b'W', 8, 0, GS, b'v', b'0', 0, 2, 0, 1, 0, 0xff, 0xff,
+    ];
+
+    let rendered = render(&input, &profile).expect("the oversized raster should be clipped");
+    let surface = &rendered.sheets[0].surface;
+
+    // The declared image is 16 dots wide, but only the first eight dots fit
+    // inside the active area from physical x=24 through x=31.
+    assert_eq!(count_printed_dots(surface, 24, 8, 1), 8);
+    assert_eq!(count_printed_dots(surface, 0, 24, 1), 0);
+    assert_eq!(count_printed_dots(surface, 32, 352, 1), 0);
+}
+
 fn count_printed_dots(
     surface: &escpos2png::MonoSurface,
     left: u32,

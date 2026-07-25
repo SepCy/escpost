@@ -1,0 +1,20 @@
+# Rust
+/target/
+
+# Python bindings and development environments
+/.venv/
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+/.pytest_cache/
+/.mypy_cache/
+/.ruff_cache/
+
+# Distribution artifacts
+/dist/
+
+# Editors and operating systems
+.DS_Store
+*.swp
+*.swo

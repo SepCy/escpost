@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from escpos2png import render
+from escpos2png import render, render_result
 from escpos2png.cases import Case, CaseError
 from escpos2png.cli import main
 
@@ -29,6 +29,33 @@ class RenderBindingTest(unittest.TestCase):
         self.assertEqual(len(sheets), 1)
         self.assertIsInstance(sheets[0], bytes)
         self.assertEqual(_read_png_header(sheets[0]), (384, 30, 1, 0))
+
+    def test_render_result_preserves_diagnostics_and_reproducibility_metadata(self):
+        rendered = render_result(b"\n", profile="NT-5890K")
+
+        self.assertEqual(len(rendered["sheets"]), 1)
+        self.assertEqual(rendered["completeness"], "complete")
+        self.assertEqual(rendered["device_events"], [])
+        self.assertTrue(
+            any(
+                diagnostic["message"].startswith("profile approximation ")
+                for diagnostic in rendered["diagnostics"]
+            )
+        )
+        self.assertEqual(rendered["metadata"]["profile_id"], "NT-5890K")
+        self.assertEqual(rendered["metadata"]["profile_revision"], 5)
+        self.assertEqual(
+            rendered["metadata"]["upstream_commit"],
+            "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5",
+        )
+        self.assertEqual(
+            len(rendered["metadata"]["canonical_profile_sha256"]),
+            64,
+        )
+        self.assertEqual(
+            rendered["metadata"]["initial_state"],
+            "profile_reset_defaults",
+        )
 
 
 class CaseRenderCliTest(unittest.TestCase):

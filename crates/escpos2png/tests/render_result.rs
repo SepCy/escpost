@@ -42,6 +42,20 @@ fn reports_the_renderer_profile_and_initial_state_assumption() {
     );
     assert_eq!(rendered.metadata.profile_id, "NT-5890K");
     assert_eq!(rendered.metadata.profile_revision, 5);
+    assert_eq!(rendered.metadata.canonical_profile_sha256.len(), 64);
+    assert_eq!(
+        rendered.metadata.upstream_repository,
+        "https://github.com/receipt-print-hq/escpos-printer-db.git"
+    );
+    assert_eq!(
+        rendered.metadata.upstream_commit,
+        "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5"
+    );
+    assert_eq!(
+        rendered.metadata.upstream_profile_sha256,
+        "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
+    );
+    assert_eq!(rendered.metadata.enrichment_sha256.len(), 64);
     assert_eq!(
         rendered.metadata.initial_state,
         InitialStateAssumption::ProfileResetDefaults

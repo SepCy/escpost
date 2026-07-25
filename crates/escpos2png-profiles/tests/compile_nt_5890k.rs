@@ -1,10 +1,16 @@
-use escpos2png_profiles::{CompileProfileError, ProfileChange, ProfileChangeKind, compile_profile};
+use escpos2png_profiles::{
+    CanonicalProfileError, CompileProfileError, ProfileChange, ProfileChangeKind, compile_profile,
+    compile_profile_with_lock, from_canonical_json, to_canonical_json,
+};
+use serde_json::Value;
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
 const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
+const UPSTREAM_LOCK_TOML: &str = include_str!("../../../profiles/upstream.lock.toml");
 const RESOLVED_PROFILE_SHA256: &str =
     "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b";
+const UPSTREAM_COMMIT: &str = "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5";
 
 #[test]
 fn nt_5890k_compiles_to_rendering_geometry() {
@@ -23,6 +29,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
             compiled.profile.defaults.line_spacing_dots,
             compiled.profile.defaults.code_page,
             compiled.source.upstream_profile_sha256.as_str(),
+            compiled.source.upstream_commit.as_str(),
         ),
         (
             "NT-5890K",
@@ -35,8 +42,13 @@ fn nt_5890k_compiles_to_rendering_geometry() {
             30,
             0,
             RESOLVED_PROFILE_SHA256,
+            UPSTREAM_COMMIT,
         )
     );
+    assert_eq!(compiled.profile.source, compiled.source);
+    assert_eq!(compiled.profile.schema_version, 1);
+    assert_eq!(compiled.source.enrichment_sha256.len(), 64);
+    assert_eq!(compiled.source.canonical_profile_sha256.len(), 64);
     assert_eq!(
         (
             compiled.profile.fonts.a.columns,
@@ -68,6 +80,59 @@ fn nt_5890k_compiles_to_rendering_geometry() {
             compiled.profile.features.qr_code,
         ),
         (true, true, false, false, false)
+    );
+}
+
+#[test]
+fn canonical_profile_json_round_trips_and_verifies_its_hash() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the pinned NT-5890K profile should compile")
+        .profile;
+
+    let json = to_canonical_json(&profile).expect("the compiled profile should serialize");
+    let loaded = from_canonical_json(&json).expect("the canonical profile should verify");
+
+    assert_eq!(loaded, profile);
+    assert_eq!(
+        to_canonical_json(&loaded).expect("serialization should be deterministic"),
+        json
+    );
+}
+
+#[test]
+fn canonical_profile_json_rejects_behavior_changed_without_a_new_hash() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the pinned NT-5890K profile should compile")
+        .profile;
+    let json = to_canonical_json(&profile).expect("the compiled profile should serialize");
+    let mut document: Value =
+        serde_json::from_slice(&json).expect("the test should parse canonical JSON");
+    document["geometry"]["printable_width_dots"] = Value::from(576);
+    let tampered = serde_json::to_vec(&document).expect("the test should serialize tampered JSON");
+
+    let error = from_canonical_json(&tampered)
+        .expect_err("a behavior change without a new hash must be rejected");
+
+    assert!(matches!(
+        error,
+        CanonicalProfileError::CanonicalHashMismatch { .. }
+    ));
+}
+
+#[test]
+fn explicit_upstream_lock_is_preserved_as_profile_provenance() {
+    let alternate_lock = UPSTREAM_LOCK_TOML.replace(UPSTREAM_COMMIT, &"a".repeat(40));
+
+    let compiled = compile_profile_with_lock(CAPABILITIES_JSON, ENRICHMENT_TOML, &alternate_lock)
+        .expect("an explicit pinned source should compile");
+
+    assert_eq!(compiled.source.upstream_commit, "a".repeat(40));
+    assert_eq!(
+        compiled.profile.source.canonical_profile_sha256,
+        compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+            .expect("the bundled source should compile")
+            .source
+            .canonical_profile_sha256
     );
 }
 

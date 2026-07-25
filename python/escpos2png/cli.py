@@ -7,7 +7,7 @@ from typing import Sequence
 
 import click
 
-from ._native import render
+from ._native import render_result
 from .cases import Case, CaseError
 from .printers import (
     DiscoveredUsbPrinter,
@@ -254,13 +254,17 @@ def _announce_case(case: Case) -> None:
 
 
 def _write_rendered_sheets(case: Case, output_directory: Path) -> None:
-    sheets = render(case.input_bytes, profile=case.profile)
+    rendered = render_result(case.input_bytes, profile=case.profile)
     output_directory.mkdir(parents=True, exist_ok=True)
 
-    for sheet_number, png in enumerate(sheets, start=1):
+    for sheet_number, png in enumerate(rendered["sheets"], start=1):
         output = output_directory / f"actual-{sheet_number:03}.png"
         output.write_bytes(png)
         click.echo(f"wrote: {output}")
+    click.echo(
+        "canonical profile sha256: "
+        f"{rendered['metadata']['canonical_profile_sha256']}"
+    )
 
 
 def _send_to_printer(case: Case, config: Path, printer: str) -> None:

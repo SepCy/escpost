@@ -27,7 +27,9 @@ The Python binding and conformance-case CLI can render, raw-print, or calibrate
 the same verified byte stream.
 
 The Rust result includes bounded rendering, device events, profile
-approximations, completeness, and renderer/profile metadata.
+approximations, completeness, and reproducible renderer/profile metadata.
+Canonical profile JSON records the pinned upstream commit and verifies a
+content hash when it is loaded.
 
 This is not yet a general-purpose ESC/POS renderer. Unsupported data and
 commands return errors while command coverage grows one conformance case at a

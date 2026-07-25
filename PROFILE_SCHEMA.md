@@ -271,9 +271,17 @@ The enrichment and canonical hashes are generated automatically. Developers
 maintain only the upstream lock, expected resolved-profile hash, enrichment
 values, revision, and source references.
 
-The canonical hash covers behaviorally relevant generated content. Metadata
-that would make identical builds differ, such as build timestamps or absolute
-paths, is prohibited.
+The canonical hash covers the schema version, profile identity and revision,
+geometry, motion units, defaults, fonts, capabilities, code-page mappings, and
+diagnostic approximations. It deliberately excludes evidence labels and source
+repository provenance. Clarifying a source note therefore does not create a
+new rendering identity, while any runtime behavior change does.
+
+The generated JSON contains the provenance beside those runtime fields. The
+loader rejects unknown fields, invalid runtime values, unsupported schema
+versions, and content whose recomputed canonical hash does not match the
+stored hash. Metadata that would make identical builds differ, such as build
+timestamps or absolute paths, is prohibited.
 
 ## Versioning
 

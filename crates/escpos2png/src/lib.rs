@@ -116,6 +116,9 @@ pub enum RenderError {
     #[error("unsupported GS V cut mode {mode} at byte offset {offset}")]
     UnsupportedCutMode { mode: u8, offset: usize },
 
+    #[error("unsupported ESC p drawer connector {connector} at byte offset {offset}")]
+    UnsupportedDrawerConnector { connector: u8, offset: usize },
+
     #[error("{command} is not supported by printer profile {profile:?} at byte offset {offset}")]
     CommandUnsupportedByProfile {
         command: &'static str,
@@ -355,6 +358,16 @@ fn execute_esc_command(
             };
             state.feed_lines(lines);
             Ok(3)
+        }
+        0x70 => {
+            let Some((&connector, _timing)) = data.get(2).zip(data.get(3..5)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC p",
+                    offset,
+                });
+            };
+            state.drawer_pulse(connector, offset)?;
+            Ok(5)
         }
         0x74 => {
             let Some(code_page) = data.get(2).copied() else {
@@ -652,6 +665,7 @@ struct PrinterState {
     line_height: u32,
     supports_full_cut: bool,
     supports_partial_cut: bool,
+    supports_standard_drawer_pulse: bool,
 }
 
 impl PrinterState {
@@ -703,6 +717,7 @@ impl PrinterState {
             line_height: 0,
             supports_full_cut: profile.features.paper_full_cut,
             supports_partial_cut: profile.features.paper_part_cut,
+            supports_standard_drawer_pulse: profile.features.pulse_standard,
         }
     }
 
@@ -1191,6 +1206,22 @@ impl PrinterState {
         self.completed_sheets
             .push(std::mem::replace(&mut self.roll, next_roll));
         self.line_top = 0;
+        Ok(())
+    }
+
+    fn drawer_pulse(&self, connector: u8, offset: usize) -> Result<(), RenderError> {
+        if !matches!(connector, 0 | 1 | 48 | 49) {
+            return Err(RenderError::UnsupportedDrawerConnector { connector, offset });
+        }
+        if !self.supports_standard_drawer_pulse {
+            return Err(RenderError::CommandUnsupportedByProfile {
+                command: "ESC p drawer pulse",
+                profile: self.profile_id.clone(),
+                offset,
+            });
+        }
+
+        // Pulse timing affects the connector only; it has no paper-side state.
         Ok(())
     }
 

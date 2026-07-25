@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>escpos2png calibration preview</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #171717;
+        color: #f5f5f5;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 20px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      label,
+      #dimensions {
+        color: #b8b8b8;
+        font-size: 13px;
+      }
+
+      select {
+        margin-left: 6px;
+        padding: 4px 8px;
+        font: inherit;
+      }
+
+      #viewport {
+        overflow: auto;
+        min-height: 160px;
+        padding: 24px;
+        border: 1px solid #3a3a3a;
+        border-radius: 8px;
+        background: #252525;
+      }
+
+      #receipt {
+        display: block;
+        max-width: none;
+        background: white;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        box-shadow: 0 3px 16px rgb(0 0 0 / 45%);
+      }
+
+      #error {
+        display: none;
+        color: #ff9d9d;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Latest escpos2png calibration render</h1>
+      <label>
+        Zoom
+        <select id="zoom">
+          <option value="1">1×</option>
+          <option value="2">2×</option>
+          <option value="4" selected>4×</option>
+          <option value="8">8×</option>
+        </select>
+      </label>
+      <span id="dimensions"></span>
+    </header>
+
+    <main id="viewport">
+      <img id="receipt" alt="Latest rendered receipt">
+      <p id="error">
+        No preview is available yet. Render a case to
+        <code>local/preview/actual-001.png</code>.
+      </p>
+    </main>
+
+    <script>
+      const image = document.querySelector("#receipt");
+      const error = document.querySelector("#error");
+      const zoom = document.querySelector("#zoom");
+      const dimensions = document.querySelector("#dimensions");
+      let naturalWidth = 0;
+
+      function applyZoom() {
+        if (naturalWidth) {
+          image.style.width = `${naturalWidth * Number(zoom.value)}px`;
+        }
+      }
+
+      function refresh() {
+        image.src = `/local/preview/actual-001.png?t=${Date.now()}`;
+      }
+
+      image.addEventListener("load", () => {
+        naturalWidth = image.naturalWidth;
+        dimensions.textContent =
+          `${image.naturalWidth} × ${image.naturalHeight} printer dots`;
+        image.style.display = "block";
+        error.style.display = "none";
+        applyZoom();
+      });
+
+      image.addEventListener("error", () => {
+        naturalWidth = 0;
+        dimensions.textContent = "";
+        image.style.display = "none";
+        error.style.display = "block";
+      });
+
+      zoom.addEventListener("change", applyZoom);
+      refresh();
+      window.setInterval(refresh, 1500);
+    </script>
+  </body>
+</html>

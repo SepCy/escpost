@@ -26,6 +26,21 @@ services:
     entrypoint:
       - /workspace/scripts/cli-entrypoint
 
+  preview:
+    <<: *development-service
+    network_mode: bridge
+    command:
+      - python3
+      - -m
+      - http.server
+      - "8765"
+      - --bind
+      - 0.0.0.0
+      - --directory
+      - /workspace
+    ports:
+      - "8765:8765"
+
 volumes:
   cargo-home:
   cargo-target:

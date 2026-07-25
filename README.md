@@ -64,6 +64,15 @@ Render the first conformance case:
   --output-dir local/rendered
 ```
 
+Serve `local/preview/actual-001.png` with automatic refresh and selectable
+integer zoom:
+
+```bash
+docker compose up -d preview
+```
+
+Open <http://localhost:8765/tools/preview/>.
+
 For physical calibration, first use discovery to populate
 `local/printers.toml`. The `case calibrate` command renders and sends one
 loaded, hash-verified byte buffer.

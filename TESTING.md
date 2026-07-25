@@ -160,6 +160,11 @@ transport.
 sends the same in-memory bytes to the printer. This makes accidental divergence
 between the two paths detectable.
 
+Render calibration output to `local/preview` and start the Compose `preview`
+service. The page at <http://localhost:8765/tools/preview/> refreshes the latest
+PNG automatically and scales it only by integer multiples so individual
+printer dots remain inspectable.
+
 The printing adapter may use python-escpos's USB transport, but it uses only
 the raw-byte operation. It must not call high-level helpers such as `text`,
 `image`, `feed`, or `cut`, because those helpers generate additional ESC/POS

@@ -1,5 +1,8 @@
 [workspace]
-members = ["crates/escpos2png-profiles"]
+members = [
+    "crates/escpos2png",
+    "crates/escpos2png-profiles",
+]
 resolver = "3"
 
 [workspace.package]
@@ -8,6 +11,7 @@ edition = "2024"
 license = "Apache-2.0"
 
 [workspace.dependencies]
+png = "0.18"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"

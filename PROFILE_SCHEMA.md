@@ -115,6 +115,9 @@ printable_width_dots = 384
 dpi_x = 203
 dpi_y = 203
 
+[defaults]
+line_spacing_dots = 30
+
 [fonts.a]
 columns = 32
 

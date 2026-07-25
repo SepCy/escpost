@@ -1,0 +1,272 @@
+//! Dot-accurate ESC/POS rendering.
+
+use escpos2png_profiles::PrinterProfile;
+use thiserror::Error;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderResult {
+    pub sheets: Vec<RenderedSheet>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderedSheet {
+    pub surface: MonoSurface,
+    pub png: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MonoSurface {
+    width: u32,
+    height: u32,
+    dots: Vec<bool>,
+}
+
+impl MonoSurface {
+    #[must_use]
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    #[must_use]
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    #[must_use]
+    pub fn is_printed(&self, x: u32, y: u32) -> bool {
+        if x >= self.width || y >= self.height {
+            return false;
+        }
+
+        self.dots[(y * self.width + x) as usize]
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum RenderError {
+    #[error("truncated {command} command at byte offset {offset}")]
+    TruncatedCommand {
+        command: &'static str,
+        offset: usize,
+    },
+
+    #[error("unsupported ESC/POS command ESC {command:#04x} at byte offset {offset}")]
+    UnsupportedEscCommand { command: u8, offset: usize },
+
+    #[error("unsupported ESC * bit-image mode {mode} at byte offset {offset}")]
+    UnsupportedBitImageMode { mode: u8, offset: usize },
+
+    #[error("unsupported data byte {byte:#04x} at byte offset {offset}")]
+    UnsupportedDataByte { byte: u8, offset: usize },
+
+    #[error("could not encode the rendered sheet as PNG")]
+    EncodePng(#[from] png::EncodingError),
+}
+
+pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, RenderError> {
+    let mut state = PrinterState::new(profile);
+    let mut offset = 0;
+
+    while offset < data.len() {
+        offset += match data[offset] {
+            0x0a => {
+                state.line_feed();
+                1
+            }
+            0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
+            byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
+        };
+    }
+
+    let png = encode_png(&state.roll)?;
+
+    Ok(RenderResult {
+        sheets: vec![RenderedSheet {
+            surface: state.roll,
+            png,
+        }],
+    })
+}
+
+fn encode_png(surface: &MonoSurface) -> Result<Vec<u8>, png::EncodingError> {
+    let row_bytes = surface.width.div_ceil(8);
+    let mut pixels = vec![0xff; (row_bytes * surface.height) as usize];
+
+    for y in 0..surface.height {
+        for x in 0..surface.width {
+            if surface.is_printed(x, y) {
+                let index = (y * row_bytes + x / 8) as usize;
+                pixels[index] &= !(0x80 >> (x % 8));
+            }
+        }
+    }
+
+    let mut encoded = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut encoded, surface.width, surface.height);
+        encoder.set_color(png::ColorType::Grayscale);
+        encoder.set_depth(png::BitDepth::One);
+        let mut writer = encoder.write_header()?;
+        writer.write_image_data(&pixels)?;
+    }
+
+    Ok(encoded)
+}
+
+fn execute_esc_command(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    let Some(command) = data.get(1).copied() else {
+        return Err(RenderError::TruncatedCommand {
+            command: "ESC",
+            offset,
+        });
+    };
+
+    match command {
+        0x40 => {
+            state.initialize();
+            Ok(2)
+        }
+        0x2a => execute_esc_star(data, offset, state),
+        command => Err(RenderError::UnsupportedEscCommand { command, offset }),
+    }
+}
+
+fn execute_esc_star(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    if data.len() < 5 {
+        return Err(RenderError::TruncatedCommand {
+            command: "ESC *",
+            offset,
+        });
+    }
+
+    let mode = data[2];
+    if mode != 1 {
+        return Err(RenderError::UnsupportedBitImageMode { mode, offset });
+    }
+
+    let columns = usize::from(data[3]) + usize::from(data[4]) * 256;
+    let command_length = 5 + columns;
+    let Some(payload) = data.get(5..command_length) else {
+        return Err(RenderError::TruncatedCommand {
+            command: "ESC *",
+            offset,
+        });
+    };
+
+    state.paint_8_dot_double_density(payload);
+    Ok(command_length)
+}
+
+#[derive(Debug)]
+struct PrinterState {
+    roll: MonoSurface,
+    line: MonoSurface,
+    line_top: u32,
+    print_x: u32,
+    line_spacing: u32,
+    default_line_spacing: u32,
+}
+
+impl PrinterState {
+    fn new(profile: &PrinterProfile) -> Self {
+        let width = profile.geometry.printable_width_dots;
+        let default_line_spacing = profile.defaults.line_spacing_dots;
+
+        Self {
+            roll: MonoSurface::new(width),
+            line: MonoSurface::new(width),
+            line_top: 0,
+            print_x: 0,
+            line_spacing: default_line_spacing,
+            default_line_spacing,
+        }
+    }
+
+    fn initialize(&mut self) {
+        self.line.clear();
+        self.print_x = 0;
+        self.line_spacing = self.default_line_spacing;
+    }
+
+    fn paint_8_dot_double_density(&mut self, columns: &[u8]) {
+        for (column_index, column) in columns.iter().copied().enumerate() {
+            let x = self.print_x + column_index as u32;
+            for source_y in 0..8 {
+                if column & (0x80 >> source_y) == 0 {
+                    continue;
+                }
+
+                let top = source_y * 3;
+                for y in top..top + 3 {
+                    self.line.print_dot(x, y);
+                }
+            }
+        }
+
+        self.print_x = self.print_x.saturating_add(columns.len() as u32);
+    }
+
+    fn line_feed(&mut self) {
+        self.roll.composite(&self.line, self.line_top);
+        self.line_top = self.line_top.saturating_add(self.line_spacing);
+        self.roll.ensure_height(self.line_top);
+        self.line.clear();
+        self.print_x = 0;
+    }
+}
+
+impl MonoSurface {
+    fn new(width: u32) -> Self {
+        Self {
+            width,
+            height: 0,
+            dots: Vec::new(),
+        }
+    }
+
+    fn print_dot(&mut self, x: u32, y: u32) {
+        if x >= self.width {
+            return;
+        }
+
+        self.ensure_height(y + 1);
+        self.dots[(y * self.width + x) as usize] = true;
+    }
+
+    fn composite(&mut self, source: &Self, top: u32) {
+        if source.height == 0 {
+            return;
+        }
+
+        self.ensure_height(top.saturating_add(source.height));
+        for y in 0..source.height {
+            for x in 0..source.width {
+                if source.is_printed(x, y) {
+                    self.print_dot(x, top + y);
+                }
+            }
+        }
+    }
+
+    fn ensure_height(&mut self, height: u32) {
+        if height <= self.height {
+            return;
+        }
+
+        self.dots.resize((height * self.width) as usize, false);
+        self.height = height;
+    }
+
+    fn clear(&mut self) {
+        self.height = 0;
+        self.dots.clear();
+    }
+}

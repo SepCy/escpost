@@ -92,14 +92,17 @@ Each behavior is represented by a self-contained case directory:
 ```text
 tests/cases/text/default-font/
 ├── case.toml
-├── input.escpos
+├── input.hex
 ├── expected-001.png
 └── notes.md
 ```
 
-`input.escpos` is the canonical byte stream. The renderer and physical-printer
-transport both read that exact file. Neither path may regenerate, normalize,
-prefix, suffix, or otherwise transform it.
+`input.hex` is the canonical, diff-friendly serialization of the byte stream.
+It contains whitespace-separated two-digit hexadecimal bytes. The case loader
+strictly decodes it once, verifies the SHA-256 of the decoded bytes, and gives
+the same immutable byte buffer to the renderer and physical-printer transport.
+Neither path may regenerate, normalize, prefix, suffix, or otherwise transform
+those decoded bytes.
 
 `case.toml` records machine-readable expectations and provenance:
 
@@ -107,7 +110,8 @@ prefix, suffix, or otherwise transform it.
 schema_version = 1
 name = "default Font A advances by 12 dots"
 profile = "NT-5890K"
-input = "input.escpos"
+input = "input.hex"
+input_encoding = "hex"
 input_sha256 = "<sha256>"
 expected_sheets = ["expected-001.png"]
 expected_completeness = "complete"
@@ -148,7 +152,8 @@ escpos2png case calibrate <case> --printer <local-name>
 `render` invokes the Rust engine through the Python binding and writes an
 actual PNG plus diagnostics.
 
-`print` sends `input.escpos` unchanged to the selected physical transport.
+`print` sends the decoded input bytes unchanged to the selected physical
+transport.
 
 `calibrate` loads the stream once, reports its SHA-256 digest, renders it, and
 sends the same in-memory bytes to the printer. This makes accidental divergence
@@ -193,7 +198,7 @@ these commands.
 
 The CLI adds no implicit initialization, feed, or cut commands. A case that
 requires `ESC @`, trailing feed, or a cut includes those bytes explicitly in
-`input.escpos`.
+`input.hex`.
 
 ## Calibration workflow
 

@@ -1,0 +1,17 @@
+[package]
+name = "escpos2png"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+escpos2png-profiles = { path = "../escpos2png-profiles" }
+png.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+escpos2png-profiles = { path = "../escpos2png-profiles" }
+
+[lints]
+workspace = true

@@ -18,6 +18,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
             compiled.profile.geometry.printable_width_dots,
             compiled.profile.geometry.dpi_x,
             compiled.profile.geometry.dpi_y,
+            compiled.profile.defaults.line_spacing_dots,
             compiled.profile.fonts.a.columns,
             compiled.profile.fonts.b.columns,
             compiled.source.upstream_profile_sha256.as_str(),
@@ -28,6 +29,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
             384,
             203,
             203,
+            30,
             32,
             42,
             RESOLVED_PROFILE_SHA256,
@@ -66,12 +68,17 @@ fn nt_5890k_reports_which_values_the_enrichment_confirms() {
             "geometry.printable_width_dots",
             "geometry.dpi_x",
             "geometry.dpi_y",
+            "defaults.line_spacing_dots",
             "fonts.a.columns",
             "fonts.b.columns",
         ]
         .map(|field| ProfileChange {
             field: field.to_owned(),
-            kind: ProfileChangeKind::Confirmed,
+            kind: if field == "defaults.line_spacing_dots" {
+                ProfileChangeKind::Added
+            } else {
+                ProfileChangeKind::Confirmed
+            },
         })
     );
 }

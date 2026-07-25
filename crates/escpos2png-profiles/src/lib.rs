@@ -21,6 +21,7 @@ pub struct PrinterProfile {
     pub id: String,
     pub revision: u32,
     pub geometry: Geometry,
+    pub defaults: PrinterDefaults,
     pub fonts: Fonts,
     pub sources: Vec<String>,
     pub approximations: Vec<Approximation>,
@@ -32,6 +33,12 @@ pub struct Geometry {
     pub printable_width_dots: u32,
     pub dpi_x: u32,
     pub dpi_y: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrinterDefaults {
+    pub line_spacing_dots: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,6 +124,7 @@ struct Enrichment {
     upstream_profile_sha256: String,
     sources: Vec<String>,
     geometry: Geometry,
+    defaults: PrinterDefaults,
     fonts: Fonts,
     approximations: Vec<Approximation>,
 }
@@ -180,6 +188,7 @@ pub fn compile_profile(
             id: enrichment.profile,
             revision: enrichment.revision,
             geometry: enrichment.geometry,
+            defaults: enrichment.defaults,
             fonts: enrichment.fonts,
             sources: enrichment.sources,
             approximations: enrichment.approximations,
@@ -218,6 +227,11 @@ fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<
             "geometry.dpi_y",
             imported.media.dpi,
             enrichment.geometry.dpi_y,
+        ),
+        classify_change(
+            "defaults.line_spacing_dots",
+            None,
+            enrichment.defaults.line_spacing_dots,
         ),
         classify_change(
             "fonts.a.columns",

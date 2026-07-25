@@ -21,6 +21,7 @@ pub struct PrinterProfile {
     pub id: String,
     pub revision: u32,
     pub geometry: Geometry,
+    pub motion: MotionUnits,
     pub defaults: PrinterDefaults,
     pub fonts: Fonts,
     pub sources: Vec<String>,
@@ -33,6 +34,13 @@ pub struct Geometry {
     pub printable_width_dots: u32,
     pub dpi_x: u32,
     pub dpi_y: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MotionUnits {
+    pub horizontal_units_per_inch: u32,
+    pub vertical_units_per_inch: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,6 +99,9 @@ pub enum CompileProfileError {
     #[error("unsupported profile enrichment schema version {found}")]
     UnsupportedSchemaVersion { found: u32 },
 
+    #[error("profile field {field} must be greater than zero")]
+    NonPositiveValue { field: &'static str },
+
     #[error("upstream profile {profile:?} does not exist")]
     UnknownUpstreamProfile { profile: String },
 
@@ -124,6 +135,7 @@ struct Enrichment {
     upstream_profile_sha256: String,
     sources: Vec<String>,
     geometry: Geometry,
+    motion: MotionUnits,
     defaults: PrinterDefaults,
     fonts: Fonts,
     approximations: Vec<Approximation>,
@@ -166,6 +178,7 @@ pub fn compile_profile(
         toml::from_str(enrichment_toml).map_err(CompileProfileError::InvalidEnrichment)?;
 
     validate_schema_version(enrichment.schema_version)?;
+    validate_profile_values(&enrichment)?;
 
     let upstream_profile = capabilities
         .profiles
@@ -188,6 +201,7 @@ pub fn compile_profile(
             id: enrichment.profile,
             revision: enrichment.revision,
             geometry: enrichment.geometry,
+            motion: enrichment.motion,
             defaults: enrichment.defaults,
             fonts: enrichment.fonts,
             sources: enrichment.sources,
@@ -229,6 +243,16 @@ fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<
             enrichment.geometry.dpi_y,
         ),
         classify_change(
+            "motion.horizontal_units_per_inch",
+            None,
+            enrichment.motion.horizontal_units_per_inch,
+        ),
+        classify_change(
+            "motion.vertical_units_per_inch",
+            None,
+            enrichment.motion.vertical_units_per_inch,
+        ),
+        classify_change(
             "defaults.line_spacing_dots",
             None,
             enrichment.defaults.line_spacing_dots,
@@ -267,6 +291,25 @@ fn validate_schema_version(schema_version: u32) -> Result<(), CompileProfileErro
     Err(CompileProfileError::UnsupportedSchemaVersion {
         found: schema_version,
     })
+}
+
+fn validate_profile_values(enrichment: &Enrichment) -> Result<(), CompileProfileError> {
+    validate_positive(
+        "motion.horizontal_units_per_inch",
+        enrichment.motion.horizontal_units_per_inch,
+    )?;
+    validate_positive(
+        "motion.vertical_units_per_inch",
+        enrichment.motion.vertical_units_per_inch,
+    )
+}
+
+fn validate_positive(field: &'static str, value: u32) -> Result<(), CompileProfileError> {
+    if value > 0 {
+        return Ok(());
+    }
+
+    Err(CompileProfileError::NonPositiveValue { field })
 }
 
 fn hash_resolved_profile(profile: &Value) -> Result<String, CompileProfileError> {

@@ -1,18 +1,23 @@
 schema_version = 1
 profile = "NT-5890K"
-revision = 1
+revision = 2
 upstream_profile_sha256 = "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
 
 sources = [
     "upstream:escpos-printer-db/NT-5890K",
     "manual:epson-escpos/esc_3#default-line-spacing",
     "case:tests/cases/graphics/esc-star-8dot-double-density",
+    "case:tests/cases/motion/line-spacing-and-feed",
 ]
 
 [geometry]
 printable_width_dots = 384
 dpi_x = 203
 dpi_y = 203
+
+[motion]
+horizontal_units_per_inch = 203
+vertical_units_per_inch = 203
 
 [defaults]
 line_spacing_dots = 30

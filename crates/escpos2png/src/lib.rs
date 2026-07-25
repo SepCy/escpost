@@ -148,6 +148,30 @@ fn execute_esc_command(
             Ok(2)
         }
         0x2a => execute_esc_star(data, offset, state),
+        0x32 => {
+            state.restore_default_line_spacing();
+            Ok(2)
+        }
+        0x33 => {
+            let Some(spacing) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC 3",
+                    offset,
+                });
+            };
+            state.set_line_spacing(spacing);
+            Ok(3)
+        }
+        0x64 => {
+            let Some(lines) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC d",
+                    offset,
+                });
+            };
+            state.feed_lines(lines);
+            Ok(3)
+        }
         command => Err(RenderError::UnsupportedEscCommand { command, offset }),
     }
 }
@@ -269,6 +293,8 @@ struct PrinterState {
     print_x: u32,
     line_spacing: u32,
     default_line_spacing: u32,
+    vertical_dpi: u32,
+    vertical_motion_units_per_inch: u32,
 }
 
 impl PrinterState {
@@ -283,6 +309,8 @@ impl PrinterState {
             print_x: 0,
             line_spacing: default_line_spacing,
             default_line_spacing,
+            vertical_dpi: profile.geometry.dpi_y,
+            vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
         }
     }
 
@@ -290,6 +318,25 @@ impl PrinterState {
         self.line.clear();
         self.print_x = 0;
         self.line_spacing = self.default_line_spacing;
+    }
+
+    fn set_line_spacing(&mut self, motion_units: u8) {
+        self.line_spacing = (u64::from(motion_units) * u64::from(self.vertical_dpi)
+            / u64::from(self.vertical_motion_units_per_inch)) as u32;
+    }
+
+    fn restore_default_line_spacing(&mut self) {
+        self.line_spacing = self.default_line_spacing;
+    }
+
+    fn feed_lines(&mut self, lines: u8) {
+        self.roll.composite(&self.line, self.line_top);
+        self.line_top = self
+            .line_top
+            .saturating_add(self.line_spacing.saturating_mul(u32::from(lines)));
+        self.roll.ensure_height(self.line_top);
+        self.line.clear();
+        self.print_x = 0;
     }
 
     fn paint_bit_image(
@@ -359,11 +406,7 @@ impl PrinterState {
     }
 
     fn line_feed(&mut self) {
-        self.roll.composite(&self.line, self.line_top);
-        self.line_top = self.line_top.saturating_add(self.line_spacing);
-        self.roll.ensure_height(self.line_top);
-        self.line.clear();
-        self.print_x = 0;
+        self.feed_lines(1);
     }
 }
 

@@ -115,6 +115,10 @@ printable_width_dots = 384
 dpi_x = 203
 dpi_y = 203
 
+[motion]
+horizontal_units_per_inch = 203
+vertical_units_per_inch = 203
+
 [defaults]
 line_spacing_dots = 30
 
@@ -136,6 +140,11 @@ schema changes.
 Only fields needed by the current implementation should be introduced. The
 schema grows vertically with implemented behavior rather than attempting to
 describe the full ESC/POS command set before the first render works.
+
+Motion-unit values define the profile's reset defaults. Commands convert
+distances into immutable printer-dot coordinates using the corresponding
+horizontal or vertical DPI. A value equal to the axis DPI therefore represents
+one printer dot per motion unit.
 
 ## Automatic change classification
 

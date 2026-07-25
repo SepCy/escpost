@@ -10,6 +10,7 @@ expected_completeness = "complete"
 assumption = "profile-reset-defaults"
 
 [[expected_sheets]]
+file = "expected-001.png"
 width_dots = 384
 height_dots = 138
 

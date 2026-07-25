@@ -141,8 +141,12 @@ profile = "NT-5890K"
 input = "input.hex"
 input_encoding = "hex"
 input_sha256 = "<sha256>"
-expected_sheets = ["expected-001.png"]
 expected_completeness = "complete"
+
+[[expected_sheets]]
+file = "expected-001.png"
+width_dots = 384
+height_dots = 30
 
 [initial_state]
 assumption = "profile-reset-defaults"
@@ -159,6 +163,32 @@ needs become concrete.
 Tests decode it and compare its pixel values and dimensions. PNG encoder output
 bytes are not asserted because compression settings can change without
 changing the receipt.
+
+Golden conformance tests always preserve each newly rendered sheet under:
+
+```text
+local/test-output/<case-path>/actual-001.png
+```
+
+The output directory mirrors `tests/cases/`, uses the same three-digit sheet
+numbers, and is ignored by Git. This lets developers inspect successful
+renders as well as failures.
+
+When pixels differ, the test also writes `diff-001.png` and
+`comparison.html`. Matching ink is black, matching paper is white, unexpected
+ink is red, and missing ink is blue. The assertion reports repository-relative
+paths for the expected, actual, diff, and comparison files together with the
+changed-dot count and difference bounds.
+
+Tests never rewrite expected PNGs. A developer reviews the generated actual
+image and accepts a new golden explicitly.
+
+Run only the golden conformance layer with:
+
+```bash
+docker compose run --rm test \
+  cargo test -p escpos2png --test golden_cases -- --nocapture
+```
 
 `notes.md` explains the behavior under test, relevant commands, manual
 references, intentional approximations, and physical observations. It should

@@ -97,7 +97,10 @@ dependencies = [
  "fontdue",
  "oem_cp",
  "png",
+ "serde",
+ "sha2",
  "thiserror",
+ "toml",
 ]
 
 [[package]]

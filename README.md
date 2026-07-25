@@ -11,9 +11,53 @@ resident font glyphs.
 
 ## Status
 
-The project is in its design phase. The public APIs, supported Rust and Python
-versions, dependencies, and canonical profile schema have not been selected
-yet. `NT-5890K` is the first physical calibration profile.
+The first vertical slice is implemented. It compiles the enriched `NT-5890K`
+profile, interprets `ESC @`, `ESC *` mode 1, and LF through a Standard-mode
+line buffer, and emits one-bit grayscale PNG. The Python binding and
+conformance-case CLI can render, raw-print, or calibrate the same verified byte
+stream.
+
+This is not yet a general-purpose ESC/POS renderer. Unsupported data and
+commands return errors while command coverage grows one conformance case at a
+time.
+
+## Development
+
+All build and test commands run in the project container:
+
+```bash
+docker compose build test
+docker compose run --rm test cargo test --workspace
+docker compose run --rm test python3 -m venv .venv
+docker compose run --rm -e VIRTUAL_ENV=/workspace/.venv test maturin develop
+docker compose run --rm test .venv/bin/python -m unittest discover -s python/tests
+```
+
+Render the first conformance case:
+
+```bash
+docker compose run --rm test \
+  .venv/bin/escpos2png case render \
+  tests/cases/graphics/esc-star-8dot-double-density \
+  --output-dir local/rendered
+```
+
+For physical calibration, copy `examples/printers.toml` to the ignored
+`local/printers.toml`, replace the USB identifiers, install the optional
+printer dependency with `maturin develop --extras printer`, and expose the USB
+device to the container. The `case calibrate` command renders and sends one
+loaded, hash-verified byte buffer.
+
+```bash
+docker compose run --rm -e VIRTUAL_ENV=/workspace/.venv \
+  test maturin develop --extras printer
+
+docker compose run --rm --device /dev/bus/usb:/dev/bus/usb test \
+  .venv/bin/escpos2png case calibrate \
+  tests/cases/graphics/esc-star-8dot-double-density \
+  --printer netum-usb \
+  --output-dir local/calibration
+```
 
 ## Fidelity contract
 

@@ -140,8 +140,7 @@ Cases with multiple cuts contain one expected PNG per sheet.
 
 ## Python calibration CLI
 
-A small Python CLI orchestrates rendering and physical printing. The intended
-interface is:
+A small Python CLI orchestrates rendering and physical printing:
 
 ```text
 escpos2png case render <case>
@@ -181,8 +180,8 @@ product_id = "<USB product ID>"
 out_endpoint = "0x01"
 ```
 
-A committed example configuration may document supported fields, but real
-machine configuration and local captures remain ignored.
+[`examples/printers.toml`](examples/printers.toml) is the committed template.
+Real machine configuration and local captures remain ignored.
 
 Before sending bytes, the CLI shows:
 

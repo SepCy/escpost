@@ -1,0 +1,34 @@
+[build-system]
+requires = ["maturin==1.14.1"]
+build-backend = "maturin"
+
+[project]
+name = "escpos2png"
+version = "0.1.0"
+description = "Dot-accurate ESC/POS to PNG renderer"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+]
+
+[project.scripts]
+escpos2png = "escpos2png.cli:main"
+
+[project.optional-dependencies]
+printer = ["python-escpos==3.1"]
+
+[tool.maturin]
+manifest-path = "crates/escpos2png-python/Cargo.toml"
+python-source = "python"
+module-name = "escpos2png._native"
+include = [
+    { path = "profiles/enrichments/NT-5890K.toml", format = "sdist" },
+    { path = "profiles/upstream/escpos-printer-db/dist/capabilities.json", format = "sdist" },
+    { path = "profiles/upstream/escpos-printer-db/LICENSE.md", format = "sdist" },
+    { path = "profiles/upstream/escpos-printer-db/LICENSE.md", format = "wheel" },
+]

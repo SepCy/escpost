@@ -1,0 +1,8 @@
+# Copy this file to local/printers.toml and replace the USB identifiers.
+
+[netum-usb]
+transport = "usb"
+profile = "NT-5890K"
+vendor_id = "0x0000"
+product_id = "0x0000"
+out_endpoint = "0x01"

@@ -46,6 +46,34 @@ buffers, and surface storage.
 Focused parser or state tests are appropriate for framing and transition
 invariants, but they supplement rather than replace public behavior tests.
 
+### Command-interaction tests
+
+ESC/POS is stateful. A command can change how later text, graphics, symbols,
+feeds, or cuts behave. Command-interaction tests prove these documented
+relationships through the same public rendering interface as other behavior
+tests.
+
+Keep isolated command mechanics in a command-specific file. For example,
+`render_gs_v0.rs` owns raster framing and scaling. Put shared-state behavior in
+a file named after the governing state:
+
+```text
+crates/escpos2png/tests/
+├── render_justification.rs
+├── render_print_area.rs
+├── render_initialization.rs
+└── render_buffering.rs
+```
+
+This makes a failed interaction easy to find without creating one large
+`render_interactions.rs` file. Each test should still explain and assert one
+observable behavior.
+
+[`tests/INTERACTIONS.md`](tests/INTERACTIONS.md) is the coverage inventory.
+Add an interaction when the ESC/POS reference says commands share state, not
+merely because two commands could appear next to each other. Implement entries
+one behavior at a time as their commands become supported.
+
 ### Python binding tests
 
 Binding tests prove that Python callers receive the same behavior as Rust

@@ -1,6 +1,7 @@
 use escpos2png_profiles::{
     CanonicalProfileError, CompileProfileError, ProfileChange, ProfileChangeKind, compile_profile,
-    compile_profile_with_lock, from_canonical_json, to_canonical_json,
+    compile_profile_with_lock, from_canonical_json, from_canonical_profile_pack_json,
+    to_canonical_json, to_canonical_profile_pack_json,
 };
 use serde_json::Value;
 
@@ -8,6 +9,7 @@ const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
 const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
 const UPSTREAM_LOCK_TOML: &str = include_str!("../../../profiles/upstream.lock.toml");
+const GENERATED_PROFILE_PACK: &[u8] = include_bytes!("../../../profiles/generated/profiles.json");
 const RESOLVED_PROFILE_SHA256: &str =
     "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b";
 const UPSTREAM_COMMIT: &str = "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5";
@@ -116,6 +118,66 @@ fn canonical_profile_json_rejects_behavior_changed_without_a_new_hash() {
     assert!(matches!(
         error,
         CanonicalProfileError::CanonicalHashMismatch { .. }
+    ));
+}
+
+#[test]
+fn canonical_profile_pack_indexes_verified_profiles_by_id() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the pinned NT-5890K profile should compile")
+        .profile;
+
+    let json = to_canonical_profile_pack_json([profile.clone()])
+        .expect("the canonical profile pack should serialize");
+    let pack =
+        from_canonical_profile_pack_json(&json).expect("the canonical profile pack should verify");
+
+    assert_eq!(pack.get("NT-5890K"), Some(&profile));
+    assert_eq!(pack.get("unknown"), None);
+    assert_eq!(
+        to_canonical_profile_pack_json(pack.profiles().cloned())
+            .expect("profile-pack serialization should be deterministic"),
+        json
+    );
+}
+
+#[test]
+fn generated_profile_pack_matches_the_reviewed_sources() {
+    let compiled = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the pinned NT-5890K profile should compile");
+    let pack = from_canonical_profile_pack_json(GENERATED_PROFILE_PACK)
+        .expect("the committed profile pack should verify");
+
+    assert_eq!(pack.get("NT-5890K"), Some(&compiled.profile));
+    assert_eq!(pack.profiles().count(), 1);
+}
+
+#[test]
+fn canonical_profile_pack_rejects_a_key_that_disagrees_with_the_profile_id() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the pinned NT-5890K profile should compile")
+        .profile;
+    let json =
+        to_canonical_profile_pack_json([profile]).expect("the profile pack should serialize");
+    let mut document: Value =
+        serde_json::from_slice(&json).expect("the test should parse canonical JSON");
+    let profile = document["profiles"]
+        .as_object_mut()
+        .expect("profiles should be a JSON object")
+        .remove("NT-5890K")
+        .expect("the generated pack should contain NT-5890K");
+    document["profiles"]["wrong-id"] = profile;
+    let tampered = serde_json::to_vec(&document).expect("the test should serialize tampered JSON");
+
+    let error = from_canonical_profile_pack_json(&tampered)
+        .expect_err("a mismatched profile key must not enter the registry");
+
+    assert!(matches!(
+        error,
+        CanonicalProfileError::ProfileIdMismatch {
+            ref key,
+            ref profile_id,
+        } if key == "wrong-id" && profile_id == "NT-5890K"
     ));
 }
 

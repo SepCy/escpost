@@ -46,6 +46,17 @@ docker compose run --rm test cargo test --workspace
 docker compose run --rm test .venv/bin/python -m unittest discover -s python/tests
 ```
 
+Regenerate the canonical runtime profile pack after changing an enrichment or
+the pinned upstream source:
+
+```bash
+docker compose run --rm test cargo run --quiet \
+  -p escpos2png-profiles --bin compile-profile-pack -- \
+  profiles/upstream/escpos-printer-db/dist/capabilities.json \
+  profiles/upstream.lock.toml profiles/enrichments \
+  profiles/generated/profiles.json
+```
+
 `./escpos2png` forwards every argument to the Python CLI in the Compose
 container. The CLI service has USB access for printer discovery and physical
 calibration. Its Python environment lives in a named Docker volume and is

@@ -32,6 +32,7 @@ python-source = "python"
 module-name = "escpos2png._native"
 include = [
     { path = "profiles/enrichments/NT-5890K.toml", format = "sdist" },
+    { path = "profiles/generated/profiles.json", format = "sdist" },
     { path = "profiles/upstream.lock.toml", format = "sdist" },
     { path = "profiles/upstream/escpos-printer-db/dist/capabilities.json", format = "sdist" },
     { path = "profiles/upstream/escpos-printer-db/LICENSE.md", format = "sdist" },

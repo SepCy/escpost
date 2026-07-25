@@ -39,6 +39,23 @@ pub struct PrinterProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ProfilePack {
+    schema_version: u32,
+    profiles: BTreeMap<String, PrinterProfile>,
+}
+
+impl ProfilePack {
+    pub fn get(&self, profile_id: &str) -> Option<&PrinterProfile> {
+        self.profiles.get(profile_id)
+    }
+
+    pub fn profiles(&self) -> impl Iterator<Item = &PrinterProfile> {
+        self.profiles.values()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Geometry {
     pub printable_width_dots: u32,
     pub dpi_x: u32,
@@ -211,6 +228,12 @@ pub enum CanonicalProfileError {
 
     #[error("canonical profile hash mismatch: expected {expected}, got {actual}")]
     CanonicalHashMismatch { expected: String, actual: String },
+
+    #[error("profile pack contains key {key:?} for profile {profile_id:?}")]
+    ProfileIdMismatch { key: String, profile_id: String },
+
+    #[error("profile pack contains duplicate profile id {profile_id:?}")]
+    DuplicateProfile { profile_id: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -364,6 +387,44 @@ pub fn from_canonical_json(json: &[u8]) -> Result<PrinterProfile, CanonicalProfi
         serde_json::from_slice(json).map_err(CanonicalProfileError::InvalidJson)?;
     verify_canonical_profile(&profile)?;
     Ok(profile)
+}
+
+pub fn to_canonical_profile_pack_json(
+    profiles: impl IntoIterator<Item = PrinterProfile>,
+) -> Result<Vec<u8>, CanonicalProfileError> {
+    let mut profiles_by_id = BTreeMap::new();
+    for profile in profiles {
+        verify_canonical_profile(&profile)?;
+        let profile_id = profile.id.clone();
+        if profiles_by_id.insert(profile_id.clone(), profile).is_some() {
+            return Err(CanonicalProfileError::DuplicateProfile { profile_id });
+        }
+    }
+    let pack = ProfilePack {
+        schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
+        profiles: profiles_by_id,
+    };
+    serde_json::to_vec_pretty(&pack).map_err(CanonicalProfileError::Serialize)
+}
+
+pub fn from_canonical_profile_pack_json(json: &[u8]) -> Result<ProfilePack, CanonicalProfileError> {
+    let pack: ProfilePack =
+        serde_json::from_slice(json).map_err(CanonicalProfileError::InvalidJson)?;
+    if pack.schema_version != CANONICAL_PROFILE_SCHEMA_VERSION {
+        return Err(CanonicalProfileError::UnsupportedSchemaVersion {
+            found: pack.schema_version,
+        });
+    }
+    for (key, profile) in &pack.profiles {
+        if key != &profile.id {
+            return Err(CanonicalProfileError::ProfileIdMismatch {
+                key: key.clone(),
+                profile_id: profile.id.clone(),
+            });
+        }
+        verify_canonical_profile(profile)?;
+    }
+    Ok(pack)
 }
 
 fn import_upstream_profile(

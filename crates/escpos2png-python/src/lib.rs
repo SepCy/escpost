@@ -4,14 +4,21 @@ use escpos2png::{
     Completeness, DeviceEvent, DiagnosticEffect, DiagnosticSeverity, InitialStateAssumption,
     RenderResult, render as render_escpos,
 };
-use escpos2png_profiles::compile_profile;
+use escpos2png_profiles::{PrinterProfile, ProfilePack, from_canonical_profile_pack_json};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
+use std::sync::OnceLock;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
-const NT_5890K_ENRICHMENT: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
+const PROFILE_PACK_JSON: &[u8] = include_bytes!("../../../profiles/generated/profiles.json");
+static PROFILE_PACK: OnceLock<ProfilePack> = OnceLock::new();
+
+#[derive(Debug)]
+enum BindingError {
+    UnknownProfile(String),
+    LoadProfiles(String),
+    Render(String),
+}
 
 #[pyfunction]
 #[pyo3(signature = (data, *, profile))]
@@ -42,17 +49,28 @@ fn render_result<'py>(py: Python<'py>, data: &[u8], profile: &str) -> PyResult<B
 }
 
 fn render_with_profile(data: &[u8], profile: &str) -> Result<RenderResult, BindingError> {
-    let enrichment = match profile {
-        "NT-5890K" => NT_5890K_ENRICHMENT,
-        profile => return Err(BindingError::UnknownProfile(profile.to_owned())),
-    };
-    let profile = compile_profile(CAPABILITIES_JSON, enrichment)
-        .map_err(|error| BindingError::CompileProfile(error.to_string()))?
-        .profile;
+    let profile = load_profile(profile)?;
     let rendered =
-        render_escpos(data, &profile).map_err(|error| BindingError::Render(error.to_string()))?;
+        render_escpos(data, profile).map_err(|error| BindingError::Render(error.to_string()))?;
 
     Ok(rendered)
+}
+
+fn load_profile(profile_id: &str) -> Result<&'static PrinterProfile, BindingError> {
+    if PROFILE_PACK.get().is_none() {
+        let profile_pack = from_canonical_profile_pack_json(PROFILE_PACK_JSON)
+            .map_err(|error| BindingError::LoadProfiles(error.to_string()))?;
+        // Another render may win this race. Either verified pack is identical,
+        // and the OnceLock gives every caller the one stored instance.
+        let _ = PROFILE_PACK.set(profile_pack);
+    }
+
+    let profile_pack = PROFILE_PACK.get().ok_or_else(|| {
+        BindingError::LoadProfiles("profile-pack initialization did not complete".to_owned())
+    })?;
+    profile_pack
+        .get(profile_id)
+        .ok_or_else(|| BindingError::UnknownProfile(profile_id.to_owned()))
 }
 
 fn render_result_to_python<'py>(
@@ -178,21 +196,14 @@ fn initial_state_name(initial_state: InitialStateAssumption) -> &'static str {
     }
 }
 
-#[derive(Debug)]
-enum BindingError {
-    UnknownProfile(String),
-    CompileProfile(String),
-    Render(String),
-}
-
 impl BindingError {
     fn into_py_err(self) -> PyErr {
         match self {
             Self::UnknownProfile(profile) => {
                 PyValueError::new_err(format!("unknown printer profile {profile:?}"))
             }
-            Self::CompileProfile(message) => {
-                PyRuntimeError::new_err(format!("could not load printer profile: {message}"))
+            Self::LoadProfiles(message) => {
+                PyRuntimeError::new_err(format!("could not load canonical profile pack: {message}"))
             }
             Self::Render(message) => PyRuntimeError::new_err(message),
         }

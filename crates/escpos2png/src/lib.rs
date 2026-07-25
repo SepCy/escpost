@@ -186,6 +186,26 @@ fn execute_esc_command(
             state.initialize();
             Ok(2)
         }
+        0x20 => {
+            let Some(spacing) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC SP",
+                    offset,
+                });
+            };
+            state.set_right_side_character_spacing(spacing);
+            Ok(3)
+        }
+        0x24 => {
+            let Some((&low, &high)) = data.get(2).zip(data.get(3)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC $",
+                    offset,
+                });
+            };
+            state.set_absolute_print_position(u16::from_le_bytes([low, high]));
+            Ok(4)
+        }
         0x21 => {
             let Some(mode) = data.get(2).copied() else {
                 return Err(RenderError::TruncatedCommand {
@@ -250,6 +270,16 @@ fn execute_esc_command(
                 font => return Err(RenderError::UnsupportedCharacterFont { font, offset }),
             }
             Ok(3)
+        }
+        0x5c => {
+            let Some((&low, &high)) = data.get(2).zip(data.get(3)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC \\",
+                    offset,
+                });
+            };
+            state.set_relative_print_position(i16::from_le_bytes([low, high]));
+            Ok(4)
         }
         0x61 => {
             let Some(justification) = data.get(2).copied() else {
@@ -365,6 +395,36 @@ fn execute_gs_command(
             state.set_reverse(reverse & 0x01 != 0);
             Ok(3)
         }
+        0x4c => {
+            let Some((&low, &high)) = data.get(2).zip(data.get(3)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS L",
+                    offset,
+                });
+            };
+            state.set_left_margin(u16::from_le_bytes([low, high]));
+            Ok(4)
+        }
+        0x50 => {
+            let Some((&horizontal, &vertical)) = data.get(2).zip(data.get(3)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS P",
+                    offset,
+                });
+            };
+            state.set_motion_units(horizontal, vertical);
+            Ok(4)
+        }
+        0x57 => {
+            let Some((&low, &high)) = data.get(2).zip(data.get(3)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS W",
+                    offset,
+                });
+            };
+            state.set_print_area_width(u16::from_le_bytes([low, high]));
+            Ok(4)
+        }
         0x76 => execute_gs_v0(data, offset, state),
         command => Err(RenderError::UnsupportedGsCommand { command, offset }),
     }
@@ -432,11 +492,21 @@ struct PrinterState {
     // Text and ESC * data are composed on a line first because ESC a applies
     // justification when the printer receives the line feed, not per glyph.
     line: MonoSurface,
+    print_area_left: u32,
+    print_area_width: u32,
     line_top: u32,
     print_x: u32,
+    line_used_width: u32,
+    // Some commands are deliberately ignored after printable data or a
+    // position command has moved the printer away from the line origin.
+    at_beginning_of_line: bool,
     line_spacing: u32,
     default_line_spacing: u32,
+    horizontal_dpi: u32,
+    default_horizontal_motion_units_per_inch: u32,
+    horizontal_motion_units_per_inch: u32,
     vertical_dpi: u32,
+    default_vertical_motion_units_per_inch: u32,
     vertical_motion_units_per_inch: u32,
     font_a: ProfileFont,
     font_b: ProfileFont,
@@ -444,6 +514,7 @@ struct PrinterState {
     code_pages: BTreeMap<u8, String>,
     default_code_page: u8,
     active_code_page: u8,
+    right_side_character_spacing: u32,
     character_width_multiplier: u32,
     character_height_multiplier: u32,
     emphasized: bool,
@@ -463,11 +534,19 @@ impl PrinterState {
         Self {
             roll: MonoSurface::new(width),
             line: MonoSurface::new(width),
+            print_area_left: 0,
+            print_area_width: width,
             line_top: 0,
             print_x: 0,
+            line_used_width: 0,
+            at_beginning_of_line: true,
             line_spacing: default_line_spacing,
             default_line_spacing,
+            horizontal_dpi: profile.geometry.dpi_x,
+            default_horizontal_motion_units_per_inch: profile.motion.horizontal_units_per_inch,
+            horizontal_motion_units_per_inch: profile.motion.horizontal_units_per_inch,
             vertical_dpi: profile.geometry.dpi_y,
+            default_vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
             vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
             active_font: font_a.clone(),
             font_a,
@@ -475,6 +554,7 @@ impl PrinterState {
             code_pages: profile.code_pages.clone(),
             default_code_page: profile.defaults.code_page,
             active_code_page: profile.defaults.code_page,
+            right_side_character_spacing: 0,
             character_width_multiplier: 1,
             character_height_multiplier: 1,
             emphasized: false,
@@ -488,11 +568,18 @@ impl PrinterState {
     fn initialize(&mut self) {
         // Epson defines ESC @ as clearing the print buffer before restoring
         // modes. Already committed rows on `roll` represent fed paper and stay.
-        self.line.clear();
+        self.print_area_left = 0;
+        self.print_area_width = self.roll.width;
+        self.line = MonoSurface::new(self.print_area_width);
         self.print_x = 0;
+        self.line_used_width = 0;
+        self.at_beginning_of_line = true;
         self.line_spacing = self.default_line_spacing;
+        self.horizontal_motion_units_per_inch = self.default_horizontal_motion_units_per_inch;
+        self.vertical_motion_units_per_inch = self.default_vertical_motion_units_per_inch;
         self.active_font = self.font_a.clone();
         self.active_code_page = self.default_code_page;
+        self.right_side_character_spacing = 0;
         self.character_width_multiplier = 1;
         self.character_height_multiplier = 1;
         self.emphasized = false;
@@ -512,6 +599,91 @@ impl PrinterState {
         self.character_width_multiplier = if mode & 0x20 == 0 { 1 } else { 2 };
         self.emphasized = mode & 0x08 != 0;
         self.underline_thickness = u32::from(mode & 0x80 != 0);
+    }
+
+    fn set_absolute_print_position(&mut self, motion_units: u16) {
+        let position = self.horizontal_motion_units_to_dots(motion_units);
+        // Epson specifies that out-of-area settings are ignored, leaving the
+        // previous cursor untouched.
+        if position <= self.line.width {
+            self.print_x = position;
+        }
+        self.at_beginning_of_line = false;
+    }
+
+    fn set_right_side_character_spacing(&mut self, motion_units: u8) {
+        self.right_side_character_spacing =
+            self.horizontal_motion_units_to_dots(u16::from(motion_units));
+    }
+
+    fn set_motion_units(&mut self, horizontal: u8, vertical: u8) {
+        self.horizontal_motion_units_per_inch = match horizontal {
+            0 => self.default_horizontal_motion_units_per_inch,
+            horizontal => u32::from(horizontal),
+        };
+        self.vertical_motion_units_per_inch = match vertical {
+            0 => self.default_vertical_motion_units_per_inch,
+            vertical => u32::from(vertical),
+        };
+    }
+
+    fn set_left_margin(&mut self, motion_units: u16) {
+        if !self.at_beginning_of_line {
+            return;
+        }
+
+        let margin = self
+            .horizontal_motion_units_to_dots(motion_units)
+            .min(self.roll.width);
+        self.print_area_left = margin;
+        self.print_area_width = self
+            .print_area_width
+            .min(self.roll.width.saturating_sub(margin));
+        // Line coordinates are relative to the active print area. Rebuilding
+        // is safe here because GS L is honored only at the beginning of a line.
+        self.line = MonoSurface::new(self.print_area_width);
+        self.print_x = 0;
+        self.line_used_width = 0;
+    }
+
+    fn set_print_area_width(&mut self, motion_units: u16) {
+        if !self.at_beginning_of_line {
+            return;
+        }
+
+        let available_width = self.roll.width.saturating_sub(self.print_area_left);
+        self.print_area_width = self
+            .horizontal_motion_units_to_dots(motion_units)
+            .min(available_width);
+        // Keeping the line buffer print-area-sized makes wrapping and
+        // justification independent of the physical left margin.
+        self.line = MonoSurface::new(self.print_area_width);
+        self.print_x = 0;
+        self.line_used_width = 0;
+    }
+
+    fn set_relative_print_position(&mut self, motion_units: i16) {
+        let distance = self.horizontal_motion_units_to_dots(motion_units.unsigned_abs());
+        let position = if motion_units.is_negative() {
+            self.print_x.checked_sub(distance)
+        } else {
+            self.print_x.checked_add(distance)
+        };
+
+        // Moving left of the print-area origin or right of its edge is an
+        // ignored setting, not a clamped position.
+        if let Some(position) = position.filter(|&position| position <= self.line.width) {
+            self.print_x = position;
+        }
+        self.at_beginning_of_line = false;
+    }
+
+    fn horizontal_motion_units_to_dots(&self, motion_units: u16) -> u32 {
+        // ESC/POS applies the current motion unit when it receives the
+        // command. Store the resulting dot coordinate so later GS P changes
+        // cannot move content that was already positioned.
+        (u64::from(motion_units) * u64::from(self.horizontal_dpi)
+            / u64::from(self.horizontal_motion_units_per_inch)) as u32
     }
 
     fn set_line_spacing(&mut self, motion_units: u8) {
@@ -538,7 +710,9 @@ impl PrinterState {
     }
 
     fn set_justification(&mut self, justification: Justification) {
-        self.justification = justification;
+        if self.at_beginning_of_line {
+            self.justification = justification;
+        }
     }
 
     fn select_font_a(&mut self) {
@@ -558,15 +732,20 @@ impl PrinterState {
     }
 
     fn feed_lines(&mut self, lines: u8) {
-        let remaining_width = self.line.width.saturating_sub(self.print_x);
-        // `print_x` is the exact composed width. Using it rather than scanning
-        // black dots keeps leading/trailing spaces significant for alignment.
+        let remaining_width = self.line.width.saturating_sub(self.line_used_width);
+        // Track logical data width rather than scanning black dots. This keeps
+        // spaces significant and preserves far-right data after ESC $ or
+        // ESC \ moves the cursor back to an earlier position.
         let line_left = match self.justification {
             Justification::Left => 0,
             Justification::Center => remaining_width / 2,
             Justification::Right => remaining_width,
         };
-        self.roll.composite_at(&self.line, line_left, self.line_top);
+        self.roll.composite_at(
+            &self.line,
+            self.print_area_left.saturating_add(line_left),
+            self.line_top,
+        );
         // Oversized text and bit images must not overlap the next line even
         // when the configured line spacing is smaller than their dot height.
         let feed = match lines {
@@ -583,6 +762,8 @@ impl PrinterState {
         self.roll.ensure_height(self.line_top);
         self.line.clear();
         self.print_x = 0;
+        self.line_used_width = 0;
+        self.at_beginning_of_line = true;
         self.line_height = 0;
     }
 
@@ -609,6 +790,7 @@ impl PrinterState {
         let cell_width = self
             .active_font
             .cell_width_dots
+            .saturating_add(self.right_side_character_spacing)
             .saturating_mul(self.character_width_multiplier);
         let cell_height = self
             .active_font
@@ -685,6 +867,8 @@ impl PrinterState {
         }
 
         self.print_x = self.print_x.saturating_add(cell_width);
+        self.line_used_width = self.line_used_width.max(self.print_x);
+        self.at_beginning_of_line = false;
     }
 
     fn paint_bit_image(
@@ -719,6 +903,10 @@ impl PrinterState {
         self.print_x = self
             .print_x
             .saturating_add(columns as u32 * horizontal_scale);
+        self.line_used_width = self.line_used_width.max(self.print_x);
+        if columns > 0 {
+            self.at_beginning_of_line = false;
+        }
     }
 
     fn print_raster_image(
@@ -755,6 +943,8 @@ impl PrinterState {
             .saturating_add(height_dots as u32 * vertical_scale);
         self.roll.ensure_height(self.line_top);
         self.print_x = 0;
+        self.line_used_width = 0;
+        self.at_beginning_of_line = true;
     }
 
     fn line_feed(&mut self) {

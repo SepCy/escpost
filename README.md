@@ -14,8 +14,9 @@ resident font glyphs.
 The renderer currently supports profile-driven Font A/B text with CP437 and
 CP850 selection, wrapping, combined character sizing, emphasis, underline,
 reverse printing, justification, line spacing and feeds, all four `ESC *`
-bit-image modes, and all `GS v 0` raster-image scaling modes. It emits one-bit
-grayscale PNG.
+bit-image modes, all `GS v 0` raster-image scaling modes, absolute and relative
+horizontal positioning, motion units, margins, and print-area widths. It emits
+one-bit grayscale PNG.
 
 The Python binding and conformance-case CLI can render, raw-print, or calibrate
 the same verified byte stream.

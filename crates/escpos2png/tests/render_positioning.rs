@@ -1,0 +1,226 @@
+use escpos2png::render;
+use escpos2png_profiles::compile_profile;
+
+const CAPABILITIES_JSON: &[u8] =
+    include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
+const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
+const ESC: u8 = 0x1b;
+const GS: u8 = 0x1d;
+const LF: u8 = 0x0a;
+
+#[test]
+fn esc_dollar_sets_an_absolute_position_in_horizontal_motion_units() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [ESC, b'$', 30, 0, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+
+    let rendered = render(&input, &profile).expect("ESC $ should position the marker");
+    let surface = &rendered.sheets[0].surface;
+
+    // This profile has 203 motion units and 203 dots per inch, so 30 units
+    // place the one-column marker exactly at x=30.
+    assert!(surface.is_printed(30, 0));
+    assert!(surface.is_printed(30, 1));
+    assert!(surface.is_printed(30, 2));
+    assert!(!(0..30).any(|x| (0..3).any(|y| surface.is_printed(x, y))));
+}
+
+#[test]
+fn esc_backslash_moves_right_or_left_from_the_current_position() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        // Start at x=30 and move ten units right.
+        ESC,
+        b'$',
+        30,
+        0,
+        ESC,
+        b'\\',
+        10,
+        0,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        LF,
+        // Start at x=30 and move ten units left. -10 is FFF6h.
+        ESC,
+        b'$',
+        30,
+        0,
+        ESC,
+        b'\\',
+        0xf6,
+        0xff,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        LF,
+    ];
+
+    let rendered = render(&input, &profile).expect("ESC \\ should move in both directions");
+    let surface = &rendered.sheets[0].surface;
+
+    assert!(surface.is_printed(40, 0));
+    assert!(surface.is_printed(20, 30));
+}
+
+#[test]
+fn esc_space_adds_profile_scaled_right_side_character_spacing() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [ESC, b' ', 5, b'A', ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+
+    let rendered = render(&input, &profile).expect("ESC SP should add character spacing");
+    let surface = &rendered.sheets[0].surface;
+
+    // Font A advances 12 dots and this profile converts five horizontal
+    // motion units to five dots. The marker therefore starts at x=17.
+    assert!(surface.is_printed(17, 0));
+    assert!(surface.is_printed(17, 1));
+    assert!(surface.is_printed(17, 2));
+}
+
+#[test]
+fn gs_p_changes_units_for_future_positions_without_moving_the_cursor() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        // Resolve x=10 with the profile's default 203-units-per-inch pitch.
+        ESC,
+        b'$',
+        10,
+        0,
+        // Changing to 100 units per inch must not alter the stored x=10 dots.
+        GS,
+        b'P',
+        100,
+        0,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        LF,
+        // A new ten-unit position now resolves to floor(10 * 203 / 100)=20.
+        ESC,
+        b'$',
+        10,
+        0,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        LF,
+    ];
+
+    let rendered = render(&input, &profile).expect("GS P should update the motion-unit state");
+    let surface = &rendered.sheets[0].surface;
+
+    assert!(surface.is_printed(10, 0));
+    assert!(surface.is_printed(20, 30));
+}
+
+#[test]
+fn gs_l_and_gs_w_define_the_standard_mode_print_area() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        GS, b'L', 24, 0, GS, b'W', 120, 0, ESC, b'a', 1, GS, b'B', 1, b' ', LF,
+    ];
+
+    let rendered = render(&input, &profile).expect("the print area should render");
+    let surface = &rendered.sheets[0].surface;
+
+    // The visible reversed-space cell is centered inside the 120-dot area:
+    // physical x = 24-dot margin + (120 - 12-dot cell) / 2 = 78.
+    assert_eq!(count_printed_dots(surface, 78, 12, 24), 12 * 24);
+    assert_eq!(count_printed_dots(surface, 0, 78, 24), 0);
+    assert_eq!(count_printed_dots(surface, 90, 294, 24), 0);
+}
+
+#[test]
+fn justification_uses_the_farthest_composed_dot_after_moving_backwards() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        ESC,
+        b'a',
+        1,
+        ESC,
+        b'$',
+        100,
+        0,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        ESC,
+        b'$',
+        20,
+        0,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        LF,
+    ];
+
+    let rendered = render(&input, &profile).expect("the repositioned line should center");
+    let surface = &rendered.sheets[0].surface;
+
+    // The far marker ends at x=101, so the complete line moves right by
+    // floor((384 - 101) / 2)=141. The cursor ending at x=21 must not shrink
+    // the line's composed width.
+    assert!(surface.is_printed(241, 0));
+    assert!(surface.is_printed(161, 0));
+}
+
+#[test]
+fn gs_l_and_gs_w_are_ignored_after_the_line_has_started() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        GS, b'B', 1, b' ', GS, b'L', 24, 0, GS, b'W', 120, 0, LF, b' ', LF,
+    ];
+
+    let rendered = render(&input, &profile).expect("mid-line print-area commands are ignored");
+    let surface = &rendered.sheets[0].surface;
+
+    // Epson enables GS L and GS W only at the beginning of a line. Both
+    // reversed cells therefore remain at the default physical x=0.
+    assert_eq!(count_printed_dots(surface, 0, 12, 24), 12 * 24);
+    assert_eq!(count_printed_dots(surface, 0, 12, 54), 12 * 48);
+}
+
+fn count_printed_dots(
+    surface: &escpos2png::MonoSurface,
+    left: u32,
+    width: u32,
+    height: u32,
+) -> usize {
+    (left..left + width)
+        .flat_map(|x| (0..height).map(move |y| (x, y)))
+        .filter(|&(x, y)| surface.is_printed(x, y))
+        .count()
+}

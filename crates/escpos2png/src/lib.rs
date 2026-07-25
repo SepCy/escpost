@@ -738,7 +738,7 @@ fn execute_gs_v0(
     offset: usize,
     state: &mut PrinterState,
 ) -> Result<usize, RenderError> {
-    if data.len() < 8 {
+    if data.len() < 3 {
         return Err(RenderError::TruncatedCommand {
             command: "GS v 0",
             offset,
@@ -748,6 +748,20 @@ fn execute_gs_v0(
     if data[2] != 0x30 {
         return Err(RenderError::UnsupportedGsCommand {
             command: data[1],
+            offset,
+        });
+    }
+
+    if !state.at_beginning_of_line {
+        // In Standard mode Epson consumes only the GS v 0 prefix when the
+        // line has started. The outer parser must see m and every later byte
+        // as normal input instead of trusting the raster length fields.
+        return Ok(3);
+    }
+
+    if data.len() < 8 {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS v 0",
             offset,
         });
     }
@@ -1132,13 +1146,10 @@ impl PrinterState {
         };
         let feed = match lines {
             0 => 0,
-            lines => self
-                .line_spacing
-                .max(self.line.height.max(self.line_height))
-                .saturating_add(
-                    self.line_spacing
-                        .saturating_mul(u32::from(lines).saturating_sub(1)),
-                ),
+            lines => self.line_spacing.max(self.line_height).saturating_add(
+                self.line_spacing
+                    .saturating_mul(u32::from(lines).saturating_sub(1)),
+            ),
         };
         let required_height = self
             .line_top
@@ -1150,8 +1161,9 @@ impl PrinterState {
             self.print_area_left.saturating_add(line_left),
             self.line_top,
         );
-        // Oversized text and bit images must not overlap the next line even
-        // when the configured line spacing is smaller than their dot height.
+        // Epson expands the feed for tall characters, but ESC * graphics keep
+        // the selected line spacing. This permits the intentional overlap used
+        // by column-image streams whose rows are advanced separately.
         self.line_top = self.line_top.saturating_add(feed);
         self.roll.ensure_height(self.line_top);
         self.line.clear();

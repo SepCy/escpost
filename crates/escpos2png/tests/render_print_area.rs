@@ -84,6 +84,42 @@ fn gs_w_clips_raster_graphics_at_the_print_area_edge() {
     assert_eq!(count_printed_dots(surface, 32, 352, 1), 0);
 }
 
+#[test]
+fn text_wraps_at_the_active_print_area_width() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [GS, b'W', 24, 0, GS, b'B', 1, b' ', b' ', b' ', LF];
+
+    let rendered = render(&input, &profile).expect("text should wrap inside GS W");
+    let surface = &rendered.sheets[0].surface;
+
+    // Two 12-dot Font A cells fit on the first line. The third cell wraps to
+    // the next profile-default 30-dot line.
+    assert_eq!((surface.width(), surface.height()), (384, 60));
+    assert_eq!(count_printed_dots(surface, 0, 24, 24), 24 * 24);
+    assert_eq!(count_printed_dots(surface, 0, 12, 54) - 12 * 24, 12 * 24);
+    assert_eq!(count_printed_dots(surface, 24, 360, 60), 0);
+}
+
+#[test]
+fn gs_w_clips_column_format_graphics_at_the_print_area_edge() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let mut input = vec![GS, b'W', 8, 0, 0x1b, b'*', 1, 16, 0];
+    input.extend([0b1000_0000; 16]);
+    input.push(LF);
+
+    let rendered = render(&input, &profile).expect("oversized ESC * should be clipped");
+    let surface = &rendered.sheets[0].surface;
+
+    // Sixteen source columns are declared, but the active area keeps only the
+    // first eight printer-dot columns.
+    assert_eq!(count_printed_dots(surface, 0, 8, 3), 8 * 3);
+    assert_eq!(count_printed_dots(surface, 8, 376, 3), 0);
+}
+
 fn count_printed_dots(
     surface: &escpos2png::MonoSurface,
     left: u32,

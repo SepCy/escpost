@@ -108,3 +108,41 @@ fn gs_v0_feeds_by_image_height_instead_of_the_selected_line_spacing() {
     assert!(surface.is_printed(0, 0));
     assert!(surface.is_printed(0, 1));
 }
+
+#[test]
+fn column_graphics_advance_by_the_selected_line_spacing() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [
+        0x1b,
+        b'3',
+        1,
+        0x1b,
+        b'*',
+        33,
+        1,
+        0,
+        0,
+        0,
+        0b0000_0001,
+        0x0a,
+        0x1b,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        0x0a,
+    ];
+
+    let rendered = render(&input, &profile).expect("ESC * should use the selected line spacing");
+    let surface = &rendered.sheets[0].surface;
+
+    // ESC * does not replace the line spacing. The first image reaches y=23,
+    // while the second image starts only one dot below the first line origin.
+    // Explicit 24-dot spacing is needed when callers want adjacent image rows.
+    assert!(surface.is_printed(0, 23));
+    assert!(surface.is_printed(0, 1));
+    assert_eq!(surface.height(), 24);
+}

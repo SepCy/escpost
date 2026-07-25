@@ -53,8 +53,24 @@ pub enum RenderError {
     #[error("unsupported ESC/POS command ESC {command:#04x} at byte offset {offset}")]
     UnsupportedEscCommand { command: u8, offset: usize },
 
+    #[error("unsupported ESC/POS command GS {command:#04x} at byte offset {offset}")]
+    UnsupportedGsCommand { command: u8, offset: usize },
+
     #[error("unsupported ESC * bit-image mode {mode} at byte offset {offset}")]
     UnsupportedBitImageMode { mode: u8, offset: usize },
+
+    #[error("unsupported GS v 0 raster bit-image mode {mode} at byte offset {offset}")]
+    UnsupportedRasterBitImageMode { mode: u8, offset: usize },
+
+    #[error(
+        "invalid GS v 0 raster dimensions {width_bytes} byte(s) by {height_dots} dot(s) \
+         at byte offset {offset}"
+    )]
+    InvalidRasterBitImageDimensions {
+        width_bytes: usize,
+        height_dots: usize,
+        offset: usize,
+    },
 
     #[error("unsupported data byte {byte:#04x} at byte offset {offset}")]
     UnsupportedDataByte { byte: u8, offset: usize },
@@ -74,6 +90,7 @@ pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, Ren
                 1
             }
             0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
+            0x1d => execute_gs_command(&data[offset..], offset, &mut state)?,
             byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
         };
     }
@@ -170,6 +187,80 @@ fn execute_esc_star(
     Ok(command_length)
 }
 
+fn execute_gs_command(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    let Some(command) = data.get(1).copied() else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS",
+            offset,
+        });
+    };
+
+    match command {
+        0x76 => execute_gs_v0(data, offset, state),
+        command => Err(RenderError::UnsupportedGsCommand { command, offset }),
+    }
+}
+
+fn execute_gs_v0(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    if data.len() < 8 {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS v 0",
+            offset,
+        });
+    }
+
+    if data[2] != 0x30 {
+        return Err(RenderError::UnsupportedGsCommand {
+            command: data[1],
+            offset,
+        });
+    }
+
+    let mode = data[3];
+    let (horizontal_scale, vertical_scale) = match mode {
+        0 | 48 => (1, 1),
+        1 | 49 => (2, 1),
+        2 | 50 => (1, 2),
+        3 | 51 => (2, 2),
+        mode => return Err(RenderError::UnsupportedRasterBitImageMode { mode, offset }),
+    };
+
+    let width_bytes = usize::from(data[4]) + usize::from(data[5]) * 256;
+    let height_dots = usize::from(data[6]) + usize::from(data[7]) * 256;
+    if width_bytes == 0 || height_dots == 0 {
+        return Err(RenderError::InvalidRasterBitImageDimensions {
+            width_bytes,
+            height_dots,
+            offset,
+        });
+    }
+
+    let command_length = 8 + width_bytes * height_dots;
+    let Some(payload) = data.get(8..command_length) else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS v 0",
+            offset,
+        });
+    };
+
+    state.print_raster_image(
+        payload,
+        width_bytes,
+        height_dots,
+        horizontal_scale,
+        vertical_scale,
+    );
+    Ok(command_length)
+}
+
 #[derive(Debug)]
 struct PrinterState {
     roll: MonoSurface,
@@ -231,6 +322,40 @@ impl PrinterState {
         self.print_x = self
             .print_x
             .saturating_add(columns as u32 * horizontal_scale);
+    }
+
+    fn print_raster_image(
+        &mut self,
+        payload: &[u8],
+        width_bytes: usize,
+        height_dots: usize,
+        horizontal_scale: u32,
+        vertical_scale: u32,
+    ) {
+        for (source_y, row) in payload.chunks_exact(width_bytes).enumerate() {
+            for (byte_index, byte) in row.iter().copied().enumerate() {
+                for bit in 0..8 {
+                    if byte & (0x80 >> bit) == 0 {
+                        continue;
+                    }
+
+                    let source_x = byte_index as u32 * 8 + bit;
+                    let left = source_x * horizontal_scale;
+                    let top = self.line_top + source_y as u32 * vertical_scale;
+                    for x in left..left + horizontal_scale {
+                        for y in top..top + vertical_scale {
+                            self.roll.print_dot(x, y);
+                        }
+                    }
+                }
+            }
+        }
+
+        self.line_top = self
+            .line_top
+            .saturating_add(height_dots as u32 * vertical_scale);
+        self.roll.ensure_height(self.line_top);
+        self.print_x = 0;
     }
 
     fn line_feed(&mut self) {

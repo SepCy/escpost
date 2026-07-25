@@ -1,0 +1,18 @@
+schema_version = 1
+name = "GS v 0 all scaling modes"
+profile = "NT-5890K"
+input = "input.hex"
+input_encoding = "hex"
+input_sha256 = "e7c39a92ae87763f7dfa6fefe03056a344d57bdc700a8196030589a7fc164371"
+expected_completeness = "complete"
+
+[initial_state]
+assumption = "profile-reset-defaults"
+
+[[expected_sheets]]
+width_dots = 384
+height_dots = 138
+
+[[references]]
+source = "epson-escpos-manual"
+location = "GS v 0 — Print raster bit image"

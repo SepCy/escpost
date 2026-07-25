@@ -1,0 +1,18 @@
+schema_version = 1
+name = "ESC * all density modes"
+profile = "NT-5890K"
+input = "input.hex"
+input_encoding = "hex"
+input_sha256 = "71314c638faa7520d8bcf9112d302bf49d9ef75d2d85737dc85148073f77250e"
+expected_completeness = "complete"
+
+[initial_state]
+assumption = "profile-reset-defaults"
+
+[[expected_sheets]]
+width_dots = 384
+height_dots = 120
+
+[[references]]
+source = "epson-escpos-manual"
+location = "ESC * — Select bit-image mode"

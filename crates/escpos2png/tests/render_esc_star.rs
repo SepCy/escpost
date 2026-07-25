@@ -35,6 +35,75 @@ fn renders_esc_star_8_dot_double_density_in_printer_dots() {
 }
 
 #[test]
+fn renders_esc_star_8_dot_single_density_at_two_by_three_printer_dots() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [0x1b, 0x40, 0x1b, 0x2a, 0, 1, 0, 0x81, 0x0a];
+
+    let rendered = render(&input, &profile).expect("single-density ESC * should render");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!((surface.width(), surface.height()), (384, 30));
+    for y in 0..surface.height() {
+        for x in 0..surface.width() {
+            let expected = x < 2 && (y < 3 || (21..24).contains(&y));
+            assert_eq!(
+                surface.is_printed(x, y),
+                expected,
+                "unexpected dot at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn renders_esc_star_24_dot_single_density_at_two_by_one_printer_dots() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [0x1b, 0x40, 0x1b, 0x2a, 32, 1, 0, 0x80, 0x00, 0x01, 0x0a];
+
+    let rendered = render(&input, &profile).expect("24-dot ESC * should render");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!((surface.width(), surface.height()), (384, 30));
+    for y in 0..surface.height() {
+        for x in 0..surface.width() {
+            let expected = x < 2 && (y == 0 || y == 23);
+            assert_eq!(
+                surface.is_printed(x, y),
+                expected,
+                "unexpected dot at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn renders_esc_star_24_dot_double_density_at_one_printer_dot_per_source_dot() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    let input = [0x1b, 0x40, 0x1b, 0x2a, 33, 1, 0, 0x80, 0x00, 0x01, 0x0a];
+
+    let rendered = render(&input, &profile).expect("24-dot ESC * should render");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!((surface.width(), surface.height()), (384, 30));
+    for y in 0..surface.height() {
+        for x in 0..surface.width() {
+            let expected = x == 0 && (y == 0 || y == 23);
+            assert_eq!(
+                surface.is_printed(x, y),
+                expected,
+                "unexpected dot at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
 fn encodes_the_rendered_sheet_as_one_bit_grayscale_png() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")

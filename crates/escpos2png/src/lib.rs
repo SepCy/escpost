@@ -148,12 +148,17 @@ fn execute_esc_star(
     }
 
     let mode = data[2];
-    if mode != 1 {
-        return Err(RenderError::UnsupportedBitImageMode { mode, offset });
-    }
-
+    let (bytes_per_column, horizontal_scale, vertical_scale) = match mode {
+        0 => (1, 2, 3),
+        1 => (1, 1, 3),
+        32 => (3, 2, 1),
+        33 => (3, 1, 1),
+        mode => {
+            return Err(RenderError::UnsupportedBitImageMode { mode, offset });
+        }
+    };
     let columns = usize::from(data[3]) + usize::from(data[4]) * 256;
-    let command_length = 5 + columns;
+    let command_length = 5 + columns * bytes_per_column;
     let Some(payload) = data.get(5..command_length) else {
         return Err(RenderError::TruncatedCommand {
             command: "ESC *",
@@ -161,7 +166,7 @@ fn execute_esc_star(
         });
     };
 
-    state.paint_8_dot_double_density(payload);
+    state.paint_bit_image(payload, bytes_per_column, horizontal_scale, vertical_scale);
     Ok(command_length)
 }
 
@@ -196,22 +201,36 @@ impl PrinterState {
         self.line_spacing = self.default_line_spacing;
     }
 
-    fn paint_8_dot_double_density(&mut self, columns: &[u8]) {
-        for (column_index, column) in columns.iter().copied().enumerate() {
-            let x = self.print_x + column_index as u32;
-            for source_y in 0..8 {
-                if column & (0x80 >> source_y) == 0 {
-                    continue;
-                }
+    fn paint_bit_image(
+        &mut self,
+        payload: &[u8],
+        bytes_per_column: usize,
+        horizontal_scale: u32,
+        vertical_scale: u32,
+    ) {
+        for (column_index, column) in payload.chunks_exact(bytes_per_column).enumerate() {
+            let x = self.print_x + column_index as u32 * horizontal_scale;
+            for (byte_index, byte) in column.iter().copied().enumerate() {
+                for bit in 0..8 {
+                    if byte & (0x80 >> bit) == 0 {
+                        continue;
+                    }
 
-                let top = source_y * 3;
-                for y in top..top + 3 {
-                    self.line.print_dot(x, y);
+                    let source_y = byte_index as u32 * 8 + bit;
+                    let top = source_y * vertical_scale;
+                    for destination_x in x..x + horizontal_scale {
+                        for y in top..top + vertical_scale {
+                            self.line.print_dot(destination_x, y);
+                        }
+                    }
                 }
             }
         }
 
-        self.print_x = self.print_x.saturating_add(columns.len() as u32);
+        let columns = payload.len() / bytes_per_column;
+        self.print_x = self
+            .print_x
+            .saturating_add(columns as u32 * horizontal_scale);
     }
 
     fn line_feed(&mut self) {

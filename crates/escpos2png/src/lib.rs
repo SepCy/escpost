@@ -1,7 +1,22 @@
 //! Dot-accurate ESC/POS rendering.
 
-use escpos2png_profiles::PrinterProfile;
+use escpos2png_profiles::{Font as ProfileFont, PrinterProfile};
+use fontdue::{Font, FontSettings};
+use oem_cp::{Cp437, Cp850};
+use std::collections::BTreeMap;
+use std::sync::OnceLock;
 use thiserror::Error;
+
+const DEFAULT_FONT_BYTES: &[u8] =
+    include_bytes!("../../../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
+const GLYPH_ALPHA_THRESHOLD: u8 = 128;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Justification {
+    Left,
+    Center,
+    Right,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderResult {
@@ -59,6 +74,22 @@ pub enum RenderError {
     #[error("unsupported ESC * bit-image mode {mode} at byte offset {offset}")]
     UnsupportedBitImageMode { mode: u8, offset: usize },
 
+    #[error("unsupported character font {font} at byte offset {offset}")]
+    UnsupportedCharacterFont { font: u8, offset: usize },
+
+    #[error("unsupported underline mode {mode} at byte offset {offset}")]
+    UnsupportedUnderlineMode { mode: u8, offset: usize },
+
+    #[error("unsupported justification {justification} at byte offset {offset}")]
+    UnsupportedJustification { justification: u8, offset: usize },
+
+    #[error("unsupported code page {code_page} ({encoding}) at byte offset {offset}")]
+    UnsupportedCodePage {
+        code_page: u8,
+        encoding: String,
+        offset: usize,
+    },
+
     #[error("unsupported GS v 0 raster bit-image mode {mode} at byte offset {offset}")]
     UnsupportedRasterBitImageMode { mode: u8, offset: usize },
 
@@ -91,6 +122,12 @@ pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, Ren
             }
             0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
             0x1d => execute_gs_command(&data[offset..], offset, &mut state)?,
+            // ESC/POS code pages retain ASCII in 20h–7Eh and assign printable
+            // characters to 80h–FFh. Control bytes remain parser input.
+            byte @ (0x20..=0x7e | 0x80..=0xff) => {
+                state.print_byte(byte, offset)?;
+                1
+            }
             byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
         };
     }
@@ -109,6 +146,8 @@ fn encode_png(surface: &MonoSurface) -> Result<Vec<u8>, png::EncodingError> {
     let row_bytes = surface.width.div_ceil(8);
     let mut pixels = vec![0xff; (row_bytes * surface.height) as usize];
 
+    // PNG grayscale-1 stores eight left-to-right pixels per byte, with zero
+    // representing black. MonoSurface uses the more convenient `true = ink`.
     for y in 0..surface.height {
         for x in 0..surface.width {
             if surface.is_printed(x, y) {
@@ -147,7 +186,33 @@ fn execute_esc_command(
             state.initialize();
             Ok(2)
         }
+        0x21 => {
+            let Some(mode) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC !",
+                    offset,
+                });
+            };
+            state.set_print_mode(mode);
+            Ok(3)
+        }
         0x2a => execute_esc_star(data, offset, state),
+        0x2d => {
+            let Some(mode) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC -",
+                    offset,
+                });
+            };
+            let thickness = match mode {
+                0 | 48 => 0,
+                1 | 49 => 1,
+                2 | 50 => 2,
+                mode => return Err(RenderError::UnsupportedUnderlineMode { mode, offset }),
+            };
+            state.set_underline(thickness);
+            Ok(3)
+        }
         0x32 => {
             state.restore_default_line_spacing();
             Ok(2)
@@ -162,6 +227,51 @@ fn execute_esc_command(
             state.set_line_spacing(spacing);
             Ok(3)
         }
+        0x45 => {
+            let Some(emphasis) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC E",
+                    offset,
+                });
+            };
+            state.set_emphasis(emphasis & 0x01 != 0);
+            Ok(3)
+        }
+        0x4d => {
+            let Some(font) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC M",
+                    offset,
+                });
+            };
+            match font {
+                0 | 48 => state.select_font_a(),
+                1 | 49 => state.select_font_b(),
+                font => return Err(RenderError::UnsupportedCharacterFont { font, offset }),
+            }
+            Ok(3)
+        }
+        0x61 => {
+            let Some(justification) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC a",
+                    offset,
+                });
+            };
+            let justification = match justification {
+                0 | 48 => Justification::Left,
+                1 | 49 => Justification::Center,
+                2 | 50 => Justification::Right,
+                justification => {
+                    return Err(RenderError::UnsupportedJustification {
+                        justification,
+                        offset,
+                    });
+                }
+            };
+            state.set_justification(justification);
+            Ok(3)
+        }
         0x64 => {
             let Some(lines) = data.get(2).copied() else {
                 return Err(RenderError::TruncatedCommand {
@@ -170,6 +280,27 @@ fn execute_esc_command(
                 });
             };
             state.feed_lines(lines);
+            Ok(3)
+        }
+        0x74 => {
+            let Some(code_page) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC t",
+                    offset,
+                });
+            };
+            let encoding = state
+                .code_page_encoding(code_page)
+                .unwrap_or("<not present in printer profile>");
+            if !is_supported_code_page_encoding(encoding) {
+                return Err(RenderError::UnsupportedCodePage {
+                    code_page,
+                    encoding: encoding.to_owned(),
+                    offset,
+                });
+            }
+
+            state.select_code_page(code_page);
             Ok(3)
         }
         command => Err(RenderError::UnsupportedEscCommand { command, offset }),
@@ -224,6 +355,16 @@ fn execute_gs_command(
     };
 
     match command {
+        0x42 => {
+            let Some(reverse) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS B",
+                    offset,
+                });
+            };
+            state.set_reverse(reverse & 0x01 != 0);
+            Ok(3)
+        }
         0x76 => execute_gs_v0(data, offset, state),
         command => Err(RenderError::UnsupportedGsCommand { command, offset }),
     }
@@ -288,6 +429,8 @@ fn execute_gs_v0(
 #[derive(Debug)]
 struct PrinterState {
     roll: MonoSurface,
+    // Text and ESC * data are composed on a line first because ESC a applies
+    // justification when the printer receives the line feed, not per glyph.
     line: MonoSurface,
     line_top: u32,
     print_x: u32,
@@ -295,12 +438,27 @@ struct PrinterState {
     default_line_spacing: u32,
     vertical_dpi: u32,
     vertical_motion_units_per_inch: u32,
+    font_a: ProfileFont,
+    font_b: ProfileFont,
+    active_font: ProfileFont,
+    code_pages: BTreeMap<u8, String>,
+    default_code_page: u8,
+    active_code_page: u8,
+    character_width_multiplier: u32,
+    character_height_multiplier: u32,
+    emphasized: bool,
+    underline_thickness: u32,
+    reversed: bool,
+    justification: Justification,
+    line_height: u32,
 }
 
 impl PrinterState {
     fn new(profile: &PrinterProfile) -> Self {
         let width = profile.geometry.printable_width_dots;
         let default_line_spacing = profile.defaults.line_spacing_dots;
+        let font_a = profile.fonts.a.clone();
+        let font_b = profile.fonts.b.clone();
 
         Self {
             roll: MonoSurface::new(width),
@@ -311,16 +469,54 @@ impl PrinterState {
             default_line_spacing,
             vertical_dpi: profile.geometry.dpi_y,
             vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
+            active_font: font_a.clone(),
+            font_a,
+            font_b,
+            code_pages: profile.code_pages.clone(),
+            default_code_page: profile.defaults.code_page,
+            active_code_page: profile.defaults.code_page,
+            character_width_multiplier: 1,
+            character_height_multiplier: 1,
+            emphasized: false,
+            underline_thickness: 0,
+            reversed: false,
+            justification: Justification::Left,
+            line_height: 0,
         }
     }
 
     fn initialize(&mut self) {
+        // Epson defines ESC @ as clearing the print buffer before restoring
+        // modes. Already committed rows on `roll` represent fed paper and stay.
         self.line.clear();
         self.print_x = 0;
         self.line_spacing = self.default_line_spacing;
+        self.active_font = self.font_a.clone();
+        self.active_code_page = self.default_code_page;
+        self.character_width_multiplier = 1;
+        self.character_height_multiplier = 1;
+        self.emphasized = false;
+        self.underline_thickness = 0;
+        self.reversed = false;
+        self.justification = Justification::Left;
+        self.line_height = 0;
+    }
+
+    fn set_print_mode(&mut self, mode: u8) {
+        if mode & 0x01 == 0 {
+            self.select_font_a();
+        } else {
+            self.select_font_b();
+        }
+        self.character_height_multiplier = if mode & 0x10 == 0 { 1 } else { 2 };
+        self.character_width_multiplier = if mode & 0x20 == 0 { 1 } else { 2 };
+        self.emphasized = mode & 0x08 != 0;
+        self.underline_thickness = u32::from(mode & 0x80 != 0);
     }
 
     fn set_line_spacing(&mut self, motion_units: u8) {
+        // ESC 3 uses the printer's vertical motion unit, which is not
+        // necessarily one dot. Integer truncation matches dot-grid hardware.
         self.line_spacing = (u64::from(motion_units) * u64::from(self.vertical_dpi)
             / u64::from(self.vertical_motion_units_per_inch)) as u32;
     }
@@ -329,14 +525,166 @@ impl PrinterState {
         self.line_spacing = self.default_line_spacing;
     }
 
+    fn set_emphasis(&mut self, emphasized: bool) {
+        self.emphasized = emphasized;
+    }
+
+    fn set_underline(&mut self, thickness: u32) {
+        self.underline_thickness = thickness;
+    }
+
+    fn set_reverse(&mut self, reversed: bool) {
+        self.reversed = reversed;
+    }
+
+    fn set_justification(&mut self, justification: Justification) {
+        self.justification = justification;
+    }
+
+    fn select_font_a(&mut self) {
+        self.active_font = self.font_a.clone();
+    }
+
+    fn select_font_b(&mut self) {
+        self.active_font = self.font_b.clone();
+    }
+
+    fn code_page_encoding(&self, code_page: u8) -> Option<&str> {
+        self.code_pages.get(&code_page).map(String::as_str)
+    }
+
+    fn select_code_page(&mut self, code_page: u8) {
+        self.active_code_page = code_page;
+    }
+
     fn feed_lines(&mut self, lines: u8) {
-        self.roll.composite(&self.line, self.line_top);
-        self.line_top = self
-            .line_top
-            .saturating_add(self.line_spacing.saturating_mul(u32::from(lines)));
+        let remaining_width = self.line.width.saturating_sub(self.print_x);
+        // `print_x` is the exact composed width. Using it rather than scanning
+        // black dots keeps leading/trailing spaces significant for alignment.
+        let line_left = match self.justification {
+            Justification::Left => 0,
+            Justification::Center => remaining_width / 2,
+            Justification::Right => remaining_width,
+        };
+        self.roll.composite_at(&self.line, line_left, self.line_top);
+        // Oversized text and bit images must not overlap the next line even
+        // when the configured line spacing is smaller than their dot height.
+        let feed = match lines {
+            0 => 0,
+            lines => self
+                .line_spacing
+                .max(self.line.height.max(self.line_height))
+                .saturating_add(
+                    self.line_spacing
+                        .saturating_mul(u32::from(lines).saturating_sub(1)),
+                ),
+        };
+        self.line_top = self.line_top.saturating_add(feed);
         self.roll.ensure_height(self.line_top);
         self.line.clear();
         self.print_x = 0;
+        self.line_height = 0;
+    }
+
+    fn print_byte(&mut self, byte: u8, offset: usize) -> Result<(), RenderError> {
+        // The ESC t operand is printer-specific. The profile translates that
+        // numeric slot into a stable encoding name before we decode the byte.
+        let encoding = self
+            .code_page_encoding(self.active_code_page)
+            .unwrap_or("<not present in printer profile>");
+        if !is_supported_code_page_encoding(encoding) {
+            return Err(RenderError::UnsupportedCodePage {
+                code_page: self.active_code_page,
+                encoding: encoding.to_owned(),
+                offset,
+            });
+        }
+
+        let character = decode_printable_byte(byte, encoding);
+        self.print_character(character);
+        Ok(())
+    }
+
+    fn print_character(&mut self, character: char) {
+        let cell_width = self
+            .active_font
+            .cell_width_dots
+            .saturating_mul(self.character_width_multiplier);
+        let cell_height = self
+            .active_font
+            .cell_height_dots
+            .saturating_mul(self.character_height_multiplier);
+        if self.print_x.saturating_add(cell_width) > self.line.width {
+            self.line_feed();
+        }
+        self.line_height = self.line_height.max(cell_height);
+        if self.reversed {
+            for x in self.print_x..self.print_x.saturating_add(cell_width) {
+                for y in 0..cell_height {
+                    self.line.print_dot(x, y);
+                }
+            }
+        }
+
+        let font_size = self.active_font.cell_height_dots as f32;
+        let (metrics, bitmap) = default_font().rasterize(character, font_size);
+        // The bundled font supplies stable glyph shapes, while printer profile
+        // cells remain authoritative for clipping, centering, and advancement.
+        let horizontal_crop = metrics
+            .width
+            .saturating_sub(self.active_font.cell_width_dots as usize)
+            / 2;
+        let horizontal_padding =
+            (self.active_font.cell_width_dots as usize).saturating_sub(metrics.width) / 2;
+        let glyph_top =
+            self.active_font.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
+
+        for source_y in 0..metrics.height {
+            let destination_y = glyph_top + source_y as i32;
+            if destination_y < 0 || destination_y >= self.active_font.cell_height_dots as i32 {
+                continue;
+            }
+
+            for source_x in horizontal_crop..metrics.width {
+                let destination_x = horizontal_padding + source_x - horizontal_crop;
+                if destination_x >= self.active_font.cell_width_dots as usize {
+                    break;
+                }
+                if bitmap[source_y * metrics.width + source_x] < GLYPH_ALPHA_THRESHOLD {
+                    continue;
+                }
+
+                let left = self.print_x + destination_x as u32 * self.character_width_multiplier;
+                let top = destination_y as u32 * self.character_height_multiplier;
+                for x in left..left + self.character_width_multiplier {
+                    for y in top..top + self.character_height_multiplier {
+                        if self.reversed {
+                            self.line.clear_dot(x, y);
+                        } else {
+                            self.line.print_dot(x, y);
+                        }
+                        if self.emphasized && x + 1 < self.print_x.saturating_add(cell_width) {
+                            if self.reversed {
+                                self.line.clear_dot(x + 1, y);
+                            } else {
+                                self.line.print_dot(x + 1, y);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if !self.reversed {
+            let underline_top = cell_height.saturating_sub(self.underline_thickness);
+            for x in self.print_x..self.print_x.saturating_add(cell_width) {
+                for y in underline_top..cell_height {
+                    self.line.print_dot(x, y);
+                }
+            }
+        }
+
+        self.print_x = self.print_x.saturating_add(cell_width);
     }
 
     fn paint_bit_image(
@@ -346,6 +694,8 @@ impl PrinterState {
         horizontal_scale: u32,
         vertical_scale: u32,
     ) {
+        // ESC * is column-major: each group describes one x coordinate and
+        // contains either 8 or 24 vertical source dots.
         for (column_index, column) in payload.chunks_exact(bytes_per_column).enumerate() {
             let x = self.print_x + column_index as u32 * horizontal_scale;
             for (byte_index, byte) in column.iter().copied().enumerate() {
@@ -379,6 +729,8 @@ impl PrinterState {
         horizontal_scale: u32,
         vertical_scale: u32,
     ) {
+        // GS v 0 is row-major, unlike ESC *. Its image is printed immediately
+        // from the left edge and advances the paper by the rendered height.
         for (source_y, row) in payload.chunks_exact(width_bytes).enumerate() {
             for (byte_index, byte) in row.iter().copied().enumerate() {
                 for bit in 0..8 {
@@ -410,6 +762,27 @@ impl PrinterState {
     }
 }
 
+fn default_font() -> &'static Font {
+    static DEFAULT_FONT: OnceLock<Font> = OnceLock::new();
+
+    DEFAULT_FONT.get_or_init(|| {
+        Font::from_bytes(DEFAULT_FONT_BYTES, FontSettings::default())
+            .expect("the bundled Noto Sans Mono font must remain valid")
+    })
+}
+
+fn is_supported_code_page_encoding(encoding: &str) -> bool {
+    matches!(encoding, "CP437" | "CP850")
+}
+
+fn decode_printable_byte(byte: u8, encoding: &str) -> char {
+    match encoding {
+        "CP437" => char::from(Cp437::from(byte)),
+        "CP850" => char::from(Cp850::from(byte)),
+        _ => unreachable!("code-page support is checked when ESC t is executed"),
+    }
+}
+
 impl MonoSurface {
     fn new(width: u32) -> Self {
         Self {
@@ -428,7 +801,15 @@ impl MonoSurface {
         self.dots[(y * self.width + x) as usize] = true;
     }
 
-    fn composite(&mut self, source: &Self, top: u32) {
+    fn clear_dot(&mut self, x: u32, y: u32) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+
+        self.dots[(y * self.width + x) as usize] = false;
+    }
+
+    fn composite_at(&mut self, source: &Self, left: u32, top: u32) {
         if source.height == 0 {
             return;
         }
@@ -437,7 +818,7 @@ impl MonoSurface {
         for y in 0..source.height {
             for x in 0..source.width {
                 if source.is_printed(x, y) {
-                    self.print_dot(x, top + y);
+                    self.print_dot(left.saturating_add(x), top + y);
                 }
             }
         }

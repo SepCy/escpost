@@ -121,12 +121,19 @@ vertical_units_per_inch = 203
 
 [defaults]
 line_spacing_dots = 30
+code_page = 0
 
 [fonts.a]
 columns = 32
+cell_width_dots = 12
+cell_height_dots = 24
+baseline_dots = 20
 
 [fonts.b]
 columns = 42
+cell_width_dots = 9
+cell_height_dots = 17
+baseline_dots = 14
 
 [[approximations]]
 field = "fonts.resident_glyph_shapes"
@@ -145,6 +152,18 @@ Motion-unit values define the profile's reset defaults. Commands convert
 distances into immutable printer-dot coordinates using the corresponding
 horizontal or vertical DPI. A value equal to the axis DPI therefore represents
 one printer dot per motion unit.
+
+Font metrics define ESC/POS character geometry. `cell_width_dots` controls
+advancement, `cell_height_dots` controls line height, and `baseline_dots` is
+measured downward from the top of the unscaled cell. The glyph provider is
+fitted and clipped inside this geometry; its native advance width never
+changes layout.
+
+`defaults.code_page` is the numeric character-table slot active at power-on
+and after `ESC @`. The compiler imports the profile's complete `codePages`
+mapping from the pinned upstream record and rejects a default slot that is not
+present there. The renderer resolves `ESC t n` through this mapping because
+the same numeric `n` can identify different encodings on different printers.
 
 ## Automatic change classification
 

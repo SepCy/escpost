@@ -266,9 +266,10 @@ Byte decoding and glyph rendering are separate:
 5. Advance by ESC/POS cell and spacing metrics, never by the font provider's
    natural advance width.
 
-The default glyph provider should use bundled, redistributable assets or
-another reproducible source. Host-installed fonts are not suitable because
-they make output platform-dependent.
+The default glyph provider embeds the redistributable Noto Sans Mono 2.006
+font bytes in the Rust library and rasterizes them with a pinned pure-Rust
+renderer and fixed one-bit threshold. Host-installed fonts are never searched
+because they would make output platform-dependent.
 
 Profiles may later provide model-specific glyph atlases without changing the
 layout engine.

@@ -402,13 +402,43 @@ maintenance needs require them.
 - Version 1 provenance is intentionally coarse and may require a future schema
   revision if profile reviews become ambiguous.
 
+## DD-023 — Embed and pin the default representative glyph source
+
+**Status:** Accepted
+
+### Context
+
+Text previews must not change with fonts installed on the host or in a
+container. Exact printer ROM glyphs are outside the initial fidelity contract,
+but representative glyph rasterization must still be reproducible and
+license-compatible.
+
+### Decision
+
+Bundle Noto Sans Mono 2.006 under the SIL Open Font License 1.1 and embed its
+verified bytes in the Rust renderer. Rasterize with the pinned pure-Rust
+`fontdue` implementation and a fixed one-bit alpha threshold.
+
+Printer profiles remain authoritative for cell width, cell height, baseline,
+spacing, and advancement. The source font's natural metrics never control
+ESC/POS layout. Keep the glyph-provider boundary replaceable so a profile can
+later select a canonical bitmap atlas or printer-specific glyphs.
+
+### Consequences
+
+- Rendering does not read fonts from the host system.
+- Font, rasterizer, or threshold changes are deliberate rendering changes that
+  require pixel-fixture review.
+- The font asset retains its own license and hash alongside the project.
+- Model-specific atlases can improve glyph fidelity without changing layout
+  semantics.
+
 ## Open questions
 
 The following are intentionally not decided yet:
 
 - canonical runtime profile fields for full command coverage and their
   compatibility policy;
-- default glyph provider and redistributable font assets;
 - whether bidirectional status commands need a configurable response emulator;
   and
 - any remaining fidelity policy needed for printer behaviors that cannot be

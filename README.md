@@ -11,11 +11,14 @@ resident font glyphs.
 
 ## Status
 
-The first vertical slice is implemented. It compiles the enriched `NT-5890K`
-profile, interprets `ESC @`, `ESC *` mode 1, and LF through a Standard-mode
-line buffer, and emits one-bit grayscale PNG. The Python binding and
-conformance-case CLI can render, raw-print, or calibrate the same verified byte
-stream.
+The renderer currently supports profile-driven Font A/B text with CP437 and
+CP850 selection, wrapping, combined character sizing, emphasis, underline,
+reverse printing, justification, line spacing and feeds, all four `ESC *`
+bit-image modes, and all `GS v 0` raster-image scaling modes. It emits one-bit
+grayscale PNG.
+
+The Python binding and conformance-case CLI can render, raw-print, or calibrate
+the same verified byte stream.
 
 This is not yet a general-purpose ESC/POS renderer. Unsupported data and
 commands return errors while command coverage grows one conformance case at a
@@ -108,6 +111,8 @@ The renderer does not initially promise:
 ## Documentation
 
 - [Architecture](ARCHITECTURE.md) describes the current coherent system design.
+- [Coding style](CODING_STYLE.md) defines how code, comments, and tests should
+  explain non-obvious behavior in plain language.
 - [Design decisions](DESIGN_DECISIONS.md) records why durable choices were
   made, their consequences, and which questions remain open.
 - [Printer profile enrichments](PROFILE_SCHEMA.md) defines how upstream

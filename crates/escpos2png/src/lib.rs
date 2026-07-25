@@ -614,6 +614,7 @@ fn execute_esc_star(
             offset,
         });
     }
+    state.require_column_bit_image(offset)?;
 
     let mode = data[2];
     let (bytes_per_column, horizontal_scale, vertical_scale) = match mode {
@@ -768,6 +769,7 @@ fn execute_gs_v0(
         // as normal input instead of trusting the raster length fields.
         return Ok(3);
     }
+    state.require_raster_bit_image(offset)?;
 
     if data.len() < 8 {
         return Err(RenderError::TruncatedCommand {
@@ -857,6 +859,8 @@ struct PrinterState {
     reversed: bool,
     justification: Justification,
     line_height: u32,
+    supports_column_bit_image: bool,
+    supports_raster_bit_image: bool,
     supports_full_cut: bool,
     supports_partial_cut: bool,
     supports_standard_drawer_pulse: bool,
@@ -911,6 +915,8 @@ impl PrinterState {
             reversed: false,
             justification: Justification::Left,
             line_height: 0,
+            supports_column_bit_image: profile.features.bit_image_column,
+            supports_raster_bit_image: profile.features.bit_image_raster,
             supports_full_cut: profile.features.paper_full_cut,
             supports_partial_cut: profile.features.paper_part_cut,
             supports_standard_drawer_pulse: profile.features.pulse_standard,
@@ -1440,6 +1446,39 @@ impl PrinterState {
             .push(std::mem::replace(&mut self.roll, next_roll));
         self.line_top = 0;
         Ok(())
+    }
+
+    fn require_column_bit_image(&self, offset: usize) -> Result<(), RenderError> {
+        self.require_profile_feature(
+            self.supports_column_bit_image,
+            "ESC * column bit image",
+            offset,
+        )
+    }
+
+    fn require_raster_bit_image(&self, offset: usize) -> Result<(), RenderError> {
+        self.require_profile_feature(
+            self.supports_raster_bit_image,
+            "GS v 0 raster bit image",
+            offset,
+        )
+    }
+
+    fn require_profile_feature(
+        &self,
+        supported: bool,
+        command: &'static str,
+        offset: usize,
+    ) -> Result<(), RenderError> {
+        if supported {
+            return Ok(());
+        }
+
+        Err(RenderError::CommandUnsupportedByProfile {
+            command,
+            profile: self.profile_id.clone(),
+            offset,
+        })
     }
 
     fn validate_command_payload_size(&self, payload_bytes: usize) -> Result<(), RenderError> {

@@ -118,3 +118,23 @@ fn rejects_zero_raster_dimensions_without_panicking() {
         })
     ));
 }
+
+#[test]
+fn reports_raster_bit_images_that_the_profile_does_not_support() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.bit_image_raster = false;
+
+    let error = render(&[0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0x80], &profile)
+        .expect_err("GS v 0 should be gated by the selected profile");
+
+    assert!(matches!(
+        error,
+        RenderError::CommandUnsupportedByProfile {
+            command: "GS v 0 raster bit image",
+            ref profile,
+            offset: 0,
+        } if profile == "NT-5890K"
+    ));
+}

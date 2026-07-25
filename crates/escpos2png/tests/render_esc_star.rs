@@ -1,4 +1,4 @@
-use escpos2png::render;
+use escpos2png::{RenderError, render};
 use escpos2png_profiles::compile_profile;
 use std::io::Cursor;
 
@@ -138,6 +138,26 @@ fn encodes_the_rendered_sheet_as_one_bit_grayscale_png() {
             assert_eq!(is_black, expected, "unexpected PNG pixel at ({x}, {y})");
         }
     }
+}
+
+#[test]
+fn reports_column_bit_images_that_the_profile_does_not_support() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.bit_image_column = false;
+
+    let error = render(&[0x1b, b'*', 1, 1, 0, 0x80], &profile)
+        .expect_err("ESC * should be gated by the selected profile");
+
+    assert!(matches!(
+        error,
+        RenderError::CommandUnsupportedByProfile {
+            command: "ESC * column bit image",
+            ref profile,
+            offset: 0,
+        } if profile == "NT-5890K"
+    ));
 }
 
 fn decode_hex(encoded: &str) -> Vec<u8> {

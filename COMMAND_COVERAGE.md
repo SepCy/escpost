@@ -79,14 +79,13 @@ printable families are covered.
 
 | Command | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
-| `ESC *` | Print column-format bit image in all four modes | Partial | Implemented | Pending |
-| `GS v 0` | Print raster-format bit image in all four scaling modes | Partial | Partial | Pending |
+| `ESC *` | Print column-format bit image in all four modes | Implemented | Implemented | Pending |
+| `GS v 0` | Print raster-format bit image in all four scaling modes | Implemented | Implemented | Pending |
 | `GS ( L` Function 50 | Print buffered graphics data | Planned | Planned | Pending |
 | `GS ( L` / `GS 8 L` Function 112 | Store raster graphics data | Planned | Planned | Pending |
 
-The implemented image commands are partial until capability checks and every
-documented beginning-of-line, print-area, and justification interaction are
-covered.
+The implemented image commands include profile capability checks and their
+documented beginning-of-line, print-area, and justification interactions.
 
 ## Native symbols
 

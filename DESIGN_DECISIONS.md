@@ -1,7 +1,17 @@
 # Design Decisions
 
-This is the project's durable decision log. It records both the selected
-design and the reasoning that future changes must consider.
+This is the project's durable domain-decision log. It records choices about
+ESC/POS interpretation, rendering, fidelity, printer behavior, safety, and
+other principles whose rationale cannot be recovered from the current
+architecture alone.
+
+Current component boundaries and implementation structure belong in
+`ARCHITECTURE.md`. Testing workflow belongs in `TESTING.md`; profile-format
+details in `PROFILE_SCHEMA.md`; and repository, tooling, licensing, release,
+and contribution process in their corresponding project documents.
+
+Decision numbers are stable and may contain gaps when an entry is relocated
+outside this document's scope.
 
 Each decision has a status:
 
@@ -11,28 +21,6 @@ Each decision has a status:
 
 When a decision changes, add a new entry that names the superseded decision
 instead of rewriting the old rationale.
-
-## DD-001 — Develop as a standalone project
-
-**Status:** Accepted
-
-### Context
-
-The renderer is initially developed inside the Receiptful repository but is a
-generally useful ESC/POS capability that may be open-sourced independently.
-
-### Decision
-
-Develop it under the root `escpos2png/` directory as an isolated Python
-project. It must not import Receiptful application modules or rely on
-Receiptful's database models.
-
-### Consequences
-
-- Extraction into a separate repository remains straightforward.
-- Shared behavior must cross the boundary through serialized profiles, public
-  APIs, or fixtures rather than application imports.
-- Packaging metadata and dependencies belong to this project once selected.
 
 ## DD-002 — Promise geometry fidelity, not photographic fidelity
 
@@ -311,35 +299,6 @@ and repeated execution.
 - Applications may select stricter limits for untrusted public input.
 - Tests must include adversarial streams.
 
-## DD-014 — Separate living architecture from decision history
-
-**Status:** Accepted
-
-### Context
-
-A single document that mixes current design, alternatives, and historical
-rationale becomes difficult to read. One ADR file per early decision would add
-unhelpful navigation overhead while the project is still small.
-
-### Decision
-
-Keep:
-
-- `README.md` as the project entry point;
-- `ARCHITECTURE.md` as the coherent current design; and
-- this single numbered decision log for rationale and history.
-
-Split decisions into individual ADR files only when this log becomes difficult
-to maintain.
-
-### Consequences
-
-- Readers can understand the current architecture without reconstructing it
-  from decisions.
-- Decision rationale remains easy to review in one place.
-- Superseded decisions stay in this file unless and until the ADR migration
-  occurs.
-
 ## DD-015 — Make rendering assumptions reproducible
 
 **Status:** Accepted
@@ -365,66 +324,6 @@ and reports that assumption.
 - Missing device-resident resources produce incomplete-preview diagnostics
   rather than invented output.
 
-## DD-016 — License the project under Apache-2.0
-
-**Status:** Accepted
-
-### Context
-
-The project is intended for independent open-source distribution and should be
-usable in commercial and closed-source applications. It may also receive
-external contributions to protocol and rendering behavior.
-
-### Decision
-
-License project code and documentation under the Apache License, Version 2.0.
-Track bundled third-party assets, including fonts, under their own compatible
-licenses and preserve required attribution.
-
-### Consequences
-
-- Users may use, modify, and redistribute the library under permissive terms.
-- Contributors provide the copyright and patent grants stated by Apache-2.0.
-- The license does not provide patent rights from non-contributors such as
-  printer manufacturers.
-- Asset provenance and licensing must be reviewed before distribution.
-
-## DD-017 — Implement a reusable Rust core with Python bindings
-
-**Status:** Accepted
-
-### Context
-
-Full ESC/POS interpretation performs byte parsing, state-machine execution,
-dot-level composition, symbol generation, and PNG compression. The renderer
-will be used by a Python FastAPI application, but its core is also useful to
-Android, command-line, WebAssembly, and non-Python consumers.
-
-### Decision
-
-Implement parsing, emulation, rasterization, profiles, and PNG encoding in a
-Python-independent Rust crate. Expose a thin Python module through PyO3 and
-build Python distributions with maturin.
-
-Use coarse-grained foreign-function calls: a complete input, validated profile,
-and render options enter Rust together, and a result containing PNG bytes,
-events, and diagnostics returns. Release the Python interpreter lock during
-Rust-only rendering.
-
-This supersedes only the "Python project" implementation wording in DD-001;
-the standalone project boundary remains accepted.
-
-### Consequences
-
-- CPU- and memory-sensitive loops execute in native code with Rust's checked
-  ownership and type system.
-- The core can later be exposed through a CLI, JNI, WebAssembly, or another
-  language binding without reimplementing ESC/POS behavior.
-- Python callers retain an ergonomic in-process API.
-- Publishing requires a supported wheel matrix and native build tooling.
-- Async services must run rendering outside their event-loop thread.
-- Python callbacks inside the render loop are prohibited.
-
 ## DD-018 — Import and enrich the shared ESC/POS printer database
 
 **Status:** Accepted
@@ -449,10 +348,6 @@ commit, enrichment revision, and canonical content hash for reproducibility.
 Allow downstream projects to run custom upstream-compatible profiles through
 the same importer.
 
-Retain the upstream dataset's CC BY 4.0 license and attribution separately from
-escpos2png's Apache-2.0 code license, and identify modifications to imported
-data.
-
 ### Consequences
 
 - python-escpos generators and escpos2png previews can share profile names.
@@ -462,102 +357,6 @@ data.
   canonical internal schema.
 - A large catalog does not imply high-fidelity support: profiles without
   sufficient enrichment must report documented approximations.
-- Release artifacts need third-party attribution and license material.
-
-## DD-019 — Version escpos2png independently from the outset
-
-**Status:** Accepted
-
-### Context
-
-The project starts inside the Receiptful working tree but is intended for its
-own open-source lifecycle, releases, issues, and commit history.
-
-### Decision
-
-Initialize `escpos2png/` as its own Git repository and ignore that directory
-from the parent Receiptful repository. Include it in Receiptful as a pinned Git
-submodule once its remote repository and initial implementation are ready.
-
-### Consequences
-
-- Development commits stay focused on the renderer.
-- The renderer can establish its own release and contribution policies.
-- Receiptful's status and commits do not accidentally absorb renderer files.
-- Until the submodule is added, fresh Receiptful clones and its CI do not
-  contain escpos2png.
-- Work in the nested repository must be committed and pushed independently;
-  the parent repository cannot protect uncommitted nested work.
-
-## DD-020 — Use NT-5890K as the first physical reference profile
-
-**Status:** Accepted
-
-### Context
-
-The development environment has access to a Netum 58 mm printer that can be
-connected over USB. Its shared upstream profile is `NT-5890K`, which inherits
-from `POS-5890`. The inherited catalog data describes a 384-dot printable
-width, 203 DPI, 32 Font A columns, and 42 Font B columns.
-
-Near dot-perfect geometry needs physical evidence in addition to manuals and
-community profile data.
-
-### Decision
-
-Use `NT-5890K` as the first physically calibrated profile. Treat inherited
-upstream values as hypotheses and enrich or correct the profile from
-documented, reproducible calibration cases.
-
-Continue using Epson documentation as the initial reference for ESC/POS
-command framing and semantics. Netum observations define behavior only for the
-applicable profile or documented firmware/configuration variant.
-
-### Consequences
-
-- The first vertical implementation slices have an accessible hardware target.
-- Profile completeness can be based on reproducible evidence rather than only
-  catalog fields.
-- Undocumented differences may require Netum-specific quirks.
-- This reference does not imply that generic or Epson profiles behave
-  identically.
-
-## DD-021 — Share immutable cases between rendering and physical printing
-
-**Status:** Accepted
-
-### Context
-
-A useful hardware comparison requires the virtual and physical printers to
-receive identical bytes. Generating one stream through the renderer test and
-another through python-escpos high-level helpers would introduce a second
-variable and invalidate the comparison.
-
-### Decision
-
-Make a version-controlled ESC/POS byte stream the canonical input of each
-conformance case. Both the Rust renderer and an opt-in Python calibration CLI
-consume those exact bytes.
-
-Use python-escpos only as the physical transport adapter and call its raw-byte
-operation. Do not allow the adapter to add initialization, feeds, cuts, or
-other commands.
-
-Keep ordinary tests deterministic and hardware-free. Physical calibration is
-an explicit developer action and records the input hash, renderer revision,
-profile revision, device identity, and observations.
-
-### Consequences
-
-- Digital and physical results have one shared input artifact.
-- Developers without hardware can run the complete automated suite.
-- Hardware access is needed to validate model-sensitive changes before they
-  are considered calibrated.
-- python-escpos is an optional development dependency, not a Rust core
-  dependency.
-- Golden images require an explicit evidence-backed acceptance step.
-- The exact case-manifest and CLI schemas can evolve independently of the
-  renderer internals.
 
 ## DD-022 — Use typed, hash-guarded profile enrichments
 
@@ -607,14 +406,10 @@ maintenance needs require them.
 
 The following are intentionally not decided yet:
 
-- minimum supported Rust and Python versions;
-- crate layout, maturin packaging, wheel targets, and dependency policy;
 - canonical runtime profile fields for full command coverage and their
   compatibility policy;
-- exact conformance-case manifest and calibration CLI schemas;
 - default glyph provider and redistributable font assets;
-- public synchronous and streaming APIs;
-- PNG library or dependency-free encoder strategy;
-- sparse, tiled, banded, or contiguous surface storage;
-- the exact support-matrix format; and
-- whether bidirectional status commands need a configurable response emulator.
+- whether bidirectional status commands need a configurable response emulator;
+  and
+- any remaining fidelity policy needed for printer behaviors that cannot be
+  observed from an isolated byte stream.

@@ -119,6 +119,8 @@ The renderer does not initially promise:
 - [Architecture](ARCHITECTURE.md) describes the current coherent system design.
 - [Coding style](CODING_STYLE.md) defines how code, comments, and tests should
   explain non-obvious behavior in plain language.
+- [Command coverage](COMMAND_COVERAGE.md) defines the version 1 boundary and
+  tracks implementation, automated coverage, and physical validation.
 - [Design decisions](DESIGN_DECISIONS.md) records why durable choices were
   made, their consequences, and which questions remain open.
 - [Printer profile enrichments](PROFILE_SCHEMA.md) defines how upstream

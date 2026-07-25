@@ -489,14 +489,84 @@ submodule once its remote repository and initial implementation are ready.
 - Work in the nested repository must be committed and pushed independently;
   the parent repository cannot protect uncommitted nested work.
 
+## DD-020 — Use NT-5890K as the first physical reference profile
+
+**Status:** Accepted
+
+### Context
+
+The development environment has access to a Netum 58 mm printer that can be
+connected over USB. Its shared upstream profile is `NT-5890K`, which inherits
+from `POS-5890`. The inherited catalog data describes a 384-dot printable
+width, 203 DPI, 32 Font A columns, and 42 Font B columns.
+
+Near dot-perfect geometry needs physical evidence in addition to manuals and
+community profile data.
+
+### Decision
+
+Use `NT-5890K` as the first physically calibrated profile. Treat inherited
+upstream values as hypotheses and enrich or correct the profile from
+documented, reproducible calibration cases.
+
+Continue using Epson documentation as the initial reference for ESC/POS
+command framing and semantics. Netum observations define behavior only for the
+applicable profile or documented firmware/configuration variant.
+
+### Consequences
+
+- The first vertical implementation slices have an accessible hardware target.
+- Profile completeness can be based on reproducible evidence rather than only
+  catalog fields.
+- Undocumented differences may require Netum-specific quirks.
+- This reference does not imply that generic or Epson profiles behave
+  identically.
+
+## DD-021 — Share immutable cases between rendering and physical printing
+
+**Status:** Accepted
+
+### Context
+
+A useful hardware comparison requires the virtual and physical printers to
+receive identical bytes. Generating one stream through the renderer test and
+another through python-escpos high-level helpers would introduce a second
+variable and invalidate the comparison.
+
+### Decision
+
+Make a version-controlled ESC/POS byte stream the canonical input of each
+conformance case. Both the Rust renderer and an opt-in Python calibration CLI
+consume those exact bytes.
+
+Use python-escpos only as the physical transport adapter and call its raw-byte
+operation. Do not allow the adapter to add initialization, feeds, cuts, or
+other commands.
+
+Keep ordinary tests deterministic and hardware-free. Physical calibration is
+an explicit developer action and records the input hash, renderer revision,
+profile revision, device identity, and observations.
+
+### Consequences
+
+- Digital and physical results have one shared input artifact.
+- Developers without hardware can run the complete automated suite.
+- Hardware access is needed to validate model-sensitive changes before they
+  are considered calibrated.
+- python-escpos is an optional development dependency, not a Rust core
+  dependency.
+- Golden images require an explicit evidence-backed acceptance step.
+- The exact case-manifest and CLI schemas can evolve independently of the
+  renderer internals.
+
 ## Open questions
 
 The following are intentionally not decided yet:
 
 - minimum supported Rust and Python versions;
 - crate layout, maturin packaging, wheel targets, and dependency policy;
-- initial reference printer profiles;
 - serialized profile schema and compatibility policy;
+- exact conformance-case manifest and calibration CLI schemas;
 - default glyph provider and redistributable font assets;
 - public synchronous and streaming APIs;
 - PNG library or dependency-free encoder strategy;

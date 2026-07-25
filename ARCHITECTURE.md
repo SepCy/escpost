@@ -390,3 +390,16 @@ Verification should combine:
 
 Receiptful's HTML-to-ESC/POS output can provide useful integration fixtures,
 but the standalone project must not depend on Receiptful code.
+
+The first physical reference profile is `NT-5890K`. Its upstream profile
+inherits 384-dot, 203-DPI geometry from `POS-5890`; those values remain
+hypotheses until checked against the connected Netum printer.
+
+Hardware calibration uses a Python CLI and python-escpos as a raw USB
+transport. A conformance case's immutable ESC/POS bytes are loaded once,
+rendered by the Rust engine, and sent unchanged to the printer. High-level
+python-escpos formatting methods are not used because they would generate a
+different stream.
+
+Physical printing is opt-in and never runs as part of ordinary tests or CI.
+Detailed fixture, calibration, and golden-review rules live in `TESTING.md`.

@@ -12,8 +12,8 @@ resident font glyphs.
 ## Status
 
 The project is in its design phase. The public APIs, supported Rust and Python
-versions, dependencies, and initial high-fidelity printer profiles have not
-been selected yet.
+versions, dependencies, and canonical profile schema have not been selected
+yet. `NT-5890K` is the first physical calibration profile.
 
 ## Fidelity contract
 
@@ -41,6 +41,8 @@ The renderer does not initially promise:
 - [Architecture](ARCHITECTURE.md) describes the current coherent system design.
 - [Design decisions](DESIGN_DECISIONS.md) records why durable choices were
   made, their consequences, and which questions remain open.
+- [Testing](TESTING.md) defines automated conformance testing and comparison
+  against physical printers.
 
 The official
 [Epson ESC/POS command reference](https://download4.epson.biz/sec_pubs/pos/reference_en/escpos/)

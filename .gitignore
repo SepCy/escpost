@@ -14,6 +14,9 @@ __pycache__/
 # Distribution artifacts
 /dist/
 
+# Machine-local printer configuration and captures
+/local/
+
 # Editors and operating systems
 .DS_Store
 *.swp

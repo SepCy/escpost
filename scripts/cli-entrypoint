@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -eu
+
+virtual_environment=/workspace/.venv
+
+if [ ! -x "$virtual_environment/bin/python" ]; then
+    python3 -m venv "$virtual_environment"
+fi
+
+export VIRTUAL_ENV="$virtual_environment"
+export PATH="$virtual_environment/bin:$PATH"
+
+maturin develop --quiet --locked --extras=printer
+
+exec escpos2png "$@"

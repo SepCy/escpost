@@ -1,0 +1,8 @@
+#!/bin/sh
+
+set -eu
+
+project_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$project_directory"
+
+exec docker compose run --rm cli "$@"

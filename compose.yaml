@@ -1,17 +1,30 @@
+x-development-service: &development-service
+  image: escpos2png-development
+  network_mode: host
+  build:
+    context: .
+    args:
+      USER_ID: 1000
+      GROUP_ID: 1000
+  working_dir: /workspace
+  volumes:
+    - .:/workspace
+    - cargo-home:/home/developer/.cargo
+    - cargo-target:/home/developer/target
+    - python-venv:/workspace/.venv
+
 services:
   test:
-    network_mode: host
-    build:
-      context: .
-      args:
-        USER_ID: 1000
-        GROUP_ID: 1000
-    working_dir: /workspace
-    volumes:
-      - .:/workspace
-      - cargo-home:/home/developer/.cargo
-      - cargo-target:/home/developer/target
+    <<: *development-service
+
+  cli:
+    <<: *development-service
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    entrypoint:
+      - /workspace/scripts/cli-entrypoint
 
 volumes:
   cargo-home:
   cargo-target:
+  python-venv:

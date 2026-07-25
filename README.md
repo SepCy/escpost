@@ -26,34 +26,31 @@ time.
 All build and test commands run in the project container:
 
 ```bash
-docker compose build test
+docker compose build
+./escpos2png --help
 docker compose run --rm test cargo test --workspace
-docker compose run --rm test python3 -m venv .venv
-docker compose run --rm -e VIRTUAL_ENV=/workspace/.venv test maturin develop
 docker compose run --rm test .venv/bin/python -m unittest discover -s python/tests
 ```
+
+`./escpos2png` forwards every argument to the Python CLI in the Compose
+container. The CLI service has USB access for printer discovery and physical
+calibration. Its Python environment lives in a named Docker volume and is
+created or updated automatically.
 
 Render the first conformance case:
 
 ```bash
-docker compose run --rm test \
-  .venv/bin/escpos2png case render \
+./escpos2png case render \
   tests/cases/graphics/esc-star-8dot-double-density \
   --output-dir local/rendered
 ```
 
 For physical calibration, copy `examples/printers.toml` to the ignored
-`local/printers.toml`, replace the USB identifiers, install the optional
-printer dependency with `maturin develop --extras printer`, and expose the USB
-device to the container. The `case calibrate` command renders and sends one
-loaded, hash-verified byte buffer.
+`local/printers.toml` and replace the USB identifiers. The `case calibrate`
+command renders and sends one loaded, hash-verified byte buffer.
 
 ```bash
-docker compose run --rm -e VIRTUAL_ENV=/workspace/.venv \
-  test maturin develop --extras printer
-
-docker compose run --rm --device /dev/bus/usb:/dev/bus/usb test \
-  .venv/bin/escpos2png case calibrate \
+./escpos2png case calibrate \
   tests/cases/graphics/esc-star-8dot-double-density \
   --printer netum-usb \
   --output-dir local/calibration

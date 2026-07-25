@@ -41,6 +41,8 @@ The renderer does not initially promise:
 - [Architecture](ARCHITECTURE.md) describes the current coherent system design.
 - [Design decisions](DESIGN_DECISIONS.md) records why durable choices were
   made, their consequences, and which questions remain open.
+- [Printer profile enrichments](PROFILE_SCHEMA.md) defines how upstream
+  profiles are confirmed, completed, and corrected.
 - [Testing](TESTING.md) defines automated conformance testing and comparison
   against physical printers.
 

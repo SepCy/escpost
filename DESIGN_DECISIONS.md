@@ -559,13 +559,58 @@ profile revision, device identity, and observations.
 - The exact case-manifest and CLI schemas can evolve independently of the
   renderer internals.
 
+## DD-022 — Use typed, hash-guarded profile enrichments
+
+**Status:** Accepted
+
+### Context
+
+escpos2png must complete and occasionally correct the shared upstream printer
+database. A mature per-field evidence and patch protocol would provide strong
+audit detail but would impose substantial authoring and implementation cost
+before the first profile is calibrated.
+
+Pinning only the complete upstream repository is reproducible, but it does not
+distinguish an unrelated profile change from a change to the selected printer
+or one of its inherited ancestors.
+
+### Decision
+
+Maintain one global lock containing the upstream repository and Git commit.
+For each enriched printer, store the SHA-256 of its fully resolved,
+deterministically normalized upstream profile.
+
+Express enrichments as partial typed TOML in escpos2png's canonical profile
+structure. The compiler automatically classifies each value as added,
+confirmed, or corrected by comparing it with the imported canonical draft.
+
+Use simple source and conformance-case references plus explicit approximation
+records. Generate deterministic canonical JSON, an enrichment hash, and a
+canonical profile hash.
+
+Reject unknown enrichment fields and stale upstream-profile hashes. Defer a
+generic patch language, operation declarations, separate evidence records,
+per-field provenance wrappers, and numeric confidence values until real
+maintenance needs require them.
+
+### Consequences
+
+- Upstream drift affecting an enriched printer cannot pass silently.
+- Unrelated upstream profile changes do not force every enrichment to change.
+- Profile authors edit ordinary typed values rather than patch operations.
+- The compiler produces an auditable change classification automatically.
+- The canonical renderer input is independent of the upstream YAML schema.
+- Version 1 provenance is intentionally coarse and may require a future schema
+  revision if profile reviews become ambiguous.
+
 ## Open questions
 
 The following are intentionally not decided yet:
 
 - minimum supported Rust and Python versions;
 - crate layout, maturin packaging, wheel targets, and dependency policy;
-- serialized profile schema and compatibility policy;
+- canonical runtime profile fields for full command coverage and their
+  compatibility policy;
 - exact conformance-case manifest and calibration CLI schemas;
 - default glyph provider and redistributable font assets;
 - public synchronous and streaming APIs;

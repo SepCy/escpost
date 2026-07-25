@@ -150,6 +150,10 @@ No Git checkout or network access is needed at installation or render time.
 Receiptful-specific profiles can pass through the same importer, preserving
 one profile identifier across HTML-to-ESC/POS generation and ESC/POS preview.
 
+`PROFILE_SCHEMA.md` defines the enrichment format, upstream drift detection,
+automatic change classification, provenance, validation, and canonical-output
+rules.
+
 At minimum, a profile needs:
 
 ```text

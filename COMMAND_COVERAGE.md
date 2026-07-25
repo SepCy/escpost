@@ -107,9 +107,8 @@ Standard-mode jobs do not depend on that implementation detail.
 |---|---|---:|---:|---:|
 | `GS V` Function A | Full or partial cut at the current position | Implemented | Implemented | Pending |
 | `GS V` Function B | Feed to cutter and cut | Partial framing | Planned | Pending |
-| `ESC p` | Generate a cash-drawer pulse without printing | Partial | Implemented | Pending |
+| `ESC p` | Generate a cash-drawer pulse without printing | Implemented | Implemented | Pending |
 
-`ESC p` becomes complete when the result exposes a structured device event.
 Feed-to-cutter commands require profile geometry rather than an assumed
 universal distance.
 

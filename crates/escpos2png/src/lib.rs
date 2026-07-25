@@ -18,6 +18,44 @@ const DEFAULT_FONT_BYTES: &[u8] =
     include_bytes!("../../../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
 const GLYPH_ALPHA_THRESHOLD: u8 = 128;
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RenderOptions {
+    pub limits: RenderLimits,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RenderLimits {
+    pub max_input_bytes: usize,
+    pub max_command_payload_bytes: usize,
+    pub max_sheet_width_dots: u32,
+    pub max_sheet_height_dots: u32,
+    pub max_sheets: usize,
+    pub max_total_dots: u64,
+}
+
+impl Default for RenderLimits {
+    fn default() -> Self {
+        Self {
+            max_input_bytes: 16 * 1024 * 1024,
+            max_command_payload_bytes: 8 * 1024 * 1024,
+            max_sheet_width_dots: 4096,
+            max_sheet_height_dots: 1_000_000,
+            max_sheets: 32,
+            max_total_dots: 200_000_000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LimitKind {
+    InputBytes,
+    CommandPayloadBytes,
+    SheetWidthDots,
+    SheetHeightDots,
+    Sheets,
+    TotalDots,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Justification {
     Left,
@@ -28,6 +66,62 @@ enum Justification {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderResult {
     pub sheets: Vec<RenderedSheet>,
+    pub device_events: Vec<DeviceEvent>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub completeness: Completeness,
+    pub metadata: RenderMetadata,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceEvent {
+    CashDrawerPulse {
+        connector: u8,
+        on_time_units: u8,
+        off_time_units: u8,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Diagnostic {
+    pub severity: DiagnosticSeverity,
+    pub byte_offset: Option<usize>,
+    pub command: Option<&'static str>,
+    pub message: String,
+    pub effect: DiagnosticEffect,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticSeverity {
+    Information,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticEffect {
+    None,
+    NonVisualBehaviorOnly,
+    VisualOutputIncomplete,
+    ParsingAborted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Completeness {
+    Complete,
+    CompleteWithNonVisualEvents,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderMetadata {
+    pub renderer_version: &'static str,
+    pub profile_id: String,
+    pub profile_revision: u32,
+    pub initial_state: InitialStateAssumption,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InitialStateAssumption {
+    ProfileResetDefaults,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,22 +233,38 @@ pub enum RenderError {
     #[error("unsupported data byte {byte:#04x} at byte offset {offset}")]
     UnsupportedDataByte { byte: u8, offset: usize },
 
+    #[error("render limit {kind:?} exceeded: value {value}, limit {limit}")]
+    LimitExceeded {
+        kind: LimitKind,
+        value: u64,
+        limit: u64,
+    },
+
     #[error("could not encode the rendered sheet as PNG")]
     EncodePng(#[from] png::EncodingError),
 }
 
 pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, RenderError> {
-    let mut state = PrinterState::new(profile);
+    render_with_options(data, profile, &RenderOptions::default())
+}
+
+pub fn render_with_options(
+    data: &[u8],
+    profile: &PrinterProfile,
+    options: &RenderOptions,
+) -> Result<RenderResult, RenderError> {
+    validate_initial_limits(data, profile, &options.limits)?;
+    let mut state = PrinterState::new(profile, options.limits);
     let mut offset = 0;
 
     while offset < data.len() {
         offset += match data[offset] {
             0x09 => {
-                state.horizontal_tab();
+                state.horizontal_tab()?;
                 1
             }
             0x0a => {
-                state.line_feed();
+                state.line_feed()?;
                 1
             }
             0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
@@ -169,13 +279,67 @@ pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, Ren
         };
     }
 
+    let device_events = std::mem::take(&mut state.device_events);
     let mut sheets = Vec::new();
-    for surface in state.into_surfaces() {
+    for surface in state.into_surfaces()? {
         let png = encode_png(&surface)?;
         sheets.push(RenderedSheet { surface, png });
     }
 
-    Ok(RenderResult { sheets })
+    let completeness = if device_events.is_empty() {
+        Completeness::Complete
+    } else {
+        Completeness::CompleteWithNonVisualEvents
+    };
+    let diagnostics = profile
+        .approximations
+        .iter()
+        .map(|approximation| Diagnostic {
+            severity: DiagnosticSeverity::Information,
+            byte_offset: None,
+            command: None,
+            message: format!(
+                "profile approximation {}: {}",
+                approximation.field, approximation.reason
+            ),
+            effect: DiagnosticEffect::None,
+        })
+        .collect();
+
+    Ok(RenderResult {
+        sheets,
+        device_events,
+        diagnostics,
+        completeness,
+        metadata: RenderMetadata {
+            renderer_version: env!("CARGO_PKG_VERSION"),
+            profile_id: profile.id.clone(),
+            profile_revision: profile.revision,
+            initial_state: InitialStateAssumption::ProfileResetDefaults,
+        },
+    })
+}
+
+fn validate_initial_limits(
+    data: &[u8],
+    profile: &PrinterProfile,
+    limits: &RenderLimits,
+) -> Result<(), RenderError> {
+    if data.len() > limits.max_input_bytes {
+        return Err(RenderError::LimitExceeded {
+            kind: LimitKind::InputBytes,
+            value: data.len() as u64,
+            limit: limits.max_input_bytes as u64,
+        });
+    }
+    if profile.geometry.printable_width_dots > limits.max_sheet_width_dots {
+        return Err(RenderError::LimitExceeded {
+            kind: LimitKind::SheetWidthDots,
+            value: u64::from(profile.geometry.printable_width_dots),
+            limit: u64::from(limits.max_sheet_width_dots),
+        });
+    }
+    Ok(())
 }
 
 fn encode_png(surface: &MonoSurface) -> Result<Vec<u8>, png::EncodingError> {
@@ -301,7 +465,7 @@ fn execute_esc_command(
                     offset,
                 });
             };
-            state.print_and_feed_motion_units(distance);
+            state.print_and_feed_motion_units(distance)?;
             Ok(3)
         }
         0x4d => {
@@ -356,17 +520,17 @@ fn execute_esc_command(
                     offset,
                 });
             };
-            state.feed_lines(lines);
+            state.feed_lines(lines)?;
             Ok(3)
         }
         0x70 => {
-            let Some((&connector, _timing)) = data.get(2).zip(data.get(3..5)) else {
+            let Some((&connector, timing)) = data.get(2).zip(data.get(3..5)) else {
                 return Err(RenderError::TruncatedCommand {
                     command: "ESC p",
                     offset,
                 });
             };
-            state.drawer_pulse(connector, offset)?;
+            state.drawer_pulse(connector, timing[0], timing[1], offset)?;
             Ok(5)
         }
         0x74 => {
@@ -452,7 +616,9 @@ fn execute_esc_star(
         }
     };
     let columns = usize::from(data[3]) + usize::from(data[4]) * 256;
-    let command_length = 5 + columns * bytes_per_column;
+    let payload_length = columns.saturating_mul(bytes_per_column);
+    state.validate_command_payload_size(payload_length)?;
+    let command_length = 5 + payload_length;
     let Some(payload) = data.get(5..command_length) else {
         return Err(RenderError::TruncatedCommand {
             command: "ESC *",
@@ -605,7 +771,9 @@ fn execute_gs_v0(
         });
     }
 
-    let command_length = 8 + width_bytes * height_dots;
+    let payload_length = width_bytes.saturating_mul(height_dots);
+    state.validate_command_payload_size(payload_length)?;
+    let command_length = 8 + payload_length;
     let Some(payload) = data.get(8..command_length) else {
         return Err(RenderError::TruncatedCommand {
             command: "GS v 0",
@@ -619,13 +787,15 @@ fn execute_gs_v0(
         height_dots,
         horizontal_scale,
         vertical_scale,
-    );
+    )?;
     Ok(command_length)
 }
 
 #[derive(Debug)]
 struct PrinterState {
     profile_id: String,
+    limits: RenderLimits,
+    device_events: Vec<DeviceEvent>,
     completed_sheets: Vec<MonoSurface>,
     roll: MonoSurface,
     // Text and ESC * data are composed on a line first because ESC a applies
@@ -669,7 +839,7 @@ struct PrinterState {
 }
 
 impl PrinterState {
-    fn new(profile: &PrinterProfile) -> Self {
+    fn new(profile: &PrinterProfile, limits: RenderLimits) -> Self {
         let width = profile.geometry.printable_width_dots;
         let default_line_spacing = profile.defaults.line_spacing_dots;
         let font_a = profile.fonts.a.clone();
@@ -682,6 +852,8 @@ impl PrinterState {
 
         Self {
             profile_id: profile.id.clone(),
+            limits,
+            device_events: Vec::new(),
             completed_sheets: Vec::new(),
             roll: MonoSurface::new(width),
             line: MonoSurface::new(width),
@@ -826,7 +998,7 @@ impl PrinterState {
         self.line_used_width = 0;
     }
 
-    fn horizontal_tab(&mut self) {
+    fn horizontal_tab(&mut self) -> Result<(), RenderError> {
         let next_position = self
             .tab_positions
             .iter()
@@ -841,7 +1013,7 @@ impl PrinterState {
             Some(_) => {
                 // Epson performs buffer-full printing and applies HT again
                 // from the next line when the next stop is outside the area.
-                self.line_feed();
+                self.line_feed()?;
                 if let Some(position) = self
                     .tab_positions
                     .iter()
@@ -856,6 +1028,7 @@ impl PrinterState {
         }
 
         self.at_beginning_of_line = false;
+        Ok(())
     }
 
     fn set_tab_positions(&mut self, columns: &[u8]) {
@@ -901,15 +1074,16 @@ impl PrinterState {
         self.line_spacing = self.default_line_spacing;
     }
 
-    fn print_and_feed_motion_units(&mut self, motion_units: u8) {
+    fn print_and_feed_motion_units(&mut self, motion_units: u8) -> Result<(), RenderError> {
         let feed_dots = (u64::from(motion_units) * u64::from(self.vertical_dpi)
             / u64::from(self.vertical_motion_units_per_inch)) as u32;
         // ESC J is a one-off feed. Reuse the normal line commit so tall data
         // cannot overlap, then restore the persistent ESC 2/ESC 3 spacing.
         let line_spacing = self.line_spacing;
         self.line_spacing = feed_dots;
-        self.feed_lines(1);
+        self.feed_lines(1)?;
         self.line_spacing = line_spacing;
+        Ok(())
     }
 
     fn set_emphasis(&mut self, emphasized: bool) {
@@ -946,7 +1120,7 @@ impl PrinterState {
         self.active_code_page = code_page;
     }
 
-    fn feed_lines(&mut self, lines: u8) {
+    fn feed_lines(&mut self, lines: u8) -> Result<(), RenderError> {
         let remaining_width = self.line.width.saturating_sub(self.line_used_width);
         // Track logical data width rather than scanning black dots. This keeps
         // spaces significant and preserves far-right data after ESC $ or
@@ -956,13 +1130,6 @@ impl PrinterState {
             Justification::Center => remaining_width / 2,
             Justification::Right => remaining_width,
         };
-        self.roll.composite_at(
-            &self.line,
-            self.print_area_left.saturating_add(line_left),
-            self.line_top,
-        );
-        // Oversized text and bit images must not overlap the next line even
-        // when the configured line spacing is smaller than their dot height.
         let feed = match lines {
             0 => 0,
             lines => self
@@ -973,6 +1140,18 @@ impl PrinterState {
                         .saturating_mul(u32::from(lines).saturating_sub(1)),
                 ),
         };
+        let required_height = self
+            .line_top
+            .saturating_add(feed.max(self.line.height).max(self.line_height));
+        self.validate_roll_height(required_height)?;
+
+        self.roll.composite_at(
+            &self.line,
+            self.print_area_left.saturating_add(line_left),
+            self.line_top,
+        );
+        // Oversized text and bit images must not overlap the next line even
+        // when the configured line spacing is smaller than their dot height.
         self.line_top = self.line_top.saturating_add(feed);
         self.roll.ensure_height(self.line_top);
         self.line.clear();
@@ -980,6 +1159,7 @@ impl PrinterState {
         self.line_used_width = 0;
         self.at_beginning_of_line = true;
         self.line_height = 0;
+        Ok(())
     }
 
     fn print_byte(&mut self, byte: u8, offset: usize) -> Result<(), RenderError> {
@@ -1010,18 +1190,17 @@ impl PrinterState {
             return Err(RenderError::MissingGlyph { character, offset });
         }
 
-        self.print_character(character);
-        Ok(())
+        self.print_character(character)
     }
 
-    fn print_character(&mut self, character: char) {
+    fn print_character(&mut self, character: char) -> Result<(), RenderError> {
         let cell_width = self.current_character_advance_width();
         let cell_height = self
             .active_font
             .cell_height_dots
             .saturating_mul(self.character_height_multiplier);
         if self.print_x.saturating_add(cell_width) > self.line.width {
-            self.line_feed();
+            self.line_feed()?;
         }
         self.line_height = self.line_height.max(cell_height);
         if self.reversed {
@@ -1093,6 +1272,7 @@ impl PrinterState {
         self.print_x = self.print_x.saturating_add(cell_width);
         self.line_used_width = self.line_used_width.max(self.print_x);
         self.at_beginning_of_line = false;
+        Ok(())
     }
 
     fn current_character_advance_width(&self) -> u32 {
@@ -1147,7 +1327,7 @@ impl PrinterState {
         height_dots: usize,
         horizontal_scale: u32,
         vertical_scale: u32,
-    ) {
+    ) -> Result<(), RenderError> {
         // GS v 0 is row-major, unlike ESC *. Its image is printed immediately
         // and advances the paper by the rendered height.
         let image_width = (width_bytes as u32)
@@ -1161,6 +1341,11 @@ impl PrinterState {
         };
         let physical_left = self.print_area_left.saturating_add(image_left);
         let print_area_right = self.print_area_left.saturating_add(self.print_area_width);
+
+        let next_line_top = self
+            .line_top
+            .saturating_add(height_dots as u32 * vertical_scale);
+        self.validate_roll_height(next_line_top)?;
 
         for (source_y, row) in payload.chunks_exact(width_bytes).enumerate() {
             for (byte_index, byte) in row.iter().copied().enumerate() {
@@ -1187,13 +1372,12 @@ impl PrinterState {
             }
         }
 
-        self.line_top = self
-            .line_top
-            .saturating_add(height_dots as u32 * vertical_scale);
+        self.line_top = next_line_top;
         self.roll.ensure_height(self.line_top);
         self.print_x = 0;
         self.line_used_width = 0;
         self.at_beginning_of_line = true;
+        Ok(())
     }
 
     fn cut(&mut self, partial: bool, offset: usize) -> Result<(), RenderError> {
@@ -1218,6 +1402,15 @@ impl PrinterState {
             });
         }
 
+        let sheet_count = self.completed_sheets.len().saturating_add(1);
+        if sheet_count > self.limits.max_sheets {
+            return Err(RenderError::LimitExceeded {
+                kind: LimitKind::Sheets,
+                value: sheet_count as u64,
+                limit: self.limits.max_sheets as u64,
+            });
+        }
+
         // Function A cuts at the current paper position; it does not add a
         // model-dependent feed-to-cutter distance.
         let next_roll = MonoSurface::new(self.roll.width);
@@ -1227,7 +1420,50 @@ impl PrinterState {
         Ok(())
     }
 
-    fn drawer_pulse(&self, connector: u8, offset: usize) -> Result<(), RenderError> {
+    fn validate_command_payload_size(&self, payload_bytes: usize) -> Result<(), RenderError> {
+        if payload_bytes > self.limits.max_command_payload_bytes {
+            return Err(RenderError::LimitExceeded {
+                kind: LimitKind::CommandPayloadBytes,
+                value: payload_bytes as u64,
+                limit: self.limits.max_command_payload_bytes as u64,
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_roll_height(&self, height_dots: u32) -> Result<(), RenderError> {
+        if height_dots > self.limits.max_sheet_height_dots {
+            return Err(RenderError::LimitExceeded {
+                kind: LimitKind::SheetHeightDots,
+                value: u64::from(height_dots),
+                limit: u64::from(self.limits.max_sheet_height_dots),
+            });
+        }
+
+        let completed_dots = self
+            .completed_sheets
+            .iter()
+            .map(|sheet| u64::from(sheet.width) * u64::from(sheet.height))
+            .sum::<u64>();
+        let current_dots = u64::from(self.roll.width) * u64::from(height_dots);
+        let total_dots = completed_dots.saturating_add(current_dots);
+        if total_dots > self.limits.max_total_dots {
+            return Err(RenderError::LimitExceeded {
+                kind: LimitKind::TotalDots,
+                value: total_dots,
+                limit: self.limits.max_total_dots,
+            });
+        }
+        Ok(())
+    }
+
+    fn drawer_pulse(
+        &mut self,
+        connector: u8,
+        on_time_units: u8,
+        off_time_units: u8,
+        offset: usize,
+    ) -> Result<(), RenderError> {
         if !matches!(connector, 0 | 1 | 48 | 49) {
             return Err(RenderError::UnsupportedDrawerConnector { connector, offset });
         }
@@ -1239,21 +1475,35 @@ impl PrinterState {
             });
         }
 
-        // Pulse timing affects the connector only; it has no paper-side state.
+        // Pulse timing affects the connector only; retain it as an event
+        // without inventing any paper-side marks.
+        self.device_events.push(DeviceEvent::CashDrawerPulse {
+            connector,
+            on_time_units,
+            off_time_units,
+        });
         Ok(())
     }
 
-    fn line_feed(&mut self) {
-        self.feed_lines(1);
+    fn line_feed(&mut self) -> Result<(), RenderError> {
+        self.feed_lines(1)
     }
 
-    fn into_surfaces(mut self) -> Vec<MonoSurface> {
+    fn into_surfaces(mut self) -> Result<Vec<MonoSurface>, RenderError> {
         // A cut already finalized the preceding roll. Do not invent a blank
         // trailing receipt when the job ends immediately after that cut.
         if self.roll.height > 0 {
+            let sheet_count = self.completed_sheets.len().saturating_add(1);
+            if sheet_count > self.limits.max_sheets {
+                return Err(RenderError::LimitExceeded {
+                    kind: LimitKind::Sheets,
+                    value: sheet_count as u64,
+                    limit: self.limits.max_sheets as u64,
+                });
+            }
             self.completed_sheets.push(self.roll);
         }
-        self.completed_sheets
+        Ok(self.completed_sheets)
     }
 }
 

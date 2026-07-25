@@ -87,7 +87,9 @@ transport = "usb"
 profile = "NT-5890K"
 vendor_id = "0x1234"
 product_id = "0x5678"
+interface_number = 0
 out_endpoint = "0x01"
+in_endpoint = "0x81"
 """.strip()
             )
 
@@ -128,7 +130,9 @@ transport = "usb"
 profile = "NT-5890K"
 vendor_id = "0x1234"
 product_id = "0x5678"
+interface_number = 0
 out_endpoint = "0x01"
+in_endpoint = "0x81"
 """.strip()
             )
             output_directory = local_directory / "rendered"

@@ -10,6 +10,7 @@ fi
 
 export VIRTUAL_ENV="$virtual_environment"
 export PATH="$virtual_environment/bin:$PATH"
+export PIP_QUIET=1
 
 maturin develop --quiet --locked --extras=printer
 

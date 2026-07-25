@@ -143,6 +143,8 @@ Cases with multiple cuts contain one expected PNG per sheet.
 A small Python CLI orchestrates rendering and physical printing:
 
 ```text
+escpos2png printers discover
+escpos2png printers discover --name <local-name> --profile <profile>
 escpos2png case render <case>
 escpos2png case print <case> --printer <local-name>
 escpos2png case calibrate <case> --printer <local-name>
@@ -177,10 +179,15 @@ transport = "usb"
 profile = "NT-5890K"
 vendor_id = "<USB vendor ID>"
 product_id = "<USB product ID>"
+# serial_number = "<optional USB serial number>"
+interface_number = 0
 out_endpoint = "0x01"
+in_endpoint = "0x81"
 ```
 
 [`examples/printers.toml`](examples/printers.toml) is the committed template.
+The discovery command writes or updates the selected table while preserving
+comments and other printer entries.
 Real machine configuration and local captures remain ignored.
 
 Before sending bytes, the CLI shows:

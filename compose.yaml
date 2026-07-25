@@ -21,6 +21,8 @@ services:
     <<: *development-service
     devices:
       - /dev/bus/usb:/dev/bus/usb
+    group_add:
+      - "${USB_GROUP_ID:-7}"
     entrypoint:
       - /workspace/scripts/cli-entrypoint
 

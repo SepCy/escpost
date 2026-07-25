@@ -15,12 +15,16 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Rust",
 ]
+dependencies = ["click==8.4.2"]
 
 [project.scripts]
 escpos2png = "escpos2png.cli:main"
 
 [project.optional-dependencies]
-printer = ["python-escpos[usb]==3.1"]
+printer = [
+    "python-escpos[usb]==3.1",
+    "tomlkit==0.15.1",
+]
 
 [tool.maturin]
 manifest-path = "crates/escpos2png-python/Cargo.toml"

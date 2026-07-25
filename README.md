@@ -37,6 +37,25 @@ container. The CLI service has USB access for printer discovery and physical
 calibration. Its Python environment lives in a named Docker volume and is
 created or updated automatically.
 
+List connected USB printer-class devices:
+
+```bash
+./escpos2png printers discover
+```
+
+Save one selected device to the ignored local configuration:
+
+```bash
+./escpos2png printers discover \
+  --serial B120300001 \
+  --name netum-usb \
+  --profile NT-5890K
+```
+
+The Compose service joins host group GID `7`, the conventional `lp` group on
+Debian-derived systems. Set `USB_GROUP_ID` when the USB printer device belongs
+to a different host group.
+
 Render the first conformance case:
 
 ```bash
@@ -45,9 +64,9 @@ Render the first conformance case:
   --output-dir local/rendered
 ```
 
-For physical calibration, copy `examples/printers.toml` to the ignored
-`local/printers.toml` and replace the USB identifiers. The `case calibrate`
-command renders and sends one loaded, hash-verified byte buffer.
+For physical calibration, first use discovery to populate
+`local/printers.toml`. The `case calibrate` command renders and sends one
+loaded, hash-verified byte buffer.
 
 ```bash
 ./escpos2png case calibrate \

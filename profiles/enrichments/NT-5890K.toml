@@ -1,0 +1,23 @@
+schema_version = 1
+profile = "NT-5890K"
+revision = 1
+upstream_profile_sha256 = "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
+
+sources = [
+    "upstream:escpos-printer-db/NT-5890K",
+]
+
+[geometry]
+printable_width_dots = 384
+dpi_x = 203
+dpi_y = 203
+
+[fonts.a]
+columns = 32
+
+[fonts.b]
+columns = 42
+
+[[approximations]]
+field = "fonts.resident_glyph_shapes"
+reason = "Representative glyphs will be used instead of printer ROM glyphs"

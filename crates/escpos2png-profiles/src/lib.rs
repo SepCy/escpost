@@ -1,0 +1,279 @@
+//! Printer profile import, enrichment, and validation.
+
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
+use thiserror::Error;
+
+const ENRICHMENT_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CompiledProfile {
+    pub profile: PrinterProfile,
+    pub source: ProfileSource,
+    pub changes: Vec<ProfileChange>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PrinterProfile {
+    pub id: String,
+    pub revision: u32,
+    pub geometry: Geometry,
+    pub fonts: Fonts,
+    pub sources: Vec<String>,
+    pub approximations: Vec<Approximation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Geometry {
+    pub printable_width_dots: u32,
+    pub dpi_x: u32,
+    pub dpi_y: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Fonts {
+    pub a: Font,
+    pub b: Font,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Font {
+    pub columns: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Approximation {
+    pub field: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfileSource {
+    pub upstream_profile_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ProfileChange {
+    pub field: String,
+    pub kind: ProfileChangeKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProfileChangeKind {
+    Added,
+    Confirmed,
+    Corrected,
+}
+
+#[derive(Debug, Error)]
+pub enum CompileProfileError {
+    #[error("invalid upstream capabilities JSON")]
+    InvalidCapabilities(#[source] serde_json::Error),
+
+    #[error("invalid profile enrichment TOML")]
+    InvalidEnrichment(#[source] toml::de::Error),
+
+    #[error("unsupported profile enrichment schema version {found}")]
+    UnsupportedSchemaVersion { found: u32 },
+
+    #[error("upstream profile {profile:?} does not exist")]
+    UnknownUpstreamProfile { profile: String },
+
+    #[error(
+        "resolved upstream profile hash changed for {profile:?}: \
+         expected {expected}, got {actual}"
+    )]
+    UpstreamProfileHashMismatch {
+        profile: String,
+        expected: String,
+        actual: String,
+    },
+
+    #[error("could not normalize resolved upstream profile")]
+    NormalizeUpstreamProfile(#[source] serde_json::Error),
+
+    #[error("could not import resolved upstream profile {profile:?}")]
+    ImportUpstreamProfile {
+        profile: String,
+        #[source]
+        source: serde_json::Error,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Enrichment {
+    schema_version: u32,
+    profile: String,
+    revision: u32,
+    upstream_profile_sha256: String,
+    sources: Vec<String>,
+    geometry: Geometry,
+    fonts: Fonts,
+    approximations: Vec<Approximation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UpstreamCapabilities {
+    profiles: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportedProfile {
+    media: ImportedMedia,
+    fonts: BTreeMap<String, ImportedFont>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportedMedia {
+    dpi: Option<u32>,
+    width: ImportedWidth,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportedWidth {
+    pixels: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportedFont {
+    columns: Option<u32>,
+}
+
+pub fn compile_profile(
+    capabilities_json: &[u8],
+    enrichment_toml: &str,
+) -> Result<CompiledProfile, CompileProfileError> {
+    let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
+        .map_err(CompileProfileError::InvalidCapabilities)?;
+    let enrichment: Enrichment =
+        toml::from_str(enrichment_toml).map_err(CompileProfileError::InvalidEnrichment)?;
+
+    validate_schema_version(enrichment.schema_version)?;
+
+    let upstream_profile = capabilities
+        .profiles
+        .get(&enrichment.profile)
+        .ok_or_else(|| CompileProfileError::UnknownUpstreamProfile {
+            profile: enrichment.profile.clone(),
+        })?;
+    let actual_hash = hash_resolved_profile(upstream_profile)?;
+
+    validate_upstream_hash(&enrichment, &actual_hash)?;
+    let imported = import_upstream_profile(upstream_profile, &enrichment.profile)?;
+    let changes = classify_changes(&imported, &enrichment);
+
+    Ok(CompiledProfile {
+        changes,
+        source: ProfileSource {
+            upstream_profile_sha256: actual_hash,
+        },
+        profile: PrinterProfile {
+            id: enrichment.profile,
+            revision: enrichment.revision,
+            geometry: enrichment.geometry,
+            fonts: enrichment.fonts,
+            sources: enrichment.sources,
+            approximations: enrichment.approximations,
+        },
+    })
+}
+
+fn import_upstream_profile(
+    upstream_profile: &Value,
+    profile_id: &str,
+) -> Result<ImportedProfile, CompileProfileError> {
+    serde_json::from_value(upstream_profile.clone()).map_err(|source| {
+        CompileProfileError::ImportUpstreamProfile {
+            profile: profile_id.to_owned(),
+            source,
+        }
+    })
+}
+
+fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<ProfileChange> {
+    let font_a_columns = imported.fonts.get("0").and_then(|font| font.columns);
+    let font_b_columns = imported.fonts.get("1").and_then(|font| font.columns);
+
+    vec![
+        classify_change(
+            "geometry.printable_width_dots",
+            imported.media.width.pixels,
+            enrichment.geometry.printable_width_dots,
+        ),
+        classify_change(
+            "geometry.dpi_x",
+            imported.media.dpi,
+            enrichment.geometry.dpi_x,
+        ),
+        classify_change(
+            "geometry.dpi_y",
+            imported.media.dpi,
+            enrichment.geometry.dpi_y,
+        ),
+        classify_change(
+            "fonts.a.columns",
+            font_a_columns,
+            enrichment.fonts.a.columns,
+        ),
+        classify_change(
+            "fonts.b.columns",
+            font_b_columns,
+            enrichment.fonts.b.columns,
+        ),
+    ]
+}
+
+fn classify_change(field: &str, imported: Option<u32>, enriched: u32) -> ProfileChange {
+    let kind = match imported {
+        None => ProfileChangeKind::Added,
+        Some(value) if value == enriched => ProfileChangeKind::Confirmed,
+        Some(_) => ProfileChangeKind::Corrected,
+    };
+
+    ProfileChange {
+        field: field.to_owned(),
+        kind,
+    }
+}
+
+fn validate_schema_version(schema_version: u32) -> Result<(), CompileProfileError> {
+    if schema_version == ENRICHMENT_SCHEMA_VERSION {
+        return Ok(());
+    }
+
+    Err(CompileProfileError::UnsupportedSchemaVersion {
+        found: schema_version,
+    })
+}
+
+fn hash_resolved_profile(profile: &Value) -> Result<String, CompileProfileError> {
+    let normalized =
+        serde_json::to_vec(profile).map_err(CompileProfileError::NormalizeUpstreamProfile)?;
+    let digest = Sha256::digest(normalized);
+
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn validate_upstream_hash(
+    enrichment: &Enrichment,
+    actual_hash: &str,
+) -> Result<(), CompileProfileError> {
+    if enrichment.upstream_profile_sha256 == actual_hash {
+        return Ok(());
+    }
+
+    Err(CompileProfileError::UpstreamProfileHashMismatch {
+        profile: enrichment.profile.clone(),
+        expected: enrichment.upstream_profile_sha256.clone(),
+        actual: actual_hash.to_owned(),
+    })
+}

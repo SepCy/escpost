@@ -1,0 +1,17 @@
+services:
+  test:
+    network_mode: host
+    build:
+      context: .
+      args:
+        USER_ID: 1000
+        GROUP_ID: 1000
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+      - cargo-home:/home/developer/.cargo
+      - cargo-target:/home/developer/target
+
+volumes:
+  cargo-home:
+  cargo-target:

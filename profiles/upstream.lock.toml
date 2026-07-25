@@ -1,0 +1,4 @@
+schema_version = 1
+repository = "https://github.com/receipt-print-hq/escpos-printer-db.git"
+commit = "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5"
+license = "CC-BY-4.0"

@@ -81,11 +81,14 @@ printable families are covered.
 |---|---|---:|---:|---:|
 | `ESC *` | Print column-format bit image in all four modes | Implemented | Implemented | Pending |
 | `GS v 0` | Print raster-format bit image in all four scaling modes | Implemented | Implemented | Pending |
-| `GS ( L` Function 50 | Print buffered graphics data | Planned | Planned | Pending |
-| `GS ( L` / `GS 8 L` Function 112 | Store raster graphics data | Planned | Planned | Pending |
+| `GS ( L` Function 50 | Print buffered graphics data | Implemented | Implemented | Pending |
+| `GS ( L` / `GS 8 L` Function 112 | Store raster graphics data | Implemented | Implemented | Pending |
 
 The implemented image commands include profile capability checks and their
 documented beginning-of-line, print-area, and justification interactions.
+Function 112 currently accepts the version 1 monochrome plane (`a=48`,
+`c=49`) and both documented 1×/2× scales. Multiple-tone and additional-color
+planes remain post-v1 as defined above.
 
 ## Native symbols
 

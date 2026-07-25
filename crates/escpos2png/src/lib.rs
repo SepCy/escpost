@@ -212,6 +212,42 @@ pub enum RenderError {
     #[error("unsupported GS v 0 raster bit-image mode {mode} at byte offset {offset}")]
     UnsupportedRasterBitImageMode { mode: u8, offset: usize },
 
+    #[error("unsupported graphics function {function} at byte offset {offset}")]
+    UnsupportedGraphicsFunction { function: u8, offset: usize },
+
+    #[error("invalid graphics parameter {parameter}={value} at byte offset {offset}")]
+    InvalidGraphicsParameter {
+        parameter: &'static str,
+        value: u64,
+        offset: usize,
+    },
+
+    #[error(
+        "invalid graphics dimensions {width_dots} dot(s) by {height_dots} dot(s) \
+         at byte offset {offset}"
+    )]
+    InvalidGraphicsDimensions {
+        width_dots: usize,
+        height_dots: usize,
+        offset: usize,
+    },
+
+    #[error("graphics payload has {actual} byte(s), expected {expected}, at byte offset {offset}")]
+    InvalidGraphicsPayloadLength {
+        expected: usize,
+        actual: usize,
+        offset: usize,
+    },
+
+    #[error("graphics print buffer is empty at byte offset {offset}")]
+    GraphicsBufferEmpty { offset: usize },
+
+    #[error("{command} requires the beginning of a line at byte offset {offset}")]
+    CommandRequiresBeginningOfLine {
+        command: &'static str,
+        offset: usize,
+    },
+
     #[error("unsupported GS V cut mode {mode} at byte offset {offset}")]
     UnsupportedCutMode { mode: u8, offset: usize },
 
@@ -664,6 +700,8 @@ fn execute_gs_command(
             state.set_character_size(size);
             Ok(3)
         }
+        0x28 => execute_gs_parenthesized_l(data, offset, state),
+        0x38 => execute_gs_8_l(data, offset, state),
         0x42 => {
             let Some(reverse) = data.get(2).copied() else {
                 return Err(RenderError::TruncatedCommand {
@@ -708,6 +746,162 @@ fn execute_gs_command(
         0x76 => execute_gs_v0(data, offset, state),
         command => Err(RenderError::UnsupportedGsCommand { command, offset }),
     }
+}
+
+fn execute_gs_parenthesized_l(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    if data.len() < 5 || data[2] != b'L' {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS ( L",
+            offset,
+        });
+    }
+
+    let parameter_length = usize::from(u16::from_le_bytes([data[3], data[4]]));
+    state.validate_command_payload_size(parameter_length)?;
+    let command_length = 5 + parameter_length;
+    let Some(parameters) = data.get(5..command_length) else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS ( L",
+            offset,
+        });
+    };
+    execute_graphics_function(parameters, false, offset, state)?;
+    Ok(command_length)
+}
+
+fn execute_gs_8_l(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    if data.len() < 7 || data[2] != b'L' {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS 8 L",
+            offset,
+        });
+    }
+
+    let parameter_length = u32::from_le_bytes([data[3], data[4], data[5], data[6]]) as usize;
+    state.validate_command_payload_size(parameter_length)?;
+    let command_length = 7usize.saturating_add(parameter_length);
+    let Some(parameters) = data.get(7..command_length) else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS 8 L",
+            offset,
+        });
+    };
+    execute_graphics_function(parameters, true, offset, state)?;
+    Ok(command_length)
+}
+
+fn execute_graphics_function(
+    parameters: &[u8],
+    extended_length: bool,
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<(), RenderError> {
+    let Some((&mode, &function)) = parameters.first().zip(parameters.get(1)) else {
+        return Err(RenderError::TruncatedCommand {
+            command: if extended_length { "GS 8 L" } else { "GS ( L" },
+            offset,
+        });
+    };
+    if mode != 48 {
+        return Err(RenderError::InvalidGraphicsParameter {
+            parameter: "m",
+            value: u64::from(mode),
+            offset,
+        });
+    }
+
+    match function {
+        2 | 50 if !extended_length => {
+            if parameters.len() != 2 {
+                return Err(RenderError::InvalidGraphicsPayloadLength {
+                    expected: 2,
+                    actual: parameters.len(),
+                    offset,
+                });
+            }
+            state.print_buffered_graphics(offset)
+        }
+        112 => store_raster_graphics(parameters, offset, state),
+        function => Err(RenderError::UnsupportedGraphicsFunction { function, offset }),
+    }
+}
+
+fn store_raster_graphics(
+    parameters: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<(), RenderError> {
+    if parameters.len() < 10 {
+        return Err(RenderError::InvalidGraphicsPayloadLength {
+            expected: 10,
+            actual: parameters.len(),
+            offset,
+        });
+    }
+    let tone = parameters[2];
+    let scale_x = parameters[3];
+    let scale_y = parameters[4];
+    let color = parameters[5];
+    validate_graphics_parameter(tone == 48, "a", tone, offset)?;
+    validate_graphics_parameter(matches!(scale_x, 1 | 2), "bx", scale_x, offset)?;
+    validate_graphics_parameter(matches!(scale_y, 1 | 2), "by", scale_y, offset)?;
+    validate_graphics_parameter(color == 49, "c", color, offset)?;
+
+    let width_dots = usize::from(u16::from_le_bytes([parameters[6], parameters[7]]));
+    let height_dots = usize::from(u16::from_le_bytes([parameters[8], parameters[9]]));
+    if width_dots == 0 || height_dots == 0 {
+        return Err(RenderError::InvalidGraphicsDimensions {
+            width_dots,
+            height_dots,
+            offset,
+        });
+    }
+    let row_bytes = width_dots.div_ceil(8);
+    let expected_payload = row_bytes.saturating_mul(height_dots);
+    let payload = &parameters[10..];
+    if payload.len() != expected_payload {
+        return Err(RenderError::InvalidGraphicsPayloadLength {
+            expected: 10 + expected_payload,
+            actual: parameters.len(),
+            offset,
+        });
+    }
+
+    state.store_raster_graphics(
+        BufferedGraphics {
+            payload: payload.to_vec(),
+            row_bytes,
+            width_dots,
+            height_dots,
+            horizontal_scale: u32::from(scale_x),
+            vertical_scale: u32::from(scale_y),
+        },
+        offset,
+    )
+}
+
+fn validate_graphics_parameter(
+    valid: bool,
+    parameter: &'static str,
+    value: u8,
+    offset: usize,
+) -> Result<(), RenderError> {
+    if valid {
+        return Ok(());
+    }
+    Err(RenderError::InvalidGraphicsParameter {
+        parameter,
+        value: u64::from(value),
+        offset,
+    })
 }
 
 fn execute_gs_v(
@@ -810,11 +1004,22 @@ fn execute_gs_v0(
     state.print_raster_image(
         payload,
         width_bytes,
+        width_bytes.saturating_mul(8) as u32,
         height_dots,
         horizontal_scale,
         vertical_scale,
     )?;
     Ok(command_length)
+}
+
+#[derive(Debug, Clone)]
+struct BufferedGraphics {
+    payload: Vec<u8>,
+    row_bytes: usize,
+    width_dots: usize,
+    height_dots: usize,
+    horizontal_scale: u32,
+    vertical_scale: u32,
 }
 
 #[derive(Debug)]
@@ -859,8 +1064,10 @@ struct PrinterState {
     reversed: bool,
     justification: Justification,
     line_height: u32,
+    buffered_graphics: Option<BufferedGraphics>,
     supports_column_bit_image: bool,
     supports_raster_bit_image: bool,
+    supports_graphics: bool,
     supports_full_cut: bool,
     supports_partial_cut: bool,
     supports_standard_drawer_pulse: bool,
@@ -915,8 +1122,10 @@ impl PrinterState {
             reversed: false,
             justification: Justification::Left,
             line_height: 0,
+            buffered_graphics: None,
             supports_column_bit_image: profile.features.bit_image_column,
             supports_raster_bit_image: profile.features.bit_image_raster,
+            supports_graphics: profile.features.graphics,
             supports_full_cut: profile.features.paper_full_cut,
             supports_partial_cut: profile.features.paper_part_cut,
             supports_standard_drawer_pulse: profile.features.pulse_standard,
@@ -946,6 +1155,7 @@ impl PrinterState {
         self.reversed = false;
         self.justification = Justification::Left;
         self.line_height = 0;
+        self.buffered_graphics = None;
     }
 
     fn set_print_mode(&mut self, mode: u8) {
@@ -1352,15 +1562,14 @@ impl PrinterState {
         &mut self,
         payload: &[u8],
         width_bytes: usize,
+        width_dots: u32,
         height_dots: usize,
         horizontal_scale: u32,
         vertical_scale: u32,
     ) -> Result<(), RenderError> {
         // GS v 0 is row-major, unlike ESC *. Its image is printed immediately
         // and advances the paper by the rendered height.
-        let image_width = (width_bytes as u32)
-            .saturating_mul(8)
-            .saturating_mul(horizontal_scale);
+        let image_width = width_dots.saturating_mul(horizontal_scale);
         let remaining_width = self.print_area_width.saturating_sub(image_width);
         let image_left = match self.justification {
             Justification::Left => 0,
@@ -1383,6 +1592,9 @@ impl PrinterState {
                     }
 
                     let source_x = byte_index as u32 * 8 + bit;
+                    if source_x >= width_dots {
+                        continue;
+                    }
                     let left =
                         physical_left.saturating_add(source_x.saturating_mul(horizontal_scale));
                     let top = self.line_top + source_y as u32 * vertical_scale;
@@ -1405,6 +1617,51 @@ impl PrinterState {
         self.print_x = 0;
         self.line_used_width = 0;
         self.at_beginning_of_line = true;
+        Ok(())
+    }
+
+    fn store_raster_graphics(
+        &mut self,
+        graphics: BufferedGraphics,
+        offset: usize,
+    ) -> Result<(), RenderError> {
+        self.require_graphics(offset)?;
+        if !self.at_beginning_of_line {
+            return Err(RenderError::CommandRequiresBeginningOfLine {
+                command: "GS ( L Function 112",
+                offset,
+            });
+        }
+
+        // Function 112 stores a complete raster plane. The later Function 50
+        // applies current layout state, so retain source dots and scale only.
+        self.buffered_graphics = Some(graphics);
+        Ok(())
+    }
+
+    fn print_buffered_graphics(&mut self, offset: usize) -> Result<(), RenderError> {
+        self.require_graphics(offset)?;
+        if !self.at_beginning_of_line {
+            return Err(RenderError::CommandRequiresBeginningOfLine {
+                command: "GS ( L Function 50",
+                offset,
+            });
+        }
+        let graphics = self
+            .buffered_graphics
+            .clone()
+            .ok_or(RenderError::GraphicsBufferEmpty { offset })?;
+        self.print_raster_image(
+            &graphics.payload,
+            graphics.row_bytes,
+            graphics.width_dots as u32,
+            graphics.height_dots,
+            graphics.horizontal_scale,
+            graphics.vertical_scale,
+        )?;
+        // Function 50 consumes the print-buffer image. A second Function 50
+        // therefore cannot invent another copy without a new store command.
+        self.buffered_graphics = None;
         Ok(())
     }
 
@@ -1462,6 +1719,10 @@ impl PrinterState {
             "GS v 0 raster bit image",
             offset,
         )
+    }
+
+    fn require_graphics(&self, offset: usize) -> Result<(), RenderError> {
+        self.require_profile_feature(self.supports_graphics, "GS ( L graphics", offset)
     }
 
     fn require_profile_feature(

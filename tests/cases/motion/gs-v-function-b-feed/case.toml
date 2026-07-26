@@ -1,4 +1,4 @@
 schema_version = 1
 name = "GS V Function B feed without an autocutter"
 profile = "NT-5890K"
-input_sha256 = "3910feea2720c9269ad0d1173cdeea7c5328fefb22c9556e1ec2866e6dc1175b"
+input_sha256 = "c02c4b6860f475b94a094dbc2da6d6f329d0b0b5425017f85e1d5e174c0965f8"

@@ -1,17 +1,23 @@
 1b 40
 
-1b 2a 01 08 00 80 80 80 80 80 80 80 80
-0a
+1d 76 30 00 04 00 08 00
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+1b 4a 16
 
 1d 50 cb 65
 1d 56 41 0a
 
-1b 2a 01 08 00 80 80 80 80 80 80 80 80
-0a
+1d 76 30 00 04 00 08 00
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+1b 4a 0b
 
 1d 56 42 0a
 
-1b 2a 01 08 00 80 80 80 80 80 80 80 80
-0a
+1d 76 30 00 04 00 08 00
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff
+1b 4a 0b
 
 1b 64 03

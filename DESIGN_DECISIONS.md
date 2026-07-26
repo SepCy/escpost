@@ -471,13 +471,52 @@ approximation until hardware evidence requires a fork or replacement.
 - New symbol families may use the same dependency rule when outsourcing the
   standards-heavy portion materially improves correctness.
 
+## DD-025 — Do not emulate incidental firmware quirks by default
+
+**Status:** Accepted
+
+### Context
+
+Low-cost ESC/POS-compatible printers sometimes deviate from Epson behavior in
+small, model-specific ways. Examples include thermal after-images, slightly
+different barcode dimensions, unexpected HRI behavior, resident glyph shapes,
+and different valid QR compaction or mask choices.
+
+Replicating every observed difference would turn the renderer into a collection
+of fragile firmware flags. Many observations are difficult to distinguish from
+paper, heat, print-head, or configuration effects and do not prevent the PNG
+from communicating the receipt's content and layout.
+
+### Decision
+
+Use documented ESC/POS behavior plus profile geometry and capabilities as the
+default model. Do not emulate a firmware quirk merely because it creates a
+pixel difference.
+
+Add a model-specific behavior only when it is reproducible and materially
+affects command parsing, content meaning, positioning, wrapping, feeds, cuts,
+sheet boundaries, or another behavior needed by the product. Minor native
+symbol size differences, HRI deviations, thermal artifacts, resident glyph
+shapes, and standards-valid QR matrix differences may remain documented
+approximations when the resulting receipt layout is still useful and correct.
+
+Record observed but unmodeled quirks with the physical test case so the
+decision can be revisited if the difference later matters.
+
+### Consequences
+
+- Printer profiles stay focused on behavior that materially improves previews.
+- The renderer follows a reviewable protocol baseline instead of reverse
+  engineering every firmware revision.
+- A preview may not reproduce every dot or native-symbol implementation choice
+  even when its positions and overall layout are correct.
+- A previously neglected quirk can become modeled after reproducible evidence
+  and a concrete fidelity need justify the added complexity.
+
 ## Open questions
 
 The following are intentionally not decided yet:
 
 - canonical runtime profile fields for full command coverage and their
   compatibility policy;
-- whether bidirectional status commands need a configurable response emulator;
-  and
-- any remaining fidelity policy needed for printer behaviors that cannot be
-  observed from an isolated byte stream.
+- whether bidirectional status commands need a configurable response emulator.

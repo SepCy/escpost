@@ -95,8 +95,8 @@ planes remain post-v1 as defined above.
 
 | Command family | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
-| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Partial | Implemented | Pending |
-| `GS ( k` QR functions | Configure, store, and print QR symbols | Partial | Implemented | Pending |
+| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Partial | Implemented | Validated on NT-5890K |
+| `GS ( k` QR functions | Configure, store, and print QR symbols | Partial | Implemented | Validated on NT-5890K |
 | `GS ( k` PDF417 functions | Configure, store, and print PDF417 symbols | Post-v1 | Planned | Pending |
 | `GS ( k` Data Matrix functions | Configure, store, and print Data Matrix symbols | Post-v1 | Planned | Pending |
 
@@ -116,7 +116,9 @@ QR Functions 165, 167, 169, 180, and 181 implement Model 2 selection, module
 size, error correction, raw-byte storage, and printing. Model 1, Micro QR, and
 Function 182's bidirectional size response remain pending. QR matrices are
 valid and deterministic, but their mask choice is not yet claimed to match a
-specific Epson firmware.
+specific Epson firmware. The NT-5890K hardware case confirms native command
+availability and the expected 84-dot QR dimensions; it does not yet compare
+every logical module with a digitized physical print.
 
 ## Paper and device actions
 

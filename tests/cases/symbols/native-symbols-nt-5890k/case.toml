@@ -1,0 +1,27 @@
+schema_version = 1
+name = "NT-5890K native one-dimensional and QR symbols"
+profile = "NT-5890K"
+input = "input.hex"
+input_encoding = "hex"
+input_sha256 = "665cd5dc465f6fa0a3f0994465943d4d97c3446177828b42b8dce24a16b1e3d2"
+expected_completeness = "complete"
+
+[initial_state]
+assumption = "profile-reset-defaults"
+
+[[expected_sheets]]
+file = "expected-001.png"
+width_dots = 384
+height_dots = 592
+
+[[references]]
+source = "epson-escpos-manual"
+location = "GS k — Print barcode"
+
+[[references]]
+source = "epson-escpos-manual"
+location = "GS ( k — QR Functions 165, 167, 169, 180, and 181"
+
+[[references]]
+source = "physical-printer"
+location = "NT-5890K USB probe recorded in notes.md"

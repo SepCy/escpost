@@ -9,8 +9,7 @@ const GS: u8 = 0x1d;
 #[test]
 fn prints_ean13_with_the_generated_check_digit_and_default_dimensions() {
     let mut profile = test_profile();
-    // The Netum test profile does not advertise native barcodes. Enabling the
-    // capability here isolates the command semantics from that hardware fact.
+    // Keep the command test explicit about its required profile capability.
     profile.features.barcode_b = true;
     let input = [
         GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
@@ -447,12 +446,15 @@ fn code128_shift_uses_the_other_code_set_for_one_character() {
 
 #[test]
 fn rejects_native_barcodes_when_the_profile_does_not_support_them() {
-    let profile = test_profile();
+    let mut profile = test_profile();
+    // Capability gating remains important even though the physical Netum
+    // probe corrected this particular profile to support native barcodes.
+    profile.features.barcode_b = false;
     let input = [
         GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
     ];
 
-    let error = render(&input, &profile).expect_err("the Netum profile disables native barcodes");
+    let error = render(&input, &profile).expect_err("the synthetic profile disables barcodes");
 
     assert!(matches!(
         error,

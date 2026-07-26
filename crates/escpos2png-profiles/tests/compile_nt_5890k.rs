@@ -35,7 +35,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         ),
         (
             "NT-5890K",
-            5,
+            6,
             384,
             203,
             203,
@@ -75,13 +75,15 @@ fn nt_5890k_compiles_to_rendering_geometry() {
     );
     assert_eq!(
         (
+            compiled.profile.features.barcode_a,
+            compiled.profile.features.barcode_b,
             compiled.profile.features.bit_image_column,
             compiled.profile.features.bit_image_raster,
             compiled.profile.features.paper_full_cut,
             compiled.profile.features.paper_part_cut,
             compiled.profile.features.qr_code,
         ),
-        (true, true, false, false, false)
+        (true, true, true, true, false, false, true)
     );
 }
 
@@ -223,39 +225,49 @@ fn nt_5890k_reports_which_values_the_enrichment_confirms() {
     let compiled = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the pinned NT-5890K profile should compile");
 
+    let expected_base_changes = [
+        "geometry.printable_width_dots",
+        "geometry.dpi_x",
+        "geometry.dpi_y",
+        "motion.horizontal_units_per_inch",
+        "motion.vertical_units_per_inch",
+        "defaults.line_spacing_dots",
+        "defaults.code_page",
+        "fonts.a.columns",
+        "fonts.a.cell_width_dots",
+        "fonts.a.cell_height_dots",
+        "fonts.a.baseline_dots",
+        "fonts.b.columns",
+        "fonts.b.cell_width_dots",
+        "fonts.b.cell_height_dots",
+        "fonts.b.baseline_dots",
+    ]
+    .map(|field| ProfileChange {
+        field: field.to_owned(),
+        kind: if field.starts_with("motion.")
+            || field == "defaults.line_spacing_dots"
+            || field == "defaults.code_page"
+            || (field.starts_with("fonts.")
+                && field != "fonts.a.columns"
+                && field != "fonts.b.columns")
+        {
+            ProfileChangeKind::Added
+        } else {
+            ProfileChangeKind::Confirmed
+        },
+    });
+    let expected_feature_corrections =
+        ["barcode_a", "barcode_b", "qr_code"].map(|feature| ProfileChange {
+            field: format!("features.{feature}"),
+            kind: ProfileChangeKind::Corrected,
+        });
+
     assert_eq!(
         compiled.changes,
-        [
-            "geometry.printable_width_dots",
-            "geometry.dpi_x",
-            "geometry.dpi_y",
-            "motion.horizontal_units_per_inch",
-            "motion.vertical_units_per_inch",
-            "defaults.line_spacing_dots",
-            "defaults.code_page",
-            "fonts.a.columns",
-            "fonts.a.cell_width_dots",
-            "fonts.a.cell_height_dots",
-            "fonts.a.baseline_dots",
-            "fonts.b.columns",
-            "fonts.b.cell_width_dots",
-            "fonts.b.cell_height_dots",
-            "fonts.b.baseline_dots",
-        ]
-        .map(|field| ProfileChange {
-            field: field.to_owned(),
-            kind: if field.starts_with("motion.")
-                || field == "defaults.line_spacing_dots"
-                || field == "defaults.code_page"
-                || (field.starts_with("fonts.")
-                    && field != "fonts.a.columns"
-                    && field != "fonts.b.columns")
-            {
-                ProfileChangeKind::Added
-            } else {
-                ProfileChangeKind::Confirmed
-            },
-        })
+        expected_base_changes
+            .into_iter()
+            .chain(expected_feature_corrections)
+            .collect::<Vec<_>>()
     );
 }
 
@@ -320,4 +332,15 @@ fn profiles_reject_zero_sized_font_cells() {
             field: "fonts.a.cell_width_dots"
         }
     ));
+}
+
+#[test]
+fn profiles_reject_unknown_feature_overrides() {
+    let invalid_enrichment =
+        ENRICHMENT_TOML.replace("qr_code = true", "qr_code = true\ninvented_mode = true");
+
+    let error = compile_profile(CAPABILITIES_JSON, &invalid_enrichment)
+        .expect_err("a misspelled capability must not silently enter the profile");
+
+    assert!(matches!(error, CompileProfileError::InvalidEnrichment(_)));
 }

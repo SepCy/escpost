@@ -9,8 +9,7 @@ const GS: u8 = 0x1d;
 #[test]
 fn stores_and_prints_a_qr_code_with_reset_defaults() {
     let mut profile = test_profile();
-    // The physical Netum printer does not advertise QR support. Enabling the
-    // feature here lets this test focus on Epson's QR command language.
+    // Keep the command test explicit about its required profile capability.
     profile.features.qr_code = true;
     let input = [
         // Function 180 stores one raw data byte. pL/pH count cn, fn, m, and data.
@@ -122,21 +121,24 @@ fn qr_store_treats_control_bytes_as_atomic_symbol_data() {
     let mut profile = test_profile();
     profile.features.qr_code = true;
     let input = [
-        GS, b'(', b'k', 7, 0, 49, 80, 48, 0x00, 0x1b, 0x1d, 0xff, GS, b'(', b'k', 3,
-        0, 49, 81, 48,
+        GS, b'(', b'k', 7, 0, 49, 80, 48, 0x00, 0x1b, 0x1d, 0xff, GS, b'(', b'k', 3, 0, 49, 81, 48,
     ];
 
-    let rendered = render(&input, &profile).expect("binary QR data should stay inside Function 180");
+    let rendered =
+        render(&input, &profile).expect("binary QR data should stay inside Function 180");
 
     assert_eq!(rendered.sheets[0].surface.height(), 63);
 }
 
 #[test]
 fn rejects_qr_commands_when_the_profile_does_not_support_them() {
-    let profile = test_profile();
+    let mut profile = test_profile();
+    // Capability gating remains important even though the physical Netum
+    // probe corrected this particular profile to support native QR.
+    profile.features.qr_code = false;
     let input = [GS, b'(', b'k', 4, 0, 49, 80, 48, b'A'];
 
-    let error = render(&input, &profile).expect_err("the Netum profile disables native QR");
+    let error = render(&input, &profile).expect_err("the synthetic profile disables native QR");
 
     assert!(matches!(
         error,

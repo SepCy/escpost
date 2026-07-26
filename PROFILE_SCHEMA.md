@@ -94,11 +94,16 @@ An upstream update that changes only an unrelated profile therefore does not
 invalidate `NT-5890K`. A change to `NT-5890K`, `POS-5890`, or another ancestor
 changes its resolved hash and requires review.
 
-The compiled runtime profile also imports upstream command-capability flags,
-such as raster-image, barcode, QR-code, and cutter support. Rendering uses
-these flags to reject commands that the selected printer cannot execute. They
-remain protected by the same resolved-profile hash, so an upstream capability
-change cannot silently alter a compiled profile.
+The compiled runtime profile imports upstream command-capability flags, such
+as raster-image, barcode, QR-code, and cutter support. Rendering uses these
+flags to reject commands that the selected printer cannot execute. They remain
+protected by the same resolved-profile hash, so an upstream capability change
+cannot silently alter a compiled profile.
+
+An enrichment may confirm or correct individual capability flags when a
+printer manual or physical case provides stronger evidence than an inherited
+upstream default. These typed overrides are also covered by the enrichment and
+canonical hashes; the vendored upstream snapshot is never edited in place.
 
 ## Enrichment document
 
@@ -141,6 +146,11 @@ cell_width_dots = 9
 cell_height_dots = 17
 baseline_dots = 14
 
+[features]
+barcode_a = true
+barcode_b = true
+qr_code = true
+
 [[approximations]]
 field = "fonts.resident_glyph_shapes"
 reason = "Representative glyphs are used instead of printer ROM glyphs"
@@ -170,6 +180,11 @@ and after `ESC @`. The compiler imports the profile's complete `codePages`
 mapping from the pinned upstream record and rejects a default slot that is not
 present there. The renderer resolves `ESC t n` through this mapping because
 the same numeric `n` can identify different encodings on different printers.
+
+`features` is a partial table. Omitted flags retain their fully resolved
+upstream values. Present flags are classified as confirmed or corrected by
+comparison with upstream. Unknown feature names are rejected, just like other
+unknown enrichment fields.
 
 ## Automatic change classification
 

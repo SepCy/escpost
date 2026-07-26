@@ -113,12 +113,12 @@ These values are starting hypotheses. The connected printer and its
 documentation determine whether escpos2png needs profile enrichments or
 corrections.
 
-The NT-5890K profile does not advertise native barcode or QR commands.
-Automated tests can still exercise those standard command semantics with an
-explicit synthetic capability override, but physical native-symbol validation
-requires a printer profile and device that actually support the commands.
-Rasterized barcodes or QR codes sent to the Netum do not validate native
-`GS k` or `GS ( k` behavior.
+The upstream NT-5890K profile inherits conservative native-symbol flags from
+the generic `simple` profile. A raw hardware probe on the connected printer
+successfully printed both `GS k` Function A/B EAN-13 symbols and a Model 2
+`GS ( k` QR symbol. Revision 6 therefore corrects those capability flags in
+the escpos2png enrichment. The exact stream and observation are retained in
+`tests/cases/symbols/native-symbols-nt-5890k`.
 
 ## Conformance case format
 

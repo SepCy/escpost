@@ -248,7 +248,40 @@ struct Enrichment {
     motion: MotionUnits,
     defaults: PrinterDefaults,
     fonts: Fonts,
+    #[serde(default)]
+    features: FeatureOverrides,
     approximations: Vec<Approximation>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+struct FeatureOverrides {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    barcode_a: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    barcode_b: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bit_image_column: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bit_image_raster: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    graphics: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    high_density: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    paper_full_cut: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    paper_part_cut: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pdf417_code: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pulse_bel: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pulse_standard: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    qr_code: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    star_commands: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -344,6 +377,7 @@ pub fn compile_profile_with_lock(
     let code_pages = import_code_pages(&imported)?;
     validate_default_code_page(enrichment.defaults.code_page, &code_pages)?;
     let changes = classify_changes(&imported, &enrichment);
+    let features = apply_feature_overrides(imported.features, &enrichment.features);
 
     let enrichment_sha256 = hash_enrichment(&enrichment)?;
     let mut profile = PrinterProfile {
@@ -354,7 +388,7 @@ pub fn compile_profile_with_lock(
         motion: enrichment.motion,
         defaults: enrichment.defaults,
         fonts: enrichment.fonts,
-        features: imported.features,
+        features,
         code_pages,
         sources: enrichment.sources,
         approximations: enrichment.approximations,
@@ -443,7 +477,7 @@ fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<
     let font_a_columns = imported.fonts.get("0").and_then(|font| font.columns);
     let font_b_columns = imported.fonts.get("1").and_then(|font| font.columns);
 
-    vec![
+    let mut changes = vec![
         classify_change(
             "geometry.printable_width_dots",
             imported.media.width.pixels,
@@ -519,7 +553,136 @@ fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<
             None,
             enrichment.fonts.b.baseline_dots,
         ),
-    ]
+    ];
+    classify_feature_changes(&mut changes, &imported.features, &enrichment.features);
+    changes
+}
+
+fn apply_feature_overrides(mut features: Features, overrides: &FeatureOverrides) -> Features {
+    apply_bool_override(&mut features.barcode_a, overrides.barcode_a);
+    apply_bool_override(&mut features.barcode_b, overrides.barcode_b);
+    apply_bool_override(&mut features.bit_image_column, overrides.bit_image_column);
+    apply_bool_override(&mut features.bit_image_raster, overrides.bit_image_raster);
+    apply_bool_override(&mut features.graphics, overrides.graphics);
+    apply_bool_override(&mut features.high_density, overrides.high_density);
+    apply_bool_override(&mut features.paper_full_cut, overrides.paper_full_cut);
+    apply_bool_override(&mut features.paper_part_cut, overrides.paper_part_cut);
+    apply_bool_override(&mut features.pdf417_code, overrides.pdf417_code);
+    apply_bool_override(&mut features.pulse_bel, overrides.pulse_bel);
+    apply_bool_override(&mut features.pulse_standard, overrides.pulse_standard);
+    apply_bool_override(&mut features.qr_code, overrides.qr_code);
+    apply_bool_override(&mut features.star_commands, overrides.star_commands);
+    features
+}
+
+fn apply_bool_override(target: &mut bool, replacement: Option<bool>) {
+    if let Some(replacement) = replacement {
+        *target = replacement;
+    }
+}
+
+fn classify_feature_changes(
+    changes: &mut Vec<ProfileChange>,
+    imported: &Features,
+    overrides: &FeatureOverrides,
+) {
+    push_feature_change(
+        changes,
+        "features.barcode_a",
+        imported.barcode_a,
+        overrides.barcode_a,
+    );
+    push_feature_change(
+        changes,
+        "features.barcode_b",
+        imported.barcode_b,
+        overrides.barcode_b,
+    );
+    push_feature_change(
+        changes,
+        "features.bit_image_column",
+        imported.bit_image_column,
+        overrides.bit_image_column,
+    );
+    push_feature_change(
+        changes,
+        "features.bit_image_raster",
+        imported.bit_image_raster,
+        overrides.bit_image_raster,
+    );
+    push_feature_change(
+        changes,
+        "features.graphics",
+        imported.graphics,
+        overrides.graphics,
+    );
+    push_feature_change(
+        changes,
+        "features.high_density",
+        imported.high_density,
+        overrides.high_density,
+    );
+    push_feature_change(
+        changes,
+        "features.paper_full_cut",
+        imported.paper_full_cut,
+        overrides.paper_full_cut,
+    );
+    push_feature_change(
+        changes,
+        "features.paper_part_cut",
+        imported.paper_part_cut,
+        overrides.paper_part_cut,
+    );
+    push_feature_change(
+        changes,
+        "features.pdf417_code",
+        imported.pdf417_code,
+        overrides.pdf417_code,
+    );
+    push_feature_change(
+        changes,
+        "features.pulse_bel",
+        imported.pulse_bel,
+        overrides.pulse_bel,
+    );
+    push_feature_change(
+        changes,
+        "features.pulse_standard",
+        imported.pulse_standard,
+        overrides.pulse_standard,
+    );
+    push_feature_change(
+        changes,
+        "features.qr_code",
+        imported.qr_code,
+        overrides.qr_code,
+    );
+    push_feature_change(
+        changes,
+        "features.star_commands",
+        imported.star_commands,
+        overrides.star_commands,
+    );
+}
+
+fn push_feature_change(
+    changes: &mut Vec<ProfileChange>,
+    field: &str,
+    imported: bool,
+    enriched: Option<bool>,
+) {
+    let Some(enriched) = enriched else {
+        return;
+    };
+    changes.push(ProfileChange {
+        field: field.to_owned(),
+        kind: if imported == enriched {
+            ProfileChangeKind::Confirmed
+        } else {
+            ProfileChangeKind::Corrected
+        },
+    });
 }
 
 fn import_code_pages(

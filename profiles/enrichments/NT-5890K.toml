@@ -1,6 +1,6 @@
 schema_version = 1
 profile = "NT-5890K"
-revision = 5
+revision = 6
 upstream_profile_sha256 = "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
 
 sources = [
@@ -9,6 +9,7 @@ sources = [
     "manual:epson-escpos/esc_t#select-character-code-table",
     "case:tests/cases/graphics/esc-star-8dot-double-density",
     "case:tests/cases/motion/line-spacing-and-feed",
+    "case:tests/cases/symbols/native-symbols-nt-5890k",
 ]
 
 [geometry]
@@ -35,6 +36,13 @@ columns = 42
 cell_width_dots = 9
 cell_height_dots = 17
 baseline_dots = 14
+
+[features]
+# The upstream NT-5890K inherits conservative `simple` flags. The exact probe
+# referenced above physically printed both GS k forms and a Model 2 QR symbol.
+barcode_a = true
+barcode_b = true
+qr_code = true
 
 [[approximations]]
 field = "fonts.resident_glyph_shapes"

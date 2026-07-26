@@ -9,7 +9,7 @@ const INPUT_HEX: &str =
     include_str!("../../../tests/cases/graphics/esc-star-8dot-double-density/input.hex");
 
 #[test]
-fn renders_esc_star_8_dot_double_density_in_printer_dots() {
+fn renders_nt_5890k_8_dot_mode_with_adjacent_vertical_rows() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
     let input = decode_hex(INPUT_HEX);
@@ -23,7 +23,7 @@ fn renders_esc_star_8_dot_double_density_in_printer_dots() {
     let columns = [0x81_u8, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81];
     for y in 0..surface.height() {
         for x in 0..surface.width() {
-            let expected = x < 8 && y < 24 && columns[x as usize] & (0x80 >> (y / 3)) != 0;
+            let expected = x < 8 && y < 8 && columns[x as usize] & (0x80 >> y) != 0;
             assert_eq!(
                 surface.is_printed(x, y),
                 expected,
@@ -34,9 +34,10 @@ fn renders_esc_star_8_dot_double_density_in_printer_dots() {
 }
 
 #[test]
-fn renders_esc_star_8_dot_single_density_at_two_by_three_printer_dots() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+fn renders_epson_8_dot_geometry_as_one_dot_on_a_three_dot_vertical_pitch() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
+    profile.column_bit_image.eight_dot_vertical_pitch_dots = 3;
     let input = [0x1b, 0x40, 0x1b, 0x2a, 0, 1, 0, 0x81, 0x0a];
 
     let rendered = render(&input, &profile).expect("single-density ESC * should render");
@@ -45,7 +46,7 @@ fn renders_esc_star_8_dot_single_density_at_two_by_three_printer_dots() {
     assert_eq!((surface.width(), surface.height()), (384, 30));
     for y in 0..surface.height() {
         for x in 0..surface.width() {
-            let expected = x < 2 && (y < 3 || (21..24).contains(&y));
+            let expected = x < 2 && (y == 0 || y == 21);
             assert_eq!(
                 surface.is_printed(x, y),
                 expected,
@@ -129,7 +130,7 @@ fn encodes_the_rendered_sheet_as_one_bit_grayscale_png() {
         for x in 0..info.width {
             let byte = pixels[(y * row_bytes + x / 8) as usize];
             let is_black = byte & (0x80 >> (x % 8)) == 0;
-            let expected = x < 8 && y < 24 && columns[x as usize] & (0x80 >> (y / 3)) != 0;
+            let expected = x < 8 && y < 8 && columns[x as usize] & (0x80 >> y) != 0;
             assert_eq!(is_black, expected, "unexpected PNG pixel at ({x}, {y})");
         }
     }

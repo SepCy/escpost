@@ -20,11 +20,10 @@ fn default_font_a_uses_profile_cells_instead_of_source_font_advance() {
     assert_eq!((surface.width(), surface.height()), (384, 30));
     assert!(cell_contains_printed_dots(surface, 0, 12, 24));
     assert!(cell_contains_printed_dots(surface, 12, 12, 24));
-    // The three-dot ESC * marker starts immediately after two 12-dot cells.
+    // The one-dot ESC * marker starts immediately after two 12-dot cells.
     // Its position is independent of Noto Sans Mono's own glyph advance.
     assert!(surface.is_printed(24, 0));
-    assert!(surface.is_printed(24, 1));
-    assert!(surface.is_printed(24, 2));
+    assert!(!surface.is_printed(24, 1));
     assert!(
         !(25..surface.width()).any(|x| { (0..surface.height()).any(|y| surface.is_printed(x, y)) })
     );
@@ -56,8 +55,7 @@ fn esc_m_selects_font_b_with_its_nine_dot_profile_cells() {
     assert!(cell_contains_printed_dots(surface, 9, 9, 17));
     // Font B advances by 9 dots, so the marker follows at x=18.
     assert!(surface.is_printed(18, 0));
-    assert!(surface.is_printed(18, 1));
-    assert!(surface.is_printed(18, 2));
+    assert!(!surface.is_printed(18, 1));
 }
 
 #[test]
@@ -87,8 +85,7 @@ fn esc_bang_double_size_scales_font_a_cells_and_line_advance() {
 
     assert_eq!((surface.width(), surface.height()), (384, 48));
     assert!(surface.is_printed(24, 0));
-    assert!(surface.is_printed(24, 1));
-    assert!(surface.is_printed(24, 2));
+    assert!(!surface.is_printed(24, 1));
     assert!(cell_contains_printed_dots(surface, 0, 24, 48));
 }
 
@@ -169,8 +166,7 @@ fn esc_t_decodes_extended_bytes_with_the_profile_cp437_mapping() {
     // rasterized; the marker proves it retained Font A's 12-dot advance.
     assert!(cell_contains_printed_dots(surface, 0, 12, 24));
     assert!(surface.is_printed(12, 0));
-    assert!(surface.is_printed(12, 1));
-    assert!(surface.is_printed(12, 2));
+    assert!(!surface.is_printed(12, 1));
 }
 
 #[test]

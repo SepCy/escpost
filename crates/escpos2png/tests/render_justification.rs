@@ -50,8 +50,7 @@ fn esc_a_right_justifies_column_format_graphics() {
     // Mode 1 produces one horizontal printer dot. Right justification moves
     // that complete one-dot image to the final x coordinate.
     assert!(surface.is_printed(383, 0));
-    assert!(surface.is_printed(383, 1));
-    assert!(surface.is_printed(383, 2));
+    assert!(!surface.is_printed(383, 1));
     assert!(!surface.is_printed(0, 0));
 }
 

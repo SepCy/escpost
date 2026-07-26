@@ -1,6 +1,6 @@
 # GS V Function B feed without an autocutter
 
-This case draws three 8 × 3-dot horizontal markers. Their top edges should be
+This case draws three 8 × 1-dot horizontal markers. Their top edges should be
 at printer-dot rows 0, 50, and 100.
 
 1. The first marker is committed by LF and advances by the 30-dot default line

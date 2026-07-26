@@ -111,8 +111,8 @@ fn gs_w_clips_column_format_graphics_at_the_print_area_edge() {
 
     // Sixteen source columns are declared, but the active area keeps only the
     // first eight printer-dot columns.
-    assert_eq!(count_printed_dots(surface, 0, 8, 3), 8 * 3);
-    assert_eq!(count_printed_dots(surface, 8, 376, 3), 0);
+    assert_eq!(count_printed_dots(surface, 0, 8, 1), 8);
+    assert_eq!(count_printed_dots(surface, 8, 376, 1), 0);
 }
 
 #[test]

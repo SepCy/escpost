@@ -37,6 +37,7 @@ pub struct PrinterProfile {
     pub id: String,
     pub geometry: Geometry,
     pub motion: MotionUnits,
+    pub column_bit_image: ColumnBitImage,
     pub defaults: PrinterDefaults,
     pub fonts: Fonts,
     pub features: Features,
@@ -77,6 +78,13 @@ pub struct Geometry {
 pub struct MotionUnits {
     pub horizontal_units_per_inch: u32,
     pub vertical_units_per_inch: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ColumnBitImage {
+    /// Physical row distance between adjacent source bits in ESC * modes 0/1.
+    pub eight_dot_vertical_pitch_dots: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -278,6 +286,7 @@ struct Enrichment {
     _sources: Vec<String>,
     geometry: Geometry,
     motion: MotionUnits,
+    column_bit_image: ColumnBitImage,
     defaults: PrinterDefaults,
     fonts: Fonts,
     #[serde(default)]
@@ -330,6 +339,7 @@ struct CanonicalProfileContent<'a> {
     id: &'a str,
     geometry: &'a Geometry,
     motion: &'a MotionUnits,
+    column_bit_image: &'a ColumnBitImage,
     defaults: &'a PrinterDefaults,
     fonts: &'a Fonts,
     features: &'a Features,
@@ -368,6 +378,7 @@ pub fn compile_profile(
         id: enrichment.profile,
         geometry: enrichment.geometry,
         motion: enrichment.motion,
+        column_bit_image: enrichment.column_bit_image,
         defaults: enrichment.defaults,
         fonts: enrichment.fonts,
         features,
@@ -540,6 +551,7 @@ fn validate_profile_values(enrichment: &Enrichment) -> Result<(), CompileProfile
     validate_runtime_values(
         &enrichment.geometry,
         &enrichment.motion,
+        &enrichment.column_bit_image,
         &enrichment.defaults,
         &enrichment.fonts,
         None,
@@ -554,6 +566,7 @@ fn validate_runtime_profile(profile: &PrinterProfile) -> Result<(), CompileProfi
     validate_runtime_values(
         &profile.geometry,
         &profile.motion,
+        &profile.column_bit_image,
         &profile.defaults,
         &profile.fonts,
         Some(&profile.code_pages),
@@ -578,6 +591,7 @@ fn validate_barcode_capabilities(
 fn validate_runtime_values(
     geometry: &Geometry,
     motion: &MotionUnits,
+    column_bit_image: &ColumnBitImage,
     defaults: &PrinterDefaults,
     fonts: &Fonts,
     code_pages: Option<&BTreeMap<u8, String>>,
@@ -595,6 +609,10 @@ fn validate_runtime_values(
     validate_positive(
         "motion.vertical_units_per_inch",
         motion.vertical_units_per_inch,
+    )?;
+    validate_positive(
+        "column_bit_image.eight_dot_vertical_pitch_dots",
+        column_bit_image.eight_dot_vertical_pitch_dots,
     )?;
     validate_positive("fonts.a.cell_width_dots", fonts.a.cell_width_dots)?;
     validate_positive("fonts.a.cell_height_dots", fonts.a.cell_height_dots)?;
@@ -655,6 +673,7 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
         id: &profile.id,
         geometry: &profile.geometry,
         motion: &profile.motion,
+        column_bit_image: &profile.column_bit_image,
         defaults: &profile.defaults,
         fonts: &profile.fonts,
         features: &profile.features,

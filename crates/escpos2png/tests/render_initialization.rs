@@ -84,8 +84,7 @@ fn esc_at_restores_profile_layout_motion_and_text_defaults() {
     // Its physical origin and 30-dot feed also prove margin, justification,
     // motion-unit, line-spacing, reverse, and size state were reset.
     assert!(surface.is_printed(12, 0));
-    assert!(surface.is_printed(12, 1));
-    assert!(surface.is_printed(12, 2));
+    assert!(!surface.is_printed(12, 1));
     assert_eq!(surface.height(), 30);
     assert!(!surface.is_printed(24, 0));
 }
@@ -122,8 +121,7 @@ fn esc_at_restores_default_code_page_and_tab_stops() {
     // cells from the origin, so the marker must start at x=96.
     assert!(cell_contains_printed_dots(surface, 0, 12, 24));
     assert!(surface.is_printed(96, 0));
-    assert!(surface.is_printed(96, 1));
-    assert!(surface.is_printed(96, 2));
+    assert!(!surface.is_printed(96, 1));
 }
 
 #[test]

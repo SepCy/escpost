@@ -508,6 +508,9 @@ decision can be revisited if the difference later matters.
 - Printer profiles stay focused on behavior that materially improves previews.
 - The renderer follows a reviewable protocol baseline instead of reverse
   engineering every firmware revision.
+- Material geometry differences remain eligible for typed corrections. For
+  example, the calibrated NT-5890K paints `ESC *` 8-dot rows adjacently instead
+  of using Epson's three-dot vertical pitch.
 - A preview may not reproduce every dot or native-symbol implementation choice
   even when its positions and overall layout are correct.
 - A previously neglected quirk can become modeled after reproducible evidence

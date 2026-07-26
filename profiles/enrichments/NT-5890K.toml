@@ -22,6 +22,11 @@ dpi_y = 203
 horizontal_units_per_inch = 203
 vertical_units_per_inch = 203
 
+[column_bit_image]
+# The connected printer maps the eight source bits to eight adjacent rows.
+# Epson's 203/3-DPI baseline instead uses a three-printer-dot vertical pitch.
+eight_dot_vertical_pitch_dots = 1
+
 [defaults]
 line_spacing_dots = 30
 code_page = 0
@@ -75,3 +80,7 @@ reason = "Representative glyphs will be used instead of printer ROM glyphs"
 [[approximations]]
 field = "defaults.carriage_return"
 reason = "Assumes auto line feed is disabled until CR behavior is physically verified"
+
+[[approximations]]
+field = "column_bit_image.trailing_line"
+reason = "Connected firmware adds a faint trailing line after 8-dot ESC * images; the renderer omits this incidental artifact"

@@ -21,9 +21,8 @@ fn esc_dollar_sets_an_absolute_position_in_horizontal_motion_units() {
     // This profile has 203 motion units and 203 dots per inch, so 30 units
     // place the one-column marker exactly at x=30.
     assert!(surface.is_printed(30, 0));
-    assert!(surface.is_printed(30, 1));
-    assert!(surface.is_printed(30, 2));
-    assert!(!(0..30).any(|x| (0..3).any(|y| surface.is_printed(x, y))));
+    assert!(!surface.is_printed(30, 1));
+    assert!(!(0..30).any(|x| surface.is_printed(x, 0)));
 }
 
 #[test]
@@ -84,8 +83,7 @@ fn esc_space_adds_profile_scaled_right_side_character_spacing() {
     // Font A advances 12 dots and this profile converts five horizontal
     // motion units to five dots. The marker therefore starts at x=17.
     assert!(surface.is_printed(17, 0));
-    assert!(surface.is_printed(17, 1));
-    assert!(surface.is_printed(17, 2));
+    assert!(!surface.is_printed(17, 1));
 }
 
 #[test]
@@ -143,8 +141,7 @@ fn ht_moves_to_the_next_default_eight_character_tab_stop() {
     // Default tab stops are every eight default-font cells. Font A advances
     // 12 dots, so the first marker begins at 8 × 12 = 96.
     assert!(surface.is_printed(96, 0));
-    assert!(surface.is_printed(96, 1));
-    assert!(surface.is_printed(96, 2));
+    assert!(!surface.is_printed(96, 1));
 }
 
 #[test]

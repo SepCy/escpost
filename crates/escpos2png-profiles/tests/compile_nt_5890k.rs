@@ -41,6 +41,10 @@ fn nt_5890k_compiles_to_rendering_geometry() {
     assert_eq!(profile.schema_version, 1);
     assert_eq!(profile.canonical_profile_sha256.len(), 64);
     assert_eq!(
+        profile.column_bit_image.eight_dot_vertical_pitch_dots, 1,
+        "the connected NT-5890K paints 8-dot ESC * rows adjacently"
+    );
+    assert_eq!(
         (
             profile.fonts.a.cell_width_dots,
             profile.fonts.a.cell_height_dots,
@@ -321,6 +325,23 @@ fn profiles_reject_a_zero_vertical_motion_unit_denominator() {
         error,
         CompileProfileError::NonPositiveValue { field }
             if field == "motion.vertical_units_per_inch"
+    ));
+}
+
+#[test]
+fn profiles_reject_a_zero_8_dot_vertical_pitch() {
+    let invalid_enrichment = ENRICHMENT_TOML.replace(
+        "eight_dot_vertical_pitch_dots = 1",
+        "eight_dot_vertical_pitch_dots = 0",
+    );
+
+    let error = compile_profile(CAPABILITIES_JSON, &invalid_enrichment)
+        .expect_err("overlapping source rows cannot reach the renderer");
+
+    assert!(matches!(
+        error,
+        CompileProfileError::NonPositiveValue { field }
+            if field == "column_bit_image.eight_dot_vertical_pitch_dots"
     ));
 }
 

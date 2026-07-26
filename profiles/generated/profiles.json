@@ -13,6 +13,9 @@
         "horizontal_units_per_inch": 203,
         "vertical_units_per_inch": 203
       },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 1
+      },
       "defaults": {
         "line_spacing_dots": 30,
         "code_page": 0,
@@ -140,10 +143,14 @@
         {
           "field": "defaults.carriage_return",
           "reason": "Assumes auto line feed is disabled until CR behavior is physically verified"
+        },
+        {
+          "field": "column_bit_image.trailing_line",
+          "reason": "Connected firmware adds a faint trailing line after 8-dot ESC * images; the renderer omits this incidental artifact"
         }
       ],
       "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-      "canonical_profile_sha256": "1d847847bd3fd5aceffcc4d2458addf0cebf611866b179855e97998c03c733ea"
+      "canonical_profile_sha256": "f1a1a984beadafc1fa237010ba45e2b1e0808bfd6d14b59686424ef0fc5d9514"
     }
   }
 }

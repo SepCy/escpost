@@ -660,9 +660,9 @@ fn execute_esc_star(
     state.require_column_bit_image(offset)?;
 
     let mode = data[2];
-    let (bytes_per_column, horizontal_scale, vertical_scale) = match mode {
-        0 => (1, 2, 3),
-        1 => (1, 1, 3),
+    let (bytes_per_column, horizontal_scale, vertical_pitch) = match mode {
+        0 => (1, 2, state.esc_star_8_dot_vertical_pitch),
+        1 => (1, 1, state.esc_star_8_dot_vertical_pitch),
         32 => (3, 2, 1),
         33 => (3, 1, 1),
         mode => {
@@ -680,7 +680,7 @@ fn execute_esc_star(
         });
     };
 
-    state.paint_bit_image(payload, bytes_per_column, horizontal_scale, vertical_scale);
+    state.paint_bit_image(payload, bytes_per_column, horizontal_scale, vertical_pitch);
     Ok(command_length)
 }
 
@@ -1617,6 +1617,7 @@ struct PrinterState {
     vertical_dpi: u32,
     default_vertical_motion_units_per_inch: u32,
     vertical_motion_units_per_inch: u32,
+    esc_star_8_dot_vertical_pitch: u32,
     font_a: ProfileFont,
     font_b: ProfileFont,
     active_font: ProfileFont,
@@ -1689,6 +1690,7 @@ impl PrinterState {
             vertical_dpi: profile.geometry.dpi_y,
             default_vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
             vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
+            esc_star_8_dot_vertical_pitch: profile.column_bit_image.eight_dot_vertical_pitch_dots,
             active_font: font_a.clone(),
             font_a,
             font_b,
@@ -2163,7 +2165,7 @@ impl PrinterState {
         payload: &[u8],
         bytes_per_column: usize,
         horizontal_scale: u32,
-        vertical_scale: u32,
+        vertical_pitch: u32,
     ) {
         // ESC * is column-major: each group describes one x coordinate and
         // contains either 8 or 24 vertical source dots.
@@ -2176,11 +2178,13 @@ impl PrinterState {
                     }
 
                     let source_y = byte_index as u32 * 8 + bit;
-                    let top = source_y * vertical_scale;
+                    // This is a pitch rather than a scaling factor: a source
+                    // bit prints one row and the profile decides where the
+                    // next source row begins. Epson uses three dots here,
+                    // while the calibrated NT-5890K uses adjacent rows.
+                    let y = source_y * vertical_pitch;
                     for destination_x in x..x + horizontal_scale {
-                        for y in top..top + vertical_scale {
-                            self.line.print_dot(destination_x, y);
-                        }
+                        self.line.print_dot(destination_x, y);
                     }
                 }
             }

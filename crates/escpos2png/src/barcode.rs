@@ -15,6 +15,7 @@ pub(crate) enum BarcodeError {
 pub(crate) struct EncodedBarcode {
     pub(crate) bars: Vec<BarElement>,
     pub(crate) hri: Vec<char>,
+    pub(crate) minimum_height_modules: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -314,6 +315,7 @@ pub(crate) fn encode_code39(data: &[u8]) -> Result<EncodedBarcode, BarcodeError>
     Ok(EncodedBarcode {
         bars,
         hri: ascii_hri(data),
+        minimum_height_modules: 0,
     })
 }
 
@@ -345,6 +347,7 @@ pub(crate) fn encode_itf(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
     Ok(EncodedBarcode {
         bars,
         hri: ascii_hri(data),
+        minimum_height_modules: 0,
     })
 }
 
@@ -380,6 +383,7 @@ pub(crate) fn encode_codabar(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
     Ok(EncodedBarcode {
         bars,
         hri: ascii_hri(data),
+        minimum_height_modules: 0,
     })
 }
 
@@ -618,6 +622,42 @@ pub(crate) fn encode_gs1_128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
     let mut encoded = encode_code128(&explicit)?;
     encoded.hri = hri;
     Ok(encoded)
+}
+
+pub(crate) fn encode_gs1_databar_omnidirectional(
+    data: &[u8],
+) -> Result<EncodedBarcode, BarcodeError> {
+    encode_gs1_databar_gtin(data, 33, crate::databar::encode_omnidirectional)
+}
+
+pub(crate) fn encode_gs1_databar_truncated(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
+    // Truncated uses the exact Omnidirectional module pattern. Only Epson's
+    // minimum printed height changes from 33X to 13X.
+    encode_gs1_databar_gtin(data, 13, crate::databar::encode_omnidirectional)
+}
+
+fn encode_gs1_databar_gtin(
+    data: &[u8],
+    minimum_height_modules: u8,
+    encode_modules: fn(&[u8]) -> Option<Vec<bool>>,
+) -> Result<EncodedBarcode, BarcodeError> {
+    if data.len() != 13 {
+        return Err(BarcodeError::Length);
+    }
+    if !data.iter().all(u8::is_ascii_digit) {
+        return Err(BarcodeError::Character);
+    }
+
+    let modules = encode_modules(data).ok_or(BarcodeError::Format)?;
+    let digit_values = data.iter().map(|digit| digit - b'0').collect::<Vec<_>>();
+    let check_digit = ean_check_digit(&digit_values) + b'0';
+    let hri = "(01)"
+        .chars()
+        .chain(data.iter().copied().map(char::from))
+        .chain([char::from(check_digit)])
+        .collect();
+    Ok(EncodedBarcode::from_modules(&modules, hri)
+        .with_minimum_height_modules(minimum_height_modules))
 }
 
 fn gs1_modulus_10_tokens(tokens: &[Code128Token]) -> Result<u8, BarcodeError> {
@@ -979,7 +1019,16 @@ impl EncodedBarcode {
                 }),
             }
         }
-        Self { bars, hri }
+        Self {
+            bars,
+            hri,
+            minimum_height_modules: 0,
+        }
+    }
+
+    fn with_minimum_height_modules(mut self, minimum_height_modules: u8) -> Self {
+        self.minimum_height_modules = minimum_height_modules;
+        self
     }
 }
 

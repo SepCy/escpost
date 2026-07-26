@@ -1,6 +1,7 @@
 //! Dot-accurate ESC/POS rendering.
 
 mod barcode;
+mod databar;
 mod international;
 mod qr;
 
@@ -1090,6 +1091,32 @@ fn execute_gs_k(
                 },
             })?
         }
+        75 => barcode::encode_gs1_databar_omnidirectional(payload).map_err(|error| {
+            RenderError::InvalidBarcodeData {
+                system: "GS1 DataBar Omnidirectional",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => "expected exactly 13 digits",
+                    barcode::BarcodeError::Character => "expected decimal digits only",
+                    barcode::BarcodeError::Format => {
+                        "could not encode the GS1 DataBar Omnidirectional value"
+                    }
+                },
+            }
+        })?,
+        76 => barcode::encode_gs1_databar_truncated(payload).map_err(|error| {
+            RenderError::InvalidBarcodeData {
+                system: "GS1 DataBar Truncated",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => "expected exactly 13 digits",
+                    barcode::BarcodeError::Character => "expected decimal digits only",
+                    barcode::BarcodeError::Format => {
+                        "could not encode the GS1 DataBar Truncated value"
+                    }
+                },
+            }
+        })?,
         79 => barcode::encode_code128_auto(payload).map_err(|error| {
             RenderError::InvalidBarcodeData {
                 system: "Code 128 auto",
@@ -2294,6 +2321,9 @@ impl PrinterState {
         let physical_content_left = self.print_area_left.saturating_add(content_left);
         let physical_barcode_left =
             physical_content_left.saturating_add(content_width.saturating_sub(barcode_width) / 2);
+        let barcode_height = self.barcode_height.max(
+            u32::from(barcode.minimum_height_modules).saturating_mul(self.barcode_module_width),
+        );
         let hri_height = hri.as_ref().map_or(0, |surface| surface.height);
         let hri_rows = u32::from(matches!(
             self.hri_position,
@@ -2310,7 +2340,7 @@ impl PrinterState {
             };
         let next_line_top = self
             .line_top
-            .saturating_add(self.barcode_height)
+            .saturating_add(barcode_height)
             .saturating_add(hri_height.saturating_mul(hri_rows));
         self.validate_roll_height(next_line_top)?;
 
@@ -2327,11 +2357,8 @@ impl PrinterState {
                 self.hri_position,
                 HriPosition::Below | HriPosition::AboveAndBelow
             ) {
-                self.roll.composite_at(
-                    hri,
-                    hri_left,
-                    barcode_top.saturating_add(self.barcode_height),
-                );
+                self.roll
+                    .composite_at(hri, hri_left, barcode_top.saturating_add(barcode_height));
             }
         }
 
@@ -2340,7 +2367,7 @@ impl PrinterState {
             let width = self.bar_element_width(bar.width);
             if bar.dark {
                 for x in element_left..element_left + width {
-                    for y in barcode_top..barcode_top + self.barcode_height {
+                    for y in barcode_top..barcode_top + barcode_height {
                         self.roll.print_dot(x, y);
                     }
                 }

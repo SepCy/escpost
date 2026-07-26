@@ -102,7 +102,7 @@ planes remain post-v1 as defined above.
 
 | Command family | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
-| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Partial | Implemented | Validated on NT-5890K |
+| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Partial | Implemented | Common systems validated on NT-5890K; DataBar unsupported by that printer |
 | `GS ( k` QR functions | Configure, store, and print QR symbols | Partial | Implemented | Validated on NT-5890K |
 | `GS ( k` PDF417 functions | Configure, store, and print PDF417 symbols | Post-v1 | Planned | Pending |
 | `GS ( k` Data Matrix functions | Configure, store, and print Data Matrix symbols | Post-v1 | Planned | Pending |
@@ -118,12 +118,18 @@ automatic start/FNC1 behavior, AI delimiters, concatenated fields, brace
 escapes, modulus-10 placeholders, code-set planning, and special-character
 HRI rules. `GS k m=79` accepts the documented `00h`–`FFh` range and minimizes
 symbol width across Code Sets A/B/C, SHIFT, and FNC4 upper-mode shifts and
-latches. GS1 DataBar systems `m=75`–`78` remain pending. Both barcode command
+latches. GS1 DataBar Omnidirectional (`m=75`) and Truncated (`m=76`) implement
+the identical 96-module symbol pattern, automatic AI `01` and check digit,
+18-character HRI, and their respective `33X` and `13X` minimum heights. Their
+logical patterns are checked against independent BWIPP vectors. DataBar
+Limited (`m=77`) and Expanded (`m=78`) remain pending. Both barcode command
 framings return bytes after an early Code 39 stop to normal ESC/POS processing.
 Code 93 HRI includes the specified start/stop and control-character
 placeholders. Every system is gated independently by the printer profile. The
-Epson barcode reset defaults, GS1-128, and automatic Code 128 remain pending
-hardware validation.
+Epson barcode reset defaults, GS1-128, automatic Code 128, and the implemented
+DataBar systems remain pending hardware validation on a supporting printer.
+The connected NT-5890K probe confirmed that its firmware does not recognize
+DataBar `m=75`–`78`.
 
 QR Functions 165, 167, 169, 180, and 181 implement Model 2 selection, module
 size, error correction, raw-byte storage, and printing. Model 1, Micro QR, and

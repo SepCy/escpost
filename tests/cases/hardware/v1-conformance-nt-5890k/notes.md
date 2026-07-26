@@ -59,7 +59,7 @@ boundaries visible instead of forming one double-height block.
 ```text
 date: 2026-07-26
 input SHA-256: 72366422ef0185da2cf13b4088649773f4569e9f7cbc602ca868f31c0dc59537
-renderer commit: pending
+renderer commit: 0767b68
 printer profile: NT-5890K
 canonical profile SHA-256: d592eb1b792ca3b0b346bcdfc23a155c9575d457b1d02eb583c26a7054cf4cb4
 printer USB identity: 0416:5011

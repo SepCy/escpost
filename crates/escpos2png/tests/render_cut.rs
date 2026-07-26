@@ -33,6 +33,32 @@ fn gs_v_full_cut_finishes_one_sheet_and_starts_the_next() {
 }
 
 #[test]
+fn gs_v_partial_cut_uses_its_own_profile_capability() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    profile.features.paper_part_cut = true;
+    let marker_line = [ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+    let input = [
+        marker_line.as_slice(),
+        &[GS, b'V', b'1'],
+        marker_line.as_slice(),
+    ]
+    .concat();
+
+    let rendered = render(&input, &profile).expect("a supported partial cut should split sheets");
+
+    // A partial cut still separates the preview into physical receipt sheets.
+    // The uncut bridge is a mechanism detail, not printable content.
+    assert_eq!(rendered.sheets.len(), 2);
+    assert!(
+        rendered
+            .sheets
+            .iter()
+            .all(|sheet| sheet.surface.is_printed(0, 0))
+    );
+}
+
+#[test]
 fn gs_v_reports_a_cut_that_the_profile_does_not_support() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
@@ -48,4 +74,29 @@ fn gs_v_reports_a_cut_that_the_profile_does_not_support() {
             offset: 0,
         } if profile == "NT-5890K"
     ));
+}
+
+#[test]
+fn gs_v_function_b_feeds_without_cutting_on_a_printer_without_an_autocutter() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    let input = [
+        // At 203 dpi, 101 vertical units per inch make each unit two dots.
+        GS, b'P', 203, 101, GS, b'V', 65, 5, GS, b'V', 66, 5,
+    ];
+
+    let rendered =
+        render(&input, &profile).expect("Function B should remain a feed on this printer");
+
+    // Epson specifies that a printer without an autocutter performs only the
+    // requested n-unit feed. Full/partial selection cannot create a cut that
+    // the mechanism does not have.
+    assert_eq!(rendered.sheets.len(), 1);
+    assert_eq!(
+        (
+            rendered.sheets[0].surface.width(),
+            rendered.sheets[0].surface.height(),
+        ),
+        (384, 20)
+    );
 }

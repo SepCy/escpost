@@ -74,6 +74,22 @@ fn gs_v_is_ignored_after_the_line_has_started() {
     assert_eq!(count_printed_dots(surface, 0, 12, 54), 12 * 48);
 }
 
+#[test]
+fn gs_v_function_b_consumes_its_feed_operand_when_ignored_mid_line() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    let input = [GS, b'B', 1, b' ', GS, b'V', 65, b' ', LF];
+
+    let rendered = render(&input, &profile).expect("mid-line Function B should be ignored");
+    let surface = &rendered.sheets[0].surface;
+
+    // The beginning-of-line rule suppresses the feed, but the complete
+    // four-byte command is still consumed. Its n operand is not printable.
+    assert_eq!((surface.width(), surface.height()), (384, 30));
+    assert_eq!(count_printed_dots(surface, 0, 12, 24), 12 * 24);
+    assert_eq!(count_printed_dots(surface, 12, 372, 24), 0);
+}
+
 fn count_printed_dots(
     surface: &escpos2png::MonoSurface,
     left: u32,

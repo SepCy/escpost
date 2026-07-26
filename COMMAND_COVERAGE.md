@@ -101,7 +101,7 @@ planes remain post-v1 as defined above.
 
 | Command family | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
-| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Partial | Implemented | Common systems validated on NT-5890K; DataBar unsupported by that printer |
+| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Implemented | Implemented | Common systems validated on NT-5890K; DataBar unsupported by that printer |
 | `GS ( k` QR functions | Configure, store, and print QR symbols | Partial | Implemented | Validated on NT-5890K |
 | `GS ( k` PDF417 functions | Configure, store, and print PDF417 symbols | Post-v1 | Planned | Pending |
 | `GS ( k` Data Matrix functions | Configure, store, and print Data Matrix symbols | Post-v1 | Planned | Pending |
@@ -150,11 +150,14 @@ every logical module with a digitized physical print.
 | Command | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
 | `GS V` Function A | Full or partial cut at the current position | Implemented | Implemented | Pending |
-| `GS V` Function B | Feed to cutter and cut | Partial framing | Planned | Pending |
+| `GS V` Function B | Feed by `n` units without cutting on a no-autocutter profile | Partial | Implemented | Pending |
 | `ESC p` | Generate a cash-drawer pulse without printing | Implemented | Implemented | Pending |
 
-Feed-to-cutter commands require profile geometry rather than an assumed
-universal distance.
+On a printer without an autocutter, Function B performs its documented
+`n × vertical motion unit` feed and creates no sheet boundary. Cutter-equipped
+Function B remains partial because its preview also needs the model-specific
+distance between the print position and blade; profiles do not yet carry that
+geometry.
 
 ## Post-v1 protocol families
 

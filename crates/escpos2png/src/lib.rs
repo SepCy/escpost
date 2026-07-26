@@ -1484,7 +1484,17 @@ fn execute_gs_v(
             state.cut(true, offset)?;
             Ok(3)
         }
-        65 | 66 | 97 | 98 | 103 | 104 => {
+        mode @ (65 | 66) => {
+            let Some(feed) = data.get(3).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS V",
+                    offset,
+                });
+            };
+            state.feed_to_cut_position_and_cut(mode, feed, offset)?;
+            Ok(4)
+        }
+        97 | 98 | 103 | 104 => {
             if data.get(3).is_none() {
                 return Err(RenderError::TruncatedCommand {
                     command: "GS V",
@@ -2504,6 +2514,28 @@ impl PrinterState {
         // therefore cannot invent another copy without a new store command.
         self.buffered_graphics = None;
         Ok(())
+    }
+
+    fn feed_to_cut_position_and_cut(
+        &mut self,
+        mode: u8,
+        feed: u8,
+        offset: usize,
+    ) -> Result<(), RenderError> {
+        if !self.at_beginning_of_line {
+            return Ok(());
+        }
+
+        if !self.supports_full_cut && !self.supports_partial_cut {
+            // Epson Function B remains useful on mechanisms without a cutter:
+            // they perform only the explicit n-unit feed.
+            return self.print_and_feed_motion_units(feed);
+        }
+
+        // A cutter-equipped profile also needs the model-specific distance
+        // from the print position to the blade. Keep that path explicit until
+        // the profile can supply it.
+        Err(RenderError::UnsupportedCutMode { mode, offset })
     }
 
     fn cut(&mut self, partial: bool, offset: usize) -> Result<(), RenderError> {

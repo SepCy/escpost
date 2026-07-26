@@ -524,11 +524,31 @@ pub(crate) fn encode_code128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
     Ok(EncodedBarcode::from_modules(&modules, hri))
 }
 
+pub(crate) fn encode_code128_auto(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
+    if data.is_empty() {
+        return Err(BarcodeError::Length);
+    }
+
+    let explicit = plan_code128_auto(data);
+    let mut encoded = encode_code128(&explicit)?;
+    encoded.hri = code128_auto_hri(data);
+    Ok(encoded)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Code128Set {
     A,
     B,
     C,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Code128AutoChoice {
+    target: Code128Set,
+    advance: usize,
+    shift: bool,
+    fnc4_count: u8,
+    upper_after: bool,
 }
 
 impl Code128Set {
@@ -547,6 +567,233 @@ impl Code128Set {
             Self::C => 99,
         }
     }
+
+    fn marker(self) -> u8 {
+        match self {
+            Self::A => b'A',
+            Self::B => b'B',
+            Self::C => b'C',
+        }
+    }
+}
+
+fn plan_code128_auto(data: &[u8]) -> Vec<u8> {
+    // A state combines the current code set (including "not started") with
+    // FNC4's lower/upper latch. Every Code 128 symbol has the same width apart
+    // from the fixed stop symbol, so minimizing symbol count also minimizes
+    // the complete barcode width.
+    const STATE_COUNT: usize = 8;
+    const UNREACHABLE: usize = usize::MAX / 4;
+
+    // Work backwards so each candidate can reuse the cheapest known suffix.
+    // The protocol limits input to 255 bytes, keeping this table small.
+    let mut costs = vec![[UNREACHABLE; STATE_COUNT]; data.len() + 1];
+    let mut choices = vec![[None; STATE_COUNT]; data.len()];
+    costs[data.len()] = [0; STATE_COUNT];
+
+    for position in (0..data.len()).rev() {
+        for state_index in 0..STATE_COUNT {
+            let (current, upper_mode) = code128_state(state_index);
+            let mut best_cost = UNREACHABLE;
+            let mut best_choice = None;
+            let text_character = data[position] & 0x7f;
+            let byte_uses_upper_half = !data[position].is_ascii();
+            let needs_upper_shift = byte_uses_upper_half != upper_mode;
+
+            // Prefer B when A and B are equally narrow. Ordinary text then
+            // follows the same stable choice as Epson's Code128 auto examples.
+            for target in [Code128Set::B, Code128Set::A] {
+                if !code128_set_encodes(target, text_character) {
+                    continue;
+                }
+                consider_code128_auto_choice(
+                    Code128AutoChoice {
+                        target,
+                        advance: 1,
+                        shift: false,
+                        fnc4_count: u8::from(needs_upper_shift),
+                        upper_after: upper_mode,
+                    },
+                    1 + usize::from(needs_upper_shift)
+                        + usize::from(current != Some(target))
+                        + costs[position + 1][code128_state_index(Some(target), upper_mode)],
+                    &mut best_cost,
+                    &mut best_choice,
+                );
+
+                if !needs_upper_shift
+                    && matches!(current, Some(Code128Set::A | Code128Set::B))
+                    && current != Some(target)
+                {
+                    consider_code128_auto_choice(
+                        Code128AutoChoice {
+                            target,
+                            advance: 1,
+                            shift: true,
+                            fnc4_count: 0,
+                            upper_after: upper_mode,
+                        },
+                        2 + costs[position + 1][state_index],
+                        &mut best_cost,
+                        &mut best_choice,
+                    );
+                }
+
+                if needs_upper_shift
+                    && matches!(current, Some(Code128Set::A | Code128Set::B))
+                    && current != Some(target)
+                {
+                    // FNC4 may be followed by SHIFT when one upper/lower-mode
+                    // character belongs to the other text set. This keeps the
+                    // surrounding A/B set latched.
+                    consider_code128_auto_choice(
+                        Code128AutoChoice {
+                            target,
+                            advance: 1,
+                            shift: true,
+                            fnc4_count: 1,
+                            upper_after: upper_mode,
+                        },
+                        3 + costs[position + 1][state_index],
+                        &mut best_cost,
+                        &mut best_choice,
+                    );
+                }
+
+                if needs_upper_shift {
+                    let upper_after = !upper_mode;
+                    consider_code128_auto_choice(
+                        Code128AutoChoice {
+                            target,
+                            advance: 1,
+                            shift: false,
+                            fnc4_count: 2,
+                            upper_after,
+                        },
+                        3 + usize::from(current != Some(target))
+                            + costs[position + 1][code128_state_index(Some(target), upper_after)],
+                        &mut best_cost,
+                        &mut best_choice,
+                    );
+                }
+            }
+
+            if data
+                .get(position..position + 2)
+                .is_some_and(|pair| pair.iter().all(u8::is_ascii_digit))
+            {
+                let target = Code128Set::C;
+                consider_code128_auto_choice(
+                    Code128AutoChoice {
+                        target,
+                        advance: 2,
+                        shift: false,
+                        fnc4_count: 0,
+                        upper_after: upper_mode,
+                    },
+                    1 + usize::from(current != Some(target))
+                        + costs[position + 2][code128_state_index(Some(target), upper_mode)],
+                    &mut best_cost,
+                    &mut best_choice,
+                );
+            }
+
+            costs[position][state_index] = best_cost;
+            choices[position][state_index] = best_choice;
+        }
+    }
+
+    let mut explicit = Vec::with_capacity(data.len() + 2);
+    let mut position = 0;
+    let mut current = None;
+    let mut upper_mode = false;
+    while position < data.len() {
+        let choice = choices[position][code128_state_index(current, upper_mode)]
+            .expect("every byte can be represented by Code 128");
+        if choice.shift {
+            for _ in 0..choice.fnc4_count {
+                explicit.extend_from_slice(b"{4");
+            }
+            explicit.extend_from_slice(b"{S");
+        } else {
+            if current != Some(choice.target) {
+                explicit.extend_from_slice(&[b'{', choice.target.marker()]);
+                current = Some(choice.target);
+            }
+            for _ in 0..choice.fnc4_count {
+                explicit.extend_from_slice(b"{4");
+            }
+        }
+
+        for character in &data[position..position + choice.advance] {
+            let character = if choice.target == Code128Set::C {
+                *character
+            } else {
+                *character & 0x7f
+            };
+            if character == b'{' {
+                explicit.extend_from_slice(b"{{");
+            } else {
+                explicit.push(character);
+            }
+        }
+        upper_mode = choice.upper_after;
+        position += choice.advance;
+    }
+    explicit
+}
+
+fn consider_code128_auto_choice(
+    choice: Code128AutoChoice,
+    cost: usize,
+    best_cost: &mut usize,
+    best_choice: &mut Option<Code128AutoChoice>,
+) {
+    if cost < *best_cost {
+        *best_cost = cost;
+        *best_choice = Some(choice);
+    }
+}
+
+fn code128_state_index(code_set: Option<Code128Set>, upper_mode: bool) -> usize {
+    let code_set_index = match code_set {
+        None => 0,
+        Some(Code128Set::A) => 1,
+        Some(Code128Set::B) => 2,
+        Some(Code128Set::C) => 3,
+    };
+    code_set_index * 2 + usize::from(upper_mode)
+}
+
+fn code128_state(index: usize) -> (Option<Code128Set>, bool) {
+    let code_set = match index / 2 {
+        0 => None,
+        1 => Some(Code128Set::A),
+        2 => Some(Code128Set::B),
+        3 => Some(Code128Set::C),
+        _ => unreachable!("Code 128 auto state index is bounded"),
+    };
+    (code_set, index % 2 == 1)
+}
+
+fn code128_set_encodes(code_set: Code128Set, character: u8) -> bool {
+    match code_set {
+        Code128Set::A => character <= 0x5f,
+        Code128Set::B => (0x20..=0x7f).contains(&character),
+        Code128Set::C => false,
+    }
+}
+
+fn code128_auto_hri(data: &[u8]) -> Vec<char> {
+    data.iter()
+        .copied()
+        .map(|character| match character {
+            // Code 128 represents the C0/C1 ranges, but printers show control
+            // bytes as spaces in HRI rather than attempting visible glyphs.
+            0x00..=0x1f | 0x7f..=0x9f => ' ',
+            _ => char::from(character),
+        })
+        .collect()
 }
 
 impl EncodedBarcode {

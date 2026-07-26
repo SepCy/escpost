@@ -533,6 +533,243 @@ fn code128_shift_uses_the_other_code_set_for_one_character() {
 }
 
 #[test]
+fn code128_auto_encodes_plain_text_without_an_explicit_code_set() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, b'A', b'B', b'C'];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 5, b'{', b'B', b'A', b'B', b'C',
+    ];
+
+    let actual = render(&automatic, &profile)
+        .expect("Code 128 auto should choose a code set for plain text");
+    let expected =
+        render(&explicit, &profile).expect("the explicit Code B reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_compacts_an_even_digit_run_with_code_c() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 4, b'1', b'2', b'3', b'4',
+    ];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 6, b'{', b'C', b'1', b'2', b'3', b'4',
+    ];
+
+    let actual =
+        render(&automatic, &profile).expect("Code 128 auto should compact an even digit run");
+    let expected =
+        render(&explicit, &profile).expect("the explicit Code C reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_switches_into_and_out_of_code_c_for_a_numeric_run() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 10, b'a', b'b', b'1', b'2', b'3', b'4', b'5', b'6',
+        b'c', b'd',
+    ];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 16, b'{', b'B', b'a', b'b', b'{', b'C', b'1', b'2',
+        b'3', b'4', b'5', b'6', b'{', b'B', b'c', b'd',
+    ];
+
+    let actual =
+        render(&automatic, &profile).expect("Code 128 auto should compact the internal digit run");
+    let expected =
+        render(&explicit, &profile).expect("the explicit code-set transitions should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_shifts_for_one_character_in_the_other_text_set() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, 0x01, b'a', 0x02];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 7, b'{', b'A', 0x01, b'{', b'S', b'a', 0x02,
+    ];
+
+    let actual =
+        render(&automatic, &profile).expect("Code 128 auto should shift for one lowercase byte");
+    let expected = render(&explicit, &profile).expect("the explicit SHIFT reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_combines_fnc4_and_shift_for_one_upper_character() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, 0x01, 0xe1, 0x02];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 9, b'{', b'A', 0x01, b'{', b'4', b'{', b'S', b'a',
+        0x02,
+    ];
+
+    let actual = render(&automatic, &profile)
+        .expect("Code 128 auto should upper-shift one character from Code B");
+    let expected =
+        render(&explicit, &profile).expect("the explicit FNC4 plus SHIFT reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_encodes_an_upper_byte_with_fnc4() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 1, 0xff];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 5, b'{', b'B', b'{', b'4', 0x7f,
+    ];
+
+    let actual =
+        render(&automatic, &profile).expect("Code 128 auto accepts every possible byte value");
+    let expected =
+        render(&explicit, &profile).expect("the explicit FNC4 upper-shift reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_hri_shows_the_source_byte_not_automatic_fnc4_symbols() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 1, 0xff];
+
+    let rendered = render(&input, &profile).expect("Code 128 auto HRI should render");
+    let surface = &rendered.sheets[0].surface;
+
+    // The barcode is 57 modules × two dots = 114 dots. Its one source HRI
+    // character is centered below the bars. FNC4 was added by the printer and
+    // must not create a second HRI cell or replace the source byte with spaces.
+    let hri_left = (114 - profile.fonts.a.cell_width_dots) / 2;
+    assert!(cell_contains_printed_dots(
+        surface,
+        hri_left,
+        1,
+        profile.fonts.a.cell_width_dots,
+        profile.fonts.a.cell_height_dots,
+    ));
+}
+
+#[test]
+fn code128_auto_latches_upper_mode_for_a_run_of_upper_bytes() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, 0xe1, 0xe2, 0xe3];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 9, b'{', b'B', b'{', b'4', b'{', b'4', b'a', b'b',
+        b'c',
+    ];
+
+    let actual =
+        render(&automatic, &profile).expect("Code 128 auto should compact an upper-byte run");
+    let expected =
+        render(&explicit, &profile).expect("the explicit FNC4 latch reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_unlatches_upper_mode_when_lower_bytes_resume() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 10, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, b'a', b'b', b'c',
+        b'd', b'e',
+    ];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 20, b'{', b'B', b'{', b'4', b'{', b'4', b'a', b'b',
+        b'c', b'd', b'e', b'{', b'4', b'{', b'4', b'a', b'b', b'c', b'd', b'e',
+    ];
+
+    let actual =
+        render(&automatic, &profile).expect("Code 128 auto should return to lower-byte mode");
+    let expected =
+        render(&explicit, &profile).expect("the explicit FNC4 unlatch reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_accepts_every_byte_value() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+
+    // Exercise each value in its own narrow symbol. A single 255-byte symbol
+    // would exceed this 58 mm profile's print area before testing the full
+    // protocol range.
+    for byte in 0..=u8::MAX {
+        let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 1, byte];
+        render(&input, &profile)
+            .unwrap_or_else(|error| panic!("Code 128 auto rejected byte {byte:02x}: {error}"));
+    }
+}
+
+#[test]
+fn code128_auto_rejects_an_empty_payload() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'k', 79, 0];
+
+    let error = render(&input, &profile).expect_err("Code 128 auto requires at least one byte");
+
+    assert!(matches!(
+        error,
+        RenderError::InvalidBarcodeData {
+            system: "Code 128 auto",
+            reason: "expected at least one byte",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn code128_auto_treats_an_opening_brace_as_data() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 1, b'{'];
+    let explicit = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 4, b'{', b'B', b'{', b'{',
+    ];
+
+    let actual =
+        render(&automatic, &profile).expect("Code 128 auto does not use explicit code-set escapes");
+    let expected =
+        render(&explicit, &profile).expect("the escaped literal brace reference should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn code128_auto_requires_function_b_support_from_the_profile() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = false;
+    let input = [GS, b'k', 79, 1, b'A'];
+
+    let error = render(&input, &profile)
+        .expect_err("Code 128 auto belongs to the Function B command family");
+
+    assert!(matches!(
+        error,
+        RenderError::CommandUnsupportedByProfile {
+            command: "GS k Function B barcode",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn rejects_native_barcodes_when_the_profile_does_not_support_them() {
     let mut profile = test_profile();
     // Capability gating remains important even though the physical Netum

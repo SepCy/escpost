@@ -18,9 +18,10 @@ behavior, emphasis, underline, reverse printing, justification, line spacing
 and feeds, all four `ESC *` bit-image modes, all `GS v 0` raster-image scaling
 modes, absolute and relative horizontal positioning, motion units, margins,
 and print-area widths. It also renders the common native one-dimensional
-barcode systems and Model 2 QR symbols, including their persistent size, HRI,
-error-correction, alignment, print-area, and reset state. Supported `GS V`
-cuts create separate output sheets. It emits one-bit grayscale PNG.
+barcode systems, automatic Code 128, and Model 2 QR symbols, including their
+persistent size, HRI, error-correction, alignment, print-area, and reset state.
+Supported `GS V` cuts create separate output sheets. It emits one-bit grayscale
+PNG.
 
 The bundled representative font currently covers Latin, Greek, and Cyrillic.
 A decoded character outside that asset returns a diagnostic rather than a

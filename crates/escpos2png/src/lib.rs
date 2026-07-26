@@ -1075,6 +1075,17 @@ fn execute_gs_k(
                 },
             })?
         }
+        79 => barcode::encode_code128_auto(payload).map_err(|error| {
+            RenderError::InvalidBarcodeData {
+                system: "Code 128 auto",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => "expected at least one byte",
+                    barcode::BarcodeError::Character => "could not encode byte in Code 128",
+                    barcode::BarcodeError::Format => "could not plan automatic Code 128 data",
+                },
+            }
+        })?,
         _ => {
             return Err(RenderError::InvalidBarcodeData {
                 system: "unknown",

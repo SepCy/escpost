@@ -20,7 +20,7 @@ Version 1 targets safe, deterministic Standard-mode previews for:
 - text, common single-byte code pages, and character formatting;
 - positioning, tabs, alignment, print areas, line spacing, and paper feeds;
 - column, raster, and modern graphics;
-- native one-dimensional barcodes and QR codes;
+- native one-dimensional barcodes and Model 2 QR codes;
 - full and partial cuts plus non-printing drawer pulses; and
 - device events, bounded resource use, and reproducibility metadata.
 
@@ -102,7 +102,9 @@ planes remain post-v1 as defined above.
 | Command family | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
 | `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Implemented | Implemented | Common systems validated on NT-5890K; DataBar unsupported by that printer |
-| `GS ( k` QR functions | Configure, store, and print QR symbols | Partial | Implemented | Validated on NT-5890K |
+| `GS ( k` Model 2 QR Functions 165, 167, 169, 180, and 181 | Configure, store, and print QR symbols | Implemented | Implemented | Validated on NT-5890K |
+| `GS ( k` Model 1 and Micro QR | Configure, store, and print legacy/compact QR variants | Post-v1 | Planned | Pending |
+| `GS ( k` QR Function 182 | Return the stored symbol size to a bidirectional host | Post-v1 | Planned | Pending |
 | `GS ( k` PDF417 functions | Configure, store, and print PDF417 symbols | Post-v1 | Planned | Pending |
 | `GS ( k` Data Matrix functions | Configure, store, and print Data Matrix symbols | Post-v1 | Planned | Pending |
 
@@ -139,9 +141,9 @@ DataBar `m=75`–`78`.
 
 QR Functions 165, 167, 169, 180, and 181 implement Model 2 selection, module
 size, error correction, raw-byte storage, and printing. Model 1, Micro QR, and
-Function 182's bidirectional size response remain pending. QR matrices are
-valid and deterministic, but their mask choice is not yet claimed to match a
-specific Epson firmware. The NT-5890K hardware case confirms native command
+Function 182's bidirectional size response are explicitly post-v1. QR matrices
+are valid and deterministic, but their mask choice is not yet claimed to match
+a specific Epson firmware. The NT-5890K hardware case confirms native command
 availability and the expected 84-dot QR dimensions; it does not yet compare
 every logical module with a digitized physical print.
 

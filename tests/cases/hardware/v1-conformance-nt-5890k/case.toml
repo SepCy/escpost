@@ -1,0 +1,4 @@
+schema_version = 1
+name = "NT-5890K v1 hardware conformance receipt"
+profile = "NT-5890K"
+input_sha256 = "6b13d470f74cfe77993989992bc66eef2ced705ebc18ed2e421781c53ca741e5"

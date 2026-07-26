@@ -1,8 +1,8 @@
 //! Logical one-dimensional barcode encoders.
 //!
 //! This module deliberately knows nothing about printer dots, justification,
-//! HRI text, or paper movement. It produces one Boolean per barcode module so
-//! the ESC/POS layer remains authoritative for printer behavior.
+//! or paper movement. It produces logical bars and HRI characters so the
+//! ESC/POS layer remains authoritative for printer behavior.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BarcodeError {
@@ -14,7 +14,7 @@ pub(crate) enum BarcodeError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EncodedBarcode {
     pub(crate) bars: Vec<BarElement>,
-    pub(crate) hri: Vec<u8>,
+    pub(crate) hri: Vec<char>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,7 +146,10 @@ pub(crate) fn encode_ean13(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> 
         push_pattern(&mut modules, RIGHT[usize::from(*digit)]);
     }
     push_pattern(&mut modules, "101");
-    let hri = digits.iter().map(|digit| digit + b'0').collect();
+    let hri = digits
+        .iter()
+        .map(|digit| char::from(digit + b'0'))
+        .collect();
     Ok(EncodedBarcode::from_modules(&modules, hri))
 }
 
@@ -200,7 +203,10 @@ pub(crate) fn encode_ean8(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
         push_pattern(&mut modules, RIGHT[usize::from(*digit)]);
     }
     push_pattern(&mut modules, "101");
-    let hri = digits.iter().map(|digit| digit + b'0').collect();
+    let hri = digits
+        .iter()
+        .map(|digit| char::from(digit + b'0'))
+        .collect();
     Ok(EncodedBarcode::from_modules(&modules, hri))
 }
 
@@ -265,9 +271,9 @@ pub(crate) fn encode_upce(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
     }
     push_pattern(&mut modules, "010101");
     let mut hri = Vec::with_capacity(8);
-    hri.push(number_system + b'0');
-    hri.extend_from_slice(&compact);
-    hri.push(check + b'0');
+    hri.push(char::from(number_system + b'0'));
+    hri.extend(compact.iter().copied().map(char::from));
+    hri.push(char::from(check + b'0'));
     Ok(EncodedBarcode::from_modules(&modules, hri))
 }
 
@@ -307,7 +313,7 @@ pub(crate) fn encode_code39(data: &[u8]) -> Result<EncodedBarcode, BarcodeError>
     }
     Ok(EncodedBarcode {
         bars,
-        hri: data.to_vec(),
+        hri: ascii_hri(data),
     })
 }
 
@@ -338,7 +344,7 @@ pub(crate) fn encode_itf(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
     push_binary_pattern(&mut bars, "wnn");
     Ok(EncodedBarcode {
         bars,
-        hri: data.to_vec(),
+        hri: ascii_hri(data),
     })
 }
 
@@ -373,7 +379,7 @@ pub(crate) fn encode_codabar(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
     }
     Ok(EncodedBarcode {
         bars,
-        hri: data.to_vec(),
+        hri: ascii_hri(data),
     })
 }
 
@@ -385,6 +391,7 @@ pub(crate) fn encode_code93(data: &[u8]) -> Result<EncodedBarcode, BarcodeError>
     for character in data.iter().copied() {
         push_code93_ascii(&mut values, character)?;
     }
+    let hri = code93_hri(&values);
 
     values.push(code93_check_value(&values, 20));
     values.push(code93_check_value(&values, 15));
@@ -396,7 +403,7 @@ pub(crate) fn encode_code93(data: &[u8]) -> Result<EncodedBarcode, BarcodeError>
     }
     push_code93_pattern(&mut modules, 47);
     modules.push(true);
-    Ok(EncodedBarcode::from_modules(&modules, data.to_vec()))
+    Ok(EncodedBarcode::from_modules(&modules, hri))
 }
 
 pub(crate) fn encode_code128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
@@ -428,15 +435,15 @@ pub(crate) fn encode_code128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
                 }
                 b'1' => {
                     symbols.push(102);
-                    hri.push(b' ');
+                    hri.push(' ');
                 }
                 b'2' => {
                     symbols.push(97);
-                    hri.push(b' ');
+                    hri.push(' ');
                 }
                 b'3' => {
                     symbols.push(96);
-                    hri.push(b' ');
+                    hri.push(' ');
                 }
                 b'4' => {
                     symbols.push(match code_set {
@@ -444,11 +451,11 @@ pub(crate) fn encode_code128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
                         Code128Set::B => 100,
                         Code128Set::C => return Err(BarcodeError::Format),
                     });
-                    hri.push(b' ');
+                    hri.push(' ');
                 }
                 b'{' => {
                     symbols.push(code128_character_value(code_set, b'{')?);
-                    hri.push(b'{');
+                    hri.push('{');
                 }
                 b'S' => {
                     let shifted_set = match code_set {
@@ -460,9 +467,9 @@ pub(crate) fn encode_code128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
                     symbols.push(98);
                     symbols.push(code128_character_value(shifted_set, character)?);
                     hri.push(if character.is_ascii_control() {
-                        b' '
+                        ' '
                     } else {
-                        character
+                        char::from(character)
                     });
                     // SHIFT consumes its marker and exactly one data byte.
                     // The following byte uses the original code set again.
@@ -480,9 +487,9 @@ pub(crate) fn encode_code128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
                 let character = data[index];
                 symbols.push(code128_character_value(code_set, character)?);
                 hri.push(if character.is_ascii_control() {
-                    b' '
+                    ' '
                 } else {
-                    character
+                    char::from(character)
                 });
                 index += 1;
             }
@@ -492,7 +499,7 @@ pub(crate) fn encode_code128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError
                     return Err(BarcodeError::Format);
                 }
                 symbols.push((pair[0] - b'0') * 10 + pair[1] - b'0');
-                hri.extend_from_slice(pair);
+                hri.extend(pair.iter().copied().map(char::from));
                 index += 2;
             }
         }
@@ -543,7 +550,7 @@ impl Code128Set {
 }
 
 impl EncodedBarcode {
-    fn from_modules(modules: &[bool], hri: Vec<u8>) -> Self {
+    fn from_modules(modules: &[bool], hri: Vec<char>) -> Self {
         let mut bars = Vec::new();
         for dark in modules.iter().copied() {
             match bars.last_mut() {
@@ -561,6 +568,24 @@ impl EncodedBarcode {
         }
         Self { bars, hri }
     }
+}
+
+fn ascii_hri(data: &[u8]) -> Vec<char> {
+    data.iter().copied().map(char::from).collect()
+}
+
+fn code93_hri(values: &[usize]) -> Vec<char> {
+    let mut hri = Vec::with_capacity(values.len() + 2);
+    hri.push('□');
+    for value in values.iter().copied() {
+        hri.push(match value {
+            0..=42 => char::from(CODE93_CHARACTERS[value]),
+            43..=46 => '■',
+            _ => unreachable!("Code 93 data values were validated"),
+        });
+    }
+    hri.push('□');
+    hri
 }
 
 fn code39_pattern(character: u8) -> Option<&'static str> {
@@ -824,4 +849,25 @@ fn ean_check_digit(digits: &[u8]) -> u8 {
 
 fn push_pattern(modules: &mut Vec<bool>, pattern: &str) {
     modules.extend(pattern.bytes().map(|module| module == b'1'));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::encode_code93;
+
+    #[test]
+    fn code93_hri_names_its_start_and_stop_characters() {
+        let encoded = encode_code93(b"A").expect("A is valid Code 93 data");
+
+        assert_eq!(encoded.hri, ['□', 'A', '□']);
+    }
+
+    #[test]
+    fn code93_hri_names_a_shifted_control_character() {
+        let encoded = encode_code93(&[0]).expect("NUL has a full-ASCII Code 93 encoding");
+
+        // NUL is encoded as the Code 93 shift pair %U. Epson displays the
+        // shift symbol as a black square followed by the pair's letter.
+        assert_eq!(encoded.hri, ['□', '■', 'U', '□']);
+    }
 }

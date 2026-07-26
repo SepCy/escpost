@@ -114,10 +114,11 @@ Standard-mode jobs do not depend on that implementation detail.
 Common `GS k` systems UPC-A, UPC-E, EAN-13, EAN-8, Code 39, ITF, Codabar,
 Code 93, and explicit-set Code 128 are implemented for the profile-advertised
 Function A/B forms. The newer GS1-128, GS1 DataBar, and automatic Code 128
-systems remain pending. Returning bytes after an early Code 39 stop is covered
-for Function B; the legacy NUL-terminated Function A edge case remains
-pending. Barcode reset defaults and special HRI glyph representations still
-need profile-level fidelity work.
+systems remain pending. Both barcode command framings return bytes after an
+early Code 39 stop to normal ESC/POS processing. Code 93 HRI includes the
+specified start/stop and control-character placeholders. The Epson barcode
+reset defaults are implemented but still need profile-level hardware
+validation.
 
 QR Functions 165, 167, 169, 180, and 181 implement Model 2 selection, module
 size, error correction, raw-byte storage, and printing. Model 1, Micro QR, and

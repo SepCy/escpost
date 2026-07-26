@@ -925,23 +925,9 @@ fn execute_gs_k(
     let (system, payload, mut command_length, is_function_a) = match system {
         function_a @ 0..=6 => {
             state.require_barcode_a(offset)?;
-            let remaining = data.get(3..).ok_or(RenderError::TruncatedCommand {
-                command: "GS k",
-                offset,
-            })?;
-            let payload_length = remaining.iter().position(|byte| *byte == 0).ok_or(
-                RenderError::TruncatedCommand {
-                    command: "GS k",
-                    offset,
-                },
-            )?;
-            state.validate_command_payload_size(payload_length)?;
-            (
-                function_a + 65,
-                &remaining[..payload_length],
-                4usize.saturating_add(payload_length),
-                true,
-            )
+            let (payload, command_length) = function_a_barcode_payload(data, function_a, offset)?;
+            state.validate_command_payload_size(payload.len())?;
+            (function_a + 65, payload, command_length, true)
         }
         function_b @ 65..=79 => {
             state.require_barcode_b(offset)?;
@@ -1099,6 +1085,42 @@ fn execute_gs_k(
     };
     state.print_barcode(&barcode, offset)?;
     Ok(command_length)
+}
+
+fn function_a_barcode_payload(
+    data: &[u8],
+    system: u8,
+    offset: usize,
+) -> Result<(&[u8], usize), RenderError> {
+    let remaining = data.get(3..).ok_or(RenderError::TruncatedCommand {
+        command: "GS k",
+        offset,
+    })?;
+    let nul = remaining.iter().position(|byte| *byte == 0);
+
+    if system == 4 {
+        // A leading '*' is Code 39's start character. A later '*' is the stop
+        // character and ends command processing immediately, even before the
+        // NUL that normally frames Function A.
+        let first_possible_stop = usize::from(remaining.first() == Some(&b'*'));
+        let stop = remaining[first_possible_stop..]
+            .iter()
+            .position(|character| *character == b'*')
+            .map(|position| first_possible_stop + position);
+        if let Some(stop) = stop.filter(|stop| nul.is_none_or(|nul| *stop < nul)) {
+            let payload_length = stop + 1;
+            return Ok((&remaining[..payload_length], 3 + payload_length));
+        }
+    }
+
+    let payload_length = nul.ok_or(RenderError::TruncatedCommand {
+        command: "GS k",
+        offset,
+    })?;
+    Ok((
+        &remaining[..payload_length],
+        4usize.saturating_add(payload_length),
+    ))
 }
 
 fn execute_gs_parenthesized_l(
@@ -2634,17 +2656,12 @@ impl PrinterState {
     }
 }
 
-fn render_hri(data: &[u8], font: &ProfileFont) -> MonoSurface {
+fn render_hri(data: &[char], font: &ProfileFont) -> MonoSurface {
     let width = (data.len() as u32).saturating_mul(font.cell_width_dots);
     let mut surface = MonoSurface::new(width);
     surface.ensure_height(font.cell_height_dots);
 
-    for (character_index, byte) in data.iter().copied().enumerate() {
-        let character = if (0x20..=0x7e).contains(&byte) {
-            char::from(byte)
-        } else {
-            ' '
-        };
+    for (character_index, character) in data.iter().copied().enumerate() {
         let font_size = font.cell_height_dots as f32;
         let (metrics, bitmap) = default_font().rasterize(character, font_size);
         let horizontal_crop = metrics.width.saturating_sub(font.cell_width_dots as usize) / 2;

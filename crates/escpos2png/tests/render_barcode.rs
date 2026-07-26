@@ -254,6 +254,48 @@ fn code39_stops_at_an_asterisk_and_returns_later_bytes_to_text_processing() {
 }
 
 #[test]
+fn function_a_code39_stops_at_an_asterisk_without_waiting_for_nul() {
+    let mut profile = test_profile();
+    profile.features.barcode_a = true;
+    profile.features.barcode_b = true;
+    let function_a = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 4, b'A', b'*', b'B', 0x0a,
+    ];
+    let equivalent_function_b = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 69, 2, b'A', b'*', b'B', 0x0a,
+    ];
+
+    let actual = render(&function_a, &profile)
+        .expect("the Code 39 stop should finish Function A before its NUL terminator");
+    let expected = render(&equivalent_function_b, &profile)
+        .expect("the equivalent length-prefixed stream should render");
+
+    // B follows the stop character and is therefore ordinary text in both
+    // streams. This protects framing, not merely the barcode's bars.
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn function_a_code39_does_not_treat_a_leading_start_character_as_the_stop() {
+    let mut profile = test_profile();
+    profile.features.barcode_a = true;
+    profile.features.barcode_b = true;
+    let function_a = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 4, b'*', b'A', b'*', b'B', 0x0a,
+    ];
+    let equivalent_function_b = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 69, 3, b'*', b'A', b'*', b'B', 0x0a,
+    ];
+
+    let actual = render(&function_a, &profile)
+        .expect("the leading start character should not finish Function A");
+    let expected = render(&equivalent_function_b, &profile)
+        .expect("the equivalent length-prefixed stream should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
 fn prints_itf_by_interleaving_each_pair_of_digit_patterns() {
     let mut profile = test_profile();
     profile.features.barcode_b = true;
@@ -334,6 +376,52 @@ fn code93_maps_the_complete_ascii_range_through_shift_characters() {
             expected,
             "unexpected full-ASCII Code 93 dot at ({x}, 0)"
         );
+    }
+}
+
+#[test]
+fn code93_hri_includes_start_and_stop_placeholders() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 1, b'A'];
+
+    let rendered = render(&input, &profile).expect("Code 93 HRI should render");
+    let surface = &rendered.sheets[0].surface;
+
+    // The bars are 46 modules × two dots = 92 dots. Epson prints □A□ as HRI,
+    // centered below those bars in three Font A cells.
+    let hri_left = (92 - 3 * profile.fonts.a.cell_width_dots) / 2;
+    for cell in 0..3 {
+        assert!(cell_contains_printed_dots(
+            surface,
+            hri_left + cell * profile.fonts.a.cell_width_dots,
+            1,
+            profile.fonts.a.cell_width_dots,
+            profile.fonts.a.cell_height_dots,
+        ));
+    }
+}
+
+#[test]
+fn code93_hri_expands_shifted_control_data_to_square_and_letter() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 1, 0x00];
+
+    let rendered = render(&input, &profile).expect("Code 93 control HRI should render");
+    let surface = &rendered.sheets[0].surface;
+
+    // NUL is encoded as Code 93's %U pair. Epson displays □■U□: white-square
+    // guards around a black-square shift placeholder and its letter.
+    let hri_left = (110 - 4 * profile.fonts.a.cell_width_dots) / 2;
+    for cell in 0..4 {
+        assert!(cell_contains_printed_dots(
+            surface,
+            hri_left + cell * profile.fonts.a.cell_width_dots,
+            1,
+            profile.fonts.a.cell_width_dots,
+            profile.fonts.a.cell_height_dots,
+        ));
     }
 }
 
@@ -469,6 +557,16 @@ fn test_profile() -> escpos2png_profiles::PrinterProfile {
     compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")
         .profile
+}
+
+fn cell_contains_printed_dots(
+    surface: &escpos2png::MonoSurface,
+    left: u32,
+    top: u32,
+    width: u32,
+    height: u32,
+) -> bool {
+    (left..left + width).any(|x| (top..top + height).any(|y| surface.is_printed(x, y)))
 }
 
 fn ean13_modules(digits: &str) -> Vec<bool> {

@@ -17,6 +17,8 @@
         "eight_dot_vertical_pitch_dots": 1
       },
       "commands": {
+        "esc_backslash_negative": "ignored",
+        "esc_dollar_after_printable_data": "ignored",
         "esc_j": "ignored",
         "gs_v_function_b_full": "feed",
         "gs_v_function_b_partial": "ignored"
@@ -155,7 +157,7 @@
         }
       ],
       "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-      "canonical_profile_sha256": "3a7459577213318b7b55b3758dc3cd94669c70f46decb9752b99460e03824334"
+      "canonical_profile_sha256": "d592eb1b792ca3b0b346bcdfc23a155c9575d457b1d02eb583c26a7054cf4cb4"
     }
   }
 }

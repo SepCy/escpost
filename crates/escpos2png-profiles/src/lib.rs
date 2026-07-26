@@ -91,9 +91,18 @@ pub struct ColumnBitImage {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommandBehavior {
+    pub esc_backslash_negative: PositioningBehavior,
+    pub esc_dollar_after_printable_data: PositioningBehavior,
     pub esc_j: FeedBehavior,
     pub gs_v_function_b_full: FeedBehavior,
     pub gs_v_function_b_partial: FeedBehavior,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PositioningBehavior {
+    Apply,
+    Ignored,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

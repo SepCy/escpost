@@ -1,5 +1,5 @@
 use escpos2png::render;
-use escpos2png_profiles::compile_profile;
+use escpos2png_profiles::{PositioningBehavior, compile_profile};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
@@ -172,9 +172,10 @@ fn esc_a_places_qr_symbols_inside_the_active_print_area() {
 }
 
 #[test]
-fn justification_uses_the_farthest_composed_dot_after_moving_backwards() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+fn epson_justification_uses_the_farthest_composed_dot_after_moving_backwards() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
+    profile.commands.esc_dollar_after_printable_data = PositioningBehavior::Apply;
     let input = [
         ESC,
         b'a',

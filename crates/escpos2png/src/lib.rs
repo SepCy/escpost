@@ -11,7 +11,7 @@ use encoding_rs::{
 };
 use escpos2png_profiles::{
     Approximation, BarcodeSystem, CarriageReturnMode, FeedBehavior, Font as ProfileFont,
-    PrinterProfile,
+    PositioningBehavior, PrinterProfile,
 };
 use fontdue::{Font, FontSettings};
 use oem_cp::{
@@ -1607,6 +1607,9 @@ struct PrinterState {
     line_top: u32,
     print_x: u32,
     line_used_width: u32,
+    // Cursor movement can increase line_used_width without buffering data.
+    // Keep this separate for firmware rules that distinguish those states.
+    line_has_printable_data: bool,
     // Some commands are deliberately ignored after printable data or a
     // position command has moved the printer away from the line origin.
     at_beginning_of_line: bool,
@@ -1619,6 +1622,8 @@ struct PrinterState {
     default_vertical_motion_units_per_inch: u32,
     vertical_motion_units_per_inch: u32,
     esc_star_8_dot_vertical_pitch: u32,
+    esc_backslash_negative_behavior: PositioningBehavior,
+    esc_dollar_after_printable_data_behavior: PositioningBehavior,
     esc_j_behavior: FeedBehavior,
     gs_v_function_b_full_behavior: FeedBehavior,
     gs_v_function_b_partial_behavior: FeedBehavior,
@@ -1685,6 +1690,7 @@ impl PrinterState {
             line_top: 0,
             print_x: 0,
             line_used_width: 0,
+            line_has_printable_data: false,
             at_beginning_of_line: true,
             line_spacing: default_line_spacing,
             default_line_spacing,
@@ -1695,6 +1701,10 @@ impl PrinterState {
             default_vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
             vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
             esc_star_8_dot_vertical_pitch: profile.column_bit_image.eight_dot_vertical_pitch_dots,
+            esc_backslash_negative_behavior: profile.commands.esc_backslash_negative,
+            esc_dollar_after_printable_data_behavior: profile
+                .commands
+                .esc_dollar_after_printable_data,
             esc_j_behavior: profile.commands.esc_j,
             gs_v_function_b_full_behavior: profile.commands.gs_v_function_b_full,
             gs_v_function_b_partial_behavior: profile.commands.gs_v_function_b_partial,
@@ -1745,6 +1755,7 @@ impl PrinterState {
         self.line = MonoSurface::new(self.print_area_width);
         self.print_x = 0;
         self.line_used_width = 0;
+        self.line_has_printable_data = false;
         self.at_beginning_of_line = true;
         self.line_spacing = self.default_line_spacing;
         self.horizontal_motion_units_per_inch = self.default_horizontal_motion_units_per_inch;
@@ -1811,6 +1822,13 @@ impl PrinterState {
     }
 
     fn set_absolute_print_position(&mut self, motion_units: u16) {
+        if self.line_has_printable_data
+            && self.esc_dollar_after_printable_data_behavior == PositioningBehavior::Ignored
+        {
+            self.at_beginning_of_line = false;
+            return;
+        }
+
         let position = self.horizontal_motion_units_to_dots(motion_units);
         // Epson specifies that out-of-area settings are ignored, leaving the
         // previous cursor untouched.
@@ -1853,6 +1871,7 @@ impl PrinterState {
         self.line = MonoSurface::new(self.print_area_width);
         self.print_x = 0;
         self.line_used_width = 0;
+        self.line_has_printable_data = false;
     }
 
     fn set_print_area_width(&mut self, motion_units: u16) {
@@ -1869,6 +1888,7 @@ impl PrinterState {
         self.line = MonoSurface::new(self.print_area_width);
         self.print_x = 0;
         self.line_used_width = 0;
+        self.line_has_printable_data = false;
     }
 
     fn horizontal_tab(&mut self) -> Result<(), RenderError> {
@@ -1913,6 +1933,13 @@ impl PrinterState {
     }
 
     fn set_relative_print_position(&mut self, motion_units: i16) {
+        if motion_units.is_negative()
+            && self.esc_backslash_negative_behavior == PositioningBehavior::Ignored
+        {
+            self.at_beginning_of_line = false;
+            return;
+        }
+
         let distance = self.horizontal_motion_units_to_dots(motion_units.unsigned_abs());
         let position = if motion_units.is_negative() {
             self.print_x.checked_sub(distance)
@@ -2039,6 +2066,7 @@ impl PrinterState {
         self.line.clear();
         self.print_x = 0;
         self.line_used_width = 0;
+        self.line_has_printable_data = false;
         self.at_beginning_of_line = true;
         self.line_height = 0;
         Ok(())
@@ -2163,6 +2191,7 @@ impl PrinterState {
 
         self.print_x = self.print_x.saturating_add(cell_width);
         self.line_used_width = self.line_used_width.max(self.print_x);
+        self.line_has_printable_data = true;
         self.at_beginning_of_line = false;
         Ok(())
     }
@@ -2210,6 +2239,7 @@ impl PrinterState {
             .saturating_add(columns as u32 * horizontal_scale);
         self.line_used_width = self.line_used_width.max(self.print_x);
         if columns > 0 {
+            self.line_has_printable_data = true;
             self.at_beginning_of_line = false;
         }
     }
@@ -2272,6 +2302,7 @@ impl PrinterState {
         self.roll.ensure_height(self.line_top);
         self.print_x = 0;
         self.line_used_width = 0;
+        self.line_has_printable_data = false;
         self.at_beginning_of_line = true;
         Ok(())
     }
@@ -2374,6 +2405,7 @@ impl PrinterState {
         self.roll.ensure_height(self.line_top);
         self.print_x = 0;
         self.line_used_width = 0;
+        self.line_has_printable_data = false;
         self.at_beginning_of_line = true;
         Ok(())
     }
@@ -2491,6 +2523,7 @@ impl PrinterState {
         self.roll.ensure_height(self.line_top);
         self.print_x = 0;
         self.line_used_width = 0;
+        self.line_has_printable_data = false;
         self.at_beginning_of_line = true;
         Ok(())
     }

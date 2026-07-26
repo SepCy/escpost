@@ -94,6 +94,7 @@ Profiles provide behavior that cannot be derived from ESC/POS bytes:
 - printable width and horizontal/vertical DPI;
 - horizontal and vertical motion units;
 - `ESC *` 8-dot vertical pitch for model-specific column-image geometry;
+- model-specific positioning behavior for `ESC $` and `ESC \`;
 - model-specific feed behavior for `ESC J` and `GS V` Function B modes;
 - reset line spacing, code page, international set, and carriage-return mode;
 - Font A/B cell size and baseline;

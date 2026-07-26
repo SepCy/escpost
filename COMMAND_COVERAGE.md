@@ -79,8 +79,8 @@ remain post-v1.
 
 | Command | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
-| `ESC $` | Set absolute horizontal position | Implemented | Implemented | Pending |
-| `ESC \` | Set relative horizontal position | Implemented | Implemented | Pending |
+| `ESC $` | Set absolute horizontal position, subject to profile behavior after printable data | Implemented | Implemented | NT-5890K ignores it after data |
+| `ESC \` | Set relative horizontal position, subject to profile behavior for negative values | Implemented | Implemented | NT-5890K applies positive and ignores negative movement |
 | `GS L` | Set left margin | Implemented | Implemented | Pending |
 | `GS P` | Set horizontal and vertical motion units | Implemented | Implemented | Pending |
 | `GS W` | Set print-area width | Implemented | Implemented | Pending |

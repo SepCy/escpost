@@ -37,6 +37,12 @@ models the material one-dot vertical pitch; the trailing line remains an
 explicit approximation. Positioning and no-cut sections now use other marker
 families so that artifact cannot obscure their measurements.
 
+An isolated positioning-interaction probe showed that the printer applies
+positive `ESC \` movement but ignores negative values. It also ignores
+`ESC $` after printable data is already buffered on the line. The profile
+models both rules, so the final two positioning cells occupy x=40 and x=52
+and appear as one 24 × 24-dot block in both the PNG and physical receipt.
+
 The initial comparison also showed that the printer restores barcode defaults
 after Function A. The revised stream therefore sends `GS H`, `GS h`, and
 `GS w` again before Function B. This isolates command framing from that
@@ -55,12 +61,12 @@ date: 2026-07-26
 input SHA-256: 72366422ef0185da2cf13b4088649773f4569e9f7cbc602ca868f31c0dc59537
 renderer commit: pending
 printer profile: NT-5890K
-canonical profile SHA-256: 3a7459577213318b7b55b3758dc3cd94669c70f46decb9752b99460e03824334
+canonical profile SHA-256: d592eb1b792ca3b0b346bcdfc23a155c9575d457b1d02eb583c26a7054cf4cb4
 printer USB identity: 0416:5011
 serial: B120300001
 connection: USB interface 0, OUT endpoint 0x01
 transport result: all 1208 hash-verified bytes sent without a USB error
-visual comparison: pending
+visual comparison: positioning behavior confirmed; final full-receipt review pending
 ```
 
 A successful USB write proves only that the exact fixture reached the device;

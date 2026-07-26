@@ -7,7 +7,11 @@ This case makes positioning behavior visible with solid reversed-space cells:
    at x=17.
 3. `GS L` and `GS W` select a 24-dot left margin and a 120-dot print area.
    `ESC a` centers a visible 12-dot reversed-space cell at physical x=78.
-4. Positive and negative `ESC \` movements place markers at x=40 and x=20.
+4. Epson behavior would use positive and negative `ESC \` movements to place
+   markers at x=40 and x=20.
+5. The calibrated NT-5890K applies the positive movement, then ignores both
+   the second `ESC $` after printable data and the negative `ESC \`. Its two
+   markers therefore occupy x=40 and x=52 and form one 24 × 24-dot block.
 
 Using visible text cells keeps this positioning case independent of
 model-specific `ESC *` painting artifacts. Column-image positioning remains

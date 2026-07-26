@@ -134,6 +134,12 @@ amount, and `GS V 66 n` is consumed without feeding. These affect layout and
 therefore live in the typed profile rather than being treated as incidental
 print artifacts.
 
+An isolated positioning-interaction probe established that the connected
+NT-5890K applies positive `ESC \` movement, consumes negative `ESC \` without
+moving, and consumes `ESC $` without moving after printable data is already
+buffered on the line. These are typed profile behaviors because they change
+the coordinates of later content.
+
 ## Conformance case format
 
 Each behavior is represented by a self-contained case directory:

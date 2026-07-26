@@ -1,5 +1,5 @@
 use escpos2png::render;
-use escpos2png_profiles::compile_profile;
+use escpos2png_profiles::{PositioningBehavior, compile_profile};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
@@ -26,9 +26,69 @@ fn esc_dollar_sets_an_absolute_position_in_horizontal_motion_units() {
 }
 
 #[test]
-fn esc_backslash_moves_right_or_left_from_the_current_position() {
+fn nt_5890k_ignores_esc_dollar_after_printable_data() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
+    let marker = [ESC, b'*', 1, 1, 0, 0b1000_0000];
+    let input = [
+        &[ESC, b'$', 40, 0],
+        marker.as_slice(),
+        &[ESC, b'$', 20, 0],
+        marker.as_slice(),
+        &[LF],
+    ]
+    .concat();
+
+    let rendered = render(&input, &profile).expect("ignored ESC $ should still be consumed");
+    let surface = &rendered.sheets[0].surface;
+
+    // The second marker continues at x=41 instead of moving back to x=20.
+    assert!(surface.is_printed(40, 0));
+    assert!(surface.is_printed(41, 0));
+    assert!(!surface.is_printed(20, 0));
+}
+
+#[test]
+fn nt_5890k_still_applies_esc_dollar_after_a_nonprinting_tab() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    let input = [HT, ESC, b'$', 20, 0, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+
+    let rendered = render(&input, &profile).expect("ESC $ should apply before printable data");
+    let surface = &rendered.sheets[0].surface;
+
+    assert!(surface.is_printed(20, 0));
+    assert!(!surface.is_printed(96, 0));
+}
+
+#[test]
+fn epson_esc_dollar_repositions_after_printable_data() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    profile.commands.esc_dollar_after_printable_data = PositioningBehavior::Apply;
+    let marker = [ESC, b'*', 1, 1, 0, 0b1000_0000];
+    let input = [
+        &[ESC, b'$', 40, 0],
+        marker.as_slice(),
+        &[ESC, b'$', 20, 0],
+        marker.as_slice(),
+        &[LF],
+    ]
+    .concat();
+
+    let rendered = render(&input, &profile).expect("Epson ESC $ should reposition");
+    let surface = &rendered.sheets[0].surface;
+
+    assert!(surface.is_printed(40, 0));
+    assert!(surface.is_printed(20, 0));
+    assert!(!surface.is_printed(41, 0));
+}
+
+#[test]
+fn epson_esc_backslash_moves_right_or_left_from_the_current_position() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    profile.commands.esc_backslash_negative = PositioningBehavior::Apply;
     let input = [
         // Start at x=30 and move ten units right.
         ESC,
@@ -69,6 +129,37 @@ fn esc_backslash_moves_right_or_left_from_the_current_position() {
 
     assert!(surface.is_printed(40, 0));
     assert!(surface.is_printed(20, 30));
+}
+
+#[test]
+fn nt_5890k_ignores_negative_esc_backslash() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    let input = [
+        // The physical probe showed that FFF6h is consumed but does not move
+        // this firmware ten units left from x=30.
+        ESC,
+        b'$',
+        30,
+        0,
+        ESC,
+        b'\\',
+        0xf6,
+        0xff,
+        ESC,
+        b'*',
+        1,
+        1,
+        0,
+        0b1000_0000,
+        LF,
+    ];
+
+    let rendered = render(&input, &profile).expect("ignored ESC \\ should still be consumed");
+    let surface = &rendered.sheets[0].surface;
+
+    assert!(surface.is_printed(30, 0));
+    assert!(!surface.is_printed(20, 0));
 }
 
 #[test]

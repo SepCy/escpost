@@ -20,3 +20,19 @@ margin.
 
 References: Epson `GS V — Select cut mode and cut paper`, Function B; `GS P —
 Set horizontal and vertical motion units`.
+
+## Physical run
+
+```text
+date: 2026-07-26
+input SHA-256: 3910feea2720c9269ad0d1173cdeea7c5328fefb22c9556e1ec2866e6dc1175b
+printer profile: NT-5890K
+printer USB identity: 0416:5011
+serial: B120300001
+connection: USB interface 0, OUT endpoint 0x01
+transport result: all 59 hash-verified bytes sent without a USB error
+visual comparison: pending
+```
+
+The expected paper result is one uncut strip with three markers and equal
+marker-to-marker gaps. The USB result alone cannot establish that geometry.

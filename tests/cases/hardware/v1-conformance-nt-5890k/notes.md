@@ -30,5 +30,21 @@ font. Compare:
 The exact PNG is served at <http://localhost:8765/tools/preview/> with integer
 nearest-neighbor zoom.
 
-Physical result is recorded here only after the exact hash-verified stream has
-been sent and compared.
+## Physical run
+
+```text
+date: 2026-07-26
+input SHA-256: 6b13d470f74cfe77993989992bc66eef2ced705ebc18ed2e421781c53ca741e5
+renderer commit: 1d5045c
+printer profile: NT-5890K
+canonical profile SHA-256: 1d847847bd3fd5aceffcc4d2458addf0cebf611866b179855e97998c03c733ea
+printer USB identity: 0416:5011
+serial: B120300001
+connection: USB interface 0, OUT endpoint 0x01
+transport result: all 820 hash-verified bytes sent without a USB error
+visual comparison: pending
+```
+
+A successful USB write proves only that the exact fixture reached the device;
+it does not prove what appeared on paper. Record the geometry and symbol
+observations here after comparing the receipt with the served PNG.

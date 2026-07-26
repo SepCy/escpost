@@ -7,8 +7,8 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-const ENRICHMENT_SCHEMA_VERSION: u32 = 2;
-const CANONICAL_PROFILE_SCHEMA_VERSION: u32 = 2;
+const ENRICHMENT_SCHEMA_VERSION: u32 = 1;
+const CANONICAL_PROFILE_SCHEMA_VERSION: u32 = 1;
 const UPSTREAM_LOCK_SCHEMA_VERSION: u32 = 1;
 const BUNDLED_UPSTREAM_LOCK_TOML: &str = include_str!("../../../profiles/upstream.lock.toml");
 const LEGACY_FUNCTION_A_SYSTEMS: [BarcodeSystem; 7] = [
@@ -44,7 +44,6 @@ pub struct CompiledProfile {
 pub struct PrinterProfile {
     pub schema_version: u32,
     pub id: String,
-    pub revision: u32,
     pub geometry: Geometry,
     pub motion: MotionUnits,
     pub defaults: PrinterDefaults,
@@ -321,7 +320,6 @@ pub enum CanonicalProfileError {
 struct Enrichment {
     schema_version: u32,
     profile: String,
-    revision: u32,
     upstream_profile_sha256: String,
     sources: Vec<String>,
     geometry: Geometry,
@@ -423,7 +421,6 @@ struct ImportedFont {
 struct CanonicalProfileContent<'a> {
     schema_version: u32,
     id: &'a str,
-    revision: u32,
     geometry: &'a Geometry,
     motion: &'a MotionUnits,
     defaults: &'a PrinterDefaults,
@@ -479,7 +476,6 @@ pub fn compile_profile_with_lock(
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: enrichment.profile,
-        revision: enrichment.revision,
         geometry: enrichment.geometry,
         motion: enrichment.motion,
         defaults: enrichment.defaults,
@@ -1037,7 +1033,6 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
     let content = CanonicalProfileContent {
         schema_version: profile.schema_version,
         id: &profile.id,
-        revision: profile.revision,
         geometry: &profile.geometry,
         motion: &profile.motion,
         defaults: &profile.defaults,

@@ -344,9 +344,8 @@ details, corrections, and explicit approximations. Resolve and validate both
 sources into a canonical profile pack embedded in the Rust library.
 
 Do not fetch profile data at installation or render time. Record the upstream
-commit, enrichment revision, and canonical content hash for reproducibility.
-Allow downstream projects to run custom upstream-compatible profiles through
-the same importer.
+commit and canonical content hash for reproducibility. Allow downstream
+projects to run custom upstream-compatible profiles through the same importer.
 
 ### Consequences
 

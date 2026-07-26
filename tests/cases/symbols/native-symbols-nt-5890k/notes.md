@@ -22,7 +22,7 @@ about one fifth of the paper width, consistent with this geometry.
 date: 2026-07-26
 input SHA-256: 665cd5dc465f6fa0a3f0994465943d4d97c3446177828b42b8dce24a16b1e3d2
 renderer commit before profile correction: 7920ee6
-printer profile: NT-5890K revision 5
+printer profile: NT-5890K
 printer USB identity: 0416:5011
 manufacturer/product descriptor: YICHIP3121 / USB Portable Printer
 serial: B120300001

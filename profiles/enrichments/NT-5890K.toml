@@ -1,6 +1,5 @@
-schema_version = 2
+schema_version = 1
 profile = "NT-5890K"
-revision = 8
 upstream_profile_sha256 = "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
 
 sources = [

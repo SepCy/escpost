@@ -133,7 +133,6 @@ pub enum Completeness {
 pub struct RenderMetadata {
     pub renderer_version: &'static str,
     pub profile_id: String,
-    pub profile_revision: u32,
     pub canonical_profile_sha256: String,
     pub upstream_repository: String,
     pub upstream_commit: String,
@@ -413,7 +412,6 @@ pub fn render_with_options(
         metadata: RenderMetadata {
             renderer_version: env!("CARGO_PKG_VERSION"),
             profile_id: profile.id.clone(),
-            profile_revision: profile.revision,
             canonical_profile_sha256: profile.source.canonical_profile_sha256.clone(),
             upstream_repository: profile.source.upstream_repository.clone(),
             upstream_commit: profile.source.upstream_commit.clone(),

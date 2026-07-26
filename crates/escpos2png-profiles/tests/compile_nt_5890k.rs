@@ -22,7 +22,6 @@ fn nt_5890k_compiles_to_rendering_geometry() {
     assert_eq!(
         (
             compiled.profile.id.as_str(),
-            compiled.profile.revision,
             compiled.profile.geometry.printable_width_dots,
             compiled.profile.geometry.dpi_x,
             compiled.profile.geometry.dpi_y,
@@ -33,7 +32,6 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         ),
         (
             "NT-5890K",
-            8,
             384,
             203,
             203,
@@ -53,7 +51,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         (30, 0, 0, CarriageReturnMode::Ignored)
     );
     assert_eq!(compiled.profile.source, compiled.source);
-    assert_eq!(compiled.profile.schema_version, 2);
+    assert_eq!(compiled.profile.schema_version, 1);
     assert_eq!(compiled.source.enrichment_sha256.len(), 64);
     assert_eq!(compiled.source.canonical_profile_sha256.len(), 64);
     assert_eq!(

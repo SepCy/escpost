@@ -388,7 +388,7 @@ A hardware-validation report includes:
 case:
 input SHA-256:
 renderer commit:
-profile revision and hash:
+profile id and canonical hash:
 printer model:
 firmware/configuration:
 connection:

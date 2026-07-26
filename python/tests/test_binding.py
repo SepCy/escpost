@@ -43,7 +43,6 @@ class RenderBindingTest(unittest.TestCase):
             )
         )
         self.assertEqual(rendered["metadata"]["profile_id"], "NT-5890K")
-        self.assertEqual(rendered["metadata"]["profile_revision"], 8)
         self.assertEqual(
             rendered["metadata"]["upstream_commit"],
             "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5",

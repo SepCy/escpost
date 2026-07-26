@@ -1,10 +1,9 @@
 {
-  "schema_version": 2,
+  "schema_version": 1,
   "profiles": {
     "NT-5890K": {
-      "schema_version": 2,
+      "schema_version": 1,
       "id": "NT-5890K",
-      "revision": 8,
       "geometry": {
         "printable_width_dots": 384,
         "dpi_x": 203,
@@ -164,8 +163,8 @@
         "upstream_commit": "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5",
         "upstream_license": "CC-BY-4.0",
         "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-        "enrichment_sha256": "dfb4ccdc296503f44f68bdb6ea9a55f0dbc91dc414a4f43a6181f125a3058dcc",
-        "canonical_profile_sha256": "eaa115fda8402d6ab20b18253006db75a5d0e5b0af192c5323bb85ade8474a4f"
+        "enrichment_sha256": "13f00afd39bb537afc661441fa1724efa728581302fe9216a7ce8eb4fc71d990",
+        "canonical_profile_sha256": "c540d5a5e13dfc30f5cb1dd90e6dced9f3b0147c521d9e1f439f72ba355072e0"
       }
     }
   }

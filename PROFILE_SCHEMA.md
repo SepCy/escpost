@@ -116,9 +116,8 @@ canonical hashes; the vendored upstream snapshot is never edited in place.
 Enrichments are partial, typed TOML documents:
 
 ```toml
-schema_version = 2
+schema_version = 1
 profile = "NT-5890K"
-revision = 8
 upstream_profile_sha256 = "<resolved-profile-sha256>"
 
 sources = [
@@ -316,7 +315,7 @@ Compilation produces deterministic JSON suitable for embedding in Rust. A
 generated profile contains:
 
 ```text
-identity and revision
+profile identity
 resolved geometry and defaults
 font metrics and code-page mappings
 capabilities and quirks
@@ -329,13 +328,13 @@ canonical profile SHA-256
 
 The enrichment and canonical hashes are generated automatically. Developers
 maintain only the upstream lock, expected resolved-profile hash, enrichment
-values, revision, and source references.
+values, and source references.
 
-The canonical hash covers the schema version, profile identity and revision,
-geometry, motion units, defaults, fonts, capabilities, code-page mappings, and
-diagnostic approximations. It deliberately excludes evidence labels and source
-repository provenance. Clarifying a source note therefore does not create a
-new rendering identity, while any runtime behavior change does.
+The canonical hash covers the schema version, profile identity, geometry,
+motion units, defaults, fonts, capabilities, code-page mappings, and diagnostic
+approximations. It deliberately excludes evidence labels and source repository
+provenance. Clarifying a source note therefore does not create a new rendering
+identity, while any runtime behavior change does.
 
 The generated JSON contains the provenance beside those runtime fields. The
 loader rejects unknown fields, invalid runtime values, unsupported schema
@@ -345,22 +344,13 @@ timestamps or absolute paths, is prohibited.
 
 ## Versioning
 
-`schema_version` identifies how to interpret the enrichment document.
+`schema_version` identifies how to interpret the enrichment and canonical
+documents. It changes only when their structure or interpretation changes.
 
-`revision` is the human-facing version of one printer profile. Increment it
-when generated rendering behavior can change, including when:
-
-- a canonical value is added or corrected;
-- an upstream update changes effective imported behavior;
-- a capability or model-specific quirk changes; or
-- an approximation becomes exact in a way that changes output.
-
-Source wording, additional evidence, or notes that do not change the canonical
-rendering input do not require a revision increment.
-
-The canonical hash is the final machine-verifiable identity. Until automated
-revision-policy enforcement proves necessary, review and tests enforce the
-human revision rule.
+Profiles do not carry a manually maintained revision. The canonical profile
+hash is their exact rendering identity, while the enrichment and upstream
+hashes identify their inputs. This avoids a redundant counter that can become
+stale without weakening reproducibility or cache invalidation.
 
 ## Deferred complexity
 

@@ -144,7 +144,6 @@ fn metadata_to_python<'py>(
     let metadata = PyDict::new(py);
     metadata.set_item("renderer_version", rendered.metadata.renderer_version)?;
     metadata.set_item("profile_id", &rendered.metadata.profile_id)?;
-    metadata.set_item("profile_revision", rendered.metadata.profile_revision)?;
     metadata.set_item(
         "canonical_profile_sha256",
         &rendered.metadata.canonical_profile_sha256,

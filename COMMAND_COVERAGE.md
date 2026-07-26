@@ -124,8 +124,12 @@ logical patterns are checked against independent BWIPP vectors. DataBar
 Limited (`m=77`) implements its restricted numeric range, 79-module pattern,
 automatic AI and check digit, HRI, and `10X` minimum height. Its combinatorial
 groups and ISO Figure 7 pattern are checked against independent Zint vectors.
-DataBar Expanded (`m=78`) remains pending. Both barcode command framings return
-bytes after an early Code 39 stop to normal ESC/POS processing.
+DataBar Expanded (`m=78`) implements all fourteen standard compaction methods,
+Numeric/Alphanumeric/ISO/IEC 646 general-field transitions, explicit FNC1 and
+literal-parenthesis escapes, HRI, its 77-byte reduced-data limit, and the `34X`
+minimum height. ISO figures and independent BWIPP/Zint vectors cover every
+compaction method and the Epson-specific input framing. Both barcode command
+framings return bytes after an early Code 39 stop to normal ESC/POS processing.
 Code 93 HRI includes the specified start/stop and control-character
 placeholders. Every system is gated independently by the printer profile. The
 Epson barcode reset defaults, GS1-128, automatic Code 128, and the implemented

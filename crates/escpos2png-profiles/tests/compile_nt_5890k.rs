@@ -72,14 +72,17 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         ),
         (true, true, true, true, false, false, true)
     );
-    assert!(
-        !profile
-            .features
-            .barcodes
-            .function_b
-            .contains(&BarcodeSystem::Gs1DataBarLimited),
-        "the connected NT-5890K ignored GS k m=77"
-    );
+    for system in [
+        BarcodeSystem::Gs1DataBarOmnidirectional,
+        BarcodeSystem::Gs1DataBarTruncated,
+        BarcodeSystem::Gs1DataBarLimited,
+        BarcodeSystem::Gs1DataBarExpanded,
+    ] {
+        assert!(
+            !profile.features.barcodes.function_b.contains(&system),
+            "the connected NT-5890K ignored every GS1 DataBar system"
+        );
+    }
 }
 
 #[test]

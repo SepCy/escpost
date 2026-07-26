@@ -833,6 +833,278 @@ fn gs1_databar_limited_matches_zint_vectors_across_all_reachable_pair_groups() {
 }
 
 #[test]
+fn gs1_databar_expanded_matches_the_iso_figure_10_vector_and_minimum_height() {
+    let mut profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    profile.geometry.printable_width_dots = 576;
+    let payload = b"(01)98898765432106(3202)012345(15)991231";
+    let mut input = vec![GS, b'h', 1, GS, b'w', 2, GS, b'k', 78, payload.len() as u8];
+    input.extend_from_slice(payload);
+
+    let rendered = render(&input, &profile).expect("GS1 DataBar Expanded should render");
+    let surface = &rendered.sheets[0].surface;
+    // ISO/IEC 24724:2011 Figure 10, independently reproduced by Zint.
+    let modules = modules(
+        "01001000011000110110111111110000101110000110010100011010000001100010101111110000111010011100000010010100111110111001100011111100001011101100000100100100011110010110001011111111001110001101111010000101",
+    );
+
+    // Epson overrides GS h when it is below 34 times the module width.
+    assert_eq!(surface.height(), 68);
+    assert_module_pattern(surface, &modules, 2, 68);
+}
+
+#[test]
+fn gs1_databar_expanded_compacts_a_general_purpose_field() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    let payload = b"(10)12A";
+    let mut input = vec![GS, b'h', 1, GS, b'w', 2, GS, b'k', 78, payload.len() as u8];
+    input.extend_from_slice(payload);
+
+    let rendered = render(&input, &profile).expect("the general-purpose field should render");
+    // ISO/IEC 24724:2011 Figure F.3 starts in the general-purpose field and
+    // exercises its Numeric-to-Alphanumeric transition.
+    let modules = modules(
+        "010100000110100000101111111100001010001000000010110101111100100111001011110000000010011101111111010101",
+    );
+
+    assert_module_pattern(&rendered.sheets[0].surface, &modules, 2, 68);
+}
+
+#[test]
+fn gs1_databar_expanded_uses_the_compact_metric_weight_method() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    let payload = b"(01)90012345678908(3103)001750";
+    let mut input = vec![GS, b'h', 1, GS, b'w', 2, GS, b'k', 78, payload.len() as u8];
+    input.extend_from_slice(payload);
+
+    let rendered = render(&input, &profile).expect("the compact metric-weight form should render");
+    // ISO/IEC 24724:2011 Figure 11 validates compressed method 3 rather than
+    // the general-purpose field used by the previous test.
+    let modules = modules(
+        "0101110010000010011011111111000010111000010011000101011110111001100010111100000011100101110001110111011110101111000110001111110000101011000010011111010",
+    );
+
+    assert_module_pattern(&rendered.sheets[0].surface, &modules, 2, 68);
+}
+
+#[test]
+fn gs1_databar_expanded_matches_every_specialized_compaction_method() {
+    let mut profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    profile.geometry.printable_width_dots = 576;
+    // These ISO/BWIPP/Zint vectors cover method 1 and methods 4 through 14.
+    // Method 2 is covered by Figure F.3 and method 3 by Figure 11 above.
+    let cases = [
+        (
+            b"(01)00012345678905(10)ABC123".as_slice(),
+            "0100011000001011011011111111000010110011000010111101011110011011111010111110000001100010110000110111000111101101011110001111110000101110001100100001010011101111110110101111111100111001011011111101110011011100101111100011110000001010",
+        ),
+        (
+            b"(01)90012345678908(3202)000156".as_slice(),
+            "0101001000111100001011111111000010100111000100001101011110111001100010111100000011100101110001110111011110101111000110001111110000101100001000001010010",
+        ),
+        (
+            b"(01)90012345678908(3922)795".as_slice(),
+            "010110000010001011101111111100001010011100000101100101111001101111101011111100001110001011000011011100011110110101111000111111000010100111101110100001100011011100100010111111110011101",
+        ),
+        (
+            b"(01)90012345678908(3932)0081234".as_slice(),
+            "01001110000101100010111111110000101110100000110010010111100110111110101111110000111000101100001101110001111011010111100011111100001011000011010111100100111110001011101011111111001110001101111001011101",
+        ),
+        (
+            b"(01)90012345678908(3102)099999(11)201209".as_slice(),
+            "01000101111001000010111111110000101000110111000010010111100110111110101111110000111000101100001101110001111011010111100011111100001010111100100001000100000011100101001011111111001110010000100100011101",
+        ),
+        (
+            b"(01)90012345678908(3201)099999(11)201209".as_slice(),
+            "01001000001101001110111111110000101110100011000010010111100110111110101111110000111000101100001101110001111011010111100011111100001011000100001101100111010111001110001011111111001110010000100100011101",
+        ),
+        (
+            b"(01)90012345678908(3100)099999(13)201209".as_slice(),
+            "01001000001101001110111111110000101111001010000010010111100110111110101111110000111000101100001101110001111011010111100011111100001011000111000001010111010000110110001011111111001110010000100100011101",
+        ),
+        (
+            b"(01)90012345678908(3204)099999(13)201209".as_slice(),
+            "01001000111000010110111111110000101100101000001110010111100110111110101111110000111000101100001101110001111011010111100011111100001010011101000011110101110000101111101011111111001110010000100100011101",
+        ),
+        (
+            b"(01)90012345678908(3103)012233(15)991231".as_slice(),
+            "01001100000100111010111111110000101011100100000110010111100110111110101111110000111000101100001101110001111011010111100011111100001011000011010110000111001100110001001011111111001110001101111010000101",
+        ),
+        (
+            b"(01)90012345678908(3205)099999(15)201209".as_slice(),
+            "01001110000010011010111111110000101000001101110100010111100110111110101111110000111000101100001101110001111011010111100011111100001011110011010001100101001100011000001011111111001110010000100100011101",
+        ),
+        (
+            b"(01)90012345678908(3105)099999(17)201209".as_slice(),
+            "01000111010000110010111111110000101110000100110100010111100110111110101111110000111000101100001101110001111011010111100011111100001011110011010001100101001100011000001011111111001110010000100100011101",
+        ),
+        (
+            b"(01)90012345678908(3200)099999(17)201209".as_slice(),
+            "01001110000010100110111111110000101111000100010100010111100110111110101111110000111000101100001101110001111011010111100011111100001011000111000001010111010000110110001011111111001110010000100100011101",
+        ),
+    ];
+
+    for (payload, expected) in cases {
+        let mut input = vec![GS, b'h', 1, GS, b'w', 2, GS, b'k', 78, payload.len() as u8];
+        input.extend_from_slice(payload);
+
+        let rendered =
+            render(&input, &profile).expect("the specialized Expanded method should render");
+        assert_module_pattern(&rendered.sheets[0].surface, &modules(expected), 2, 68);
+    }
+}
+
+#[test]
+fn gs1_databar_expanded_compacts_lowercase_and_mode_transitions() {
+    let mut profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    profile.geometry.printable_width_dots = 576;
+    let payload = b"(91)a1234ABCDE";
+    let mut input = vec![GS, b'h', 1, GS, b'w', 2, GS, b'k', 78, payload.len() as u8];
+    input.extend_from_slice(payload);
+
+    let rendered =
+        render(&input, &profile).expect("ISO/IEC 646 general-purpose data should render");
+    // This independent BWIPP/Zint vector crosses Numeric, Alphanumeric, and
+    // ISO/IEC 646 modes, including the early latch back to Numeric.
+    let modules = modules(
+        "01001000011000111010111111110000101100100001000001010110111111001110101111110000111000011011010001110000111000010101100011111100001010011100001011000100000010011011001011111111001110010011100000100101",
+    );
+
+    assert_module_pattern(&rendered.sheets[0].surface, &modules, 2, 68);
+}
+
+#[test]
+fn gs1_databar_expanded_encodes_fnc1_but_omits_it_from_hri() {
+    let mut profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    profile.geometry.printable_width_dots = 576;
+    let payload = b"(01)90012345678908(3922)795{1(20)01";
+    let mut input = vec![
+        GS,
+        b'H',
+        2,
+        GS,
+        b'h',
+        1,
+        GS,
+        b'w',
+        2,
+        GS,
+        b'k',
+        78,
+        payload.len() as u8,
+    ];
+    input.extend_from_slice(payload);
+
+    let rendered = render(&input, &profile).expect("an escaped FNC1 should render");
+    // The reference vector includes the FNC1 that terminates the variable
+    // (3922) field before the following (20) field.
+    let modules = modules(
+        "01000110110000110010111111110000101111000100001010010111100110111110101111110000111000101100001101110001111011010111100011111100001010011110111010000110001110001011001011111111001110100111110001110101",
+    );
+    let surface = &rendered.sheets[0].surface;
+
+    assert_module_pattern(surface, &modules, 2, 68);
+    // Epson keeps AI delimiters in HRI but gives FNC1 no visible glyph.
+    assert_hri_below(
+        surface,
+        &profile,
+        68,
+        400,
+        "(01)90012345678908(3922)795(20)01",
+    );
+}
+
+#[test]
+fn gs1_databar_expanded_escaped_parentheses_are_data_and_hri() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    let escaped_payload = b"(91){({)";
+    let mut escaped = vec![
+        GS,
+        b'H',
+        2,
+        GS,
+        b'h',
+        1,
+        GS,
+        b'w',
+        2,
+        GS,
+        b'k',
+        78,
+        escaped_payload.len() as u8,
+    ];
+    escaped.extend_from_slice(escaped_payload);
+    let delimiter_payload = b"(91)()";
+    let mut delimiters = vec![
+        GS,
+        b'H',
+        2,
+        GS,
+        b'h',
+        1,
+        GS,
+        b'w',
+        2,
+        GS,
+        b'k',
+        78,
+        delimiter_payload.len() as u8,
+    ];
+    delimiters.extend_from_slice(delimiter_payload);
+
+    let escaped = render(&escaped, &profile).expect("escaped literal parentheses should render");
+    let delimiters = render(&delimiters, &profile).expect("unescaped HRI delimiters should render");
+
+    // Both forms show parentheses, but only the escaped form changes the bars.
+    assert_hri_below(&escaped.sheets[0].surface, &profile, 68, 268, "(91)()");
+    assert!((0..68).any(|y| {
+        (0..268).any(|x| {
+            escaped.sheets[0].surface.is_printed(x, y)
+                != delimiters.sheets[0].surface.is_printed(x, y)
+        })
+    }));
+}
+
+#[test]
+fn gs1_databar_expanded_rejects_malformed_epson_data_escapes() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+
+    for payload in [b"(10)A{".as_slice(), b"(10){X".as_slice()] {
+        let mut input = vec![GS, b'k', 78, payload.len() as u8];
+        input.extend_from_slice(payload);
+
+        let error = render(&input, &profile).expect_err("an invalid escape must not be guessed");
+        assert!(matches!(
+            error,
+            RenderError::InvalidBarcodeData {
+                system: "GS1 DataBar Expanded",
+                reason: "invalid GS1 DataBar Expanded data structure",
+                ..
+            }
+        ));
+    }
+}
+
+#[test]
+fn gs1_databar_expanded_rejects_data_that_exceeds_symbol_capacity() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarExpanded);
+    let mut payload = Vec::from(b"91".as_slice());
+    payload.extend(std::iter::repeat_n(b'a', 76));
+    let mut input = vec![GS, b'k', 78, payload.len() as u8];
+    input.extend_from_slice(&payload);
+
+    let error = render(&input, &profile).expect_err("Expanded reduced data has a 77-byte limit");
+
+    assert!(matches!(
+        error,
+        RenderError::InvalidBarcodeData {
+            system: "GS1 DataBar Expanded",
+            reason: "invalid GS1 DataBar Expanded data structure",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn gs1_databar_uses_gs_h_when_it_exceeds_the_symbol_minimum() {
     let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarOmnidirectional);
     let input = [
@@ -957,6 +1229,7 @@ fn gs1_databar_systems_require_their_exact_profile_capability() {
             "GS k GS1 DataBar Truncated",
         ),
         (77, b"1501234567890".as_slice(), "GS k GS1 DataBar Limited"),
+        (78, b"(10)12A".as_slice(), "GS k GS1 DataBar Expanded"),
     ] {
         let mut input = vec![GS, b'k', system, payload.len() as u8];
         input.extend_from_slice(payload);

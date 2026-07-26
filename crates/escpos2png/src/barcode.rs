@@ -640,6 +640,57 @@ pub(crate) fn encode_gs1_databar_limited(data: &[u8]) -> Result<EncodedBarcode, 
     encode_gs1_databar_gtin(data, 10, crate::databar::encode_limited)
 }
 
+pub(crate) fn encode_gs1_databar_expanded(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
+    if data.len() < 2 {
+        return Err(BarcodeError::Length);
+    }
+    let (encoded, hri) = parse_gs1_databar_expanded(data)?;
+    let modules = crate::databar::encode_expanded(&encoded).ok_or(BarcodeError::Format)?;
+    Ok(EncodedBarcode::from_modules(&modules, hri).with_minimum_height_modules(34))
+}
+
+fn parse_gs1_databar_expanded(data: &[u8]) -> Result<(Vec<u8>, Vec<char>), BarcodeError> {
+    let mut encoded = Vec::with_capacity(data.len());
+    let mut hri = Vec::with_capacity(data.len());
+    let mut index = 0;
+    while index < data.len() {
+        match data[index] {
+            b'{' => {
+                let escaped = *data.get(index + 1).ok_or(BarcodeError::Format)?;
+                match escaped {
+                    b'1' => encoded.push(0x1d),
+                    b'(' | b')' => {
+                        encoded.push(escaped);
+                        hri.push(char::from(escaped));
+                    }
+                    _ => return Err(BarcodeError::Format),
+                }
+                index += 2;
+            }
+            parenthesis @ (b'(' | b')') => {
+                // Unescaped parentheses make AI delimiters readable in HRI,
+                // but Epson does not include them in the encoded GS1 data.
+                hri.push(char::from(parenthesis));
+                index += 1;
+            }
+            byte if is_gs1_expanded_character(byte) => {
+                encoded.push(byte);
+                hri.push(char::from(byte));
+                index += 1;
+            }
+            _ => return Err(BarcodeError::Character),
+        }
+    }
+    if encoded.len() < 2 || !encoded[0..2].iter().all(u8::is_ascii_digit) {
+        return Err(BarcodeError::Format);
+    }
+    Ok((encoded, hri))
+}
+
+fn is_gs1_expanded_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || b" !\"%&'$*+,-./:;<=>?_".contains(&byte)
+}
+
 fn encode_gs1_databar_gtin(
     data: &[u8],
     minimum_height_modules: u8,

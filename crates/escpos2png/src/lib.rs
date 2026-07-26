@@ -1063,6 +1063,19 @@ fn execute_gs_k(
                 },
             }
         })?,
+        78 => barcode::encode_gs1_databar_expanded(payload).map_err(|error| {
+            RenderError::InvalidBarcodeData {
+                system: "GS1 DataBar Expanded",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => "expected at least two bytes",
+                    barcode::BarcodeError::Character => {
+                        "contains a character outside the GS1 encodable set"
+                    }
+                    barcode::BarcodeError::Format => "invalid GS1 DataBar Expanded data structure",
+                },
+            }
+        })?,
         79 => barcode::encode_code128_auto(payload).map_err(|error| {
             RenderError::InvalidBarcodeData {
                 system: "Code 128 auto",

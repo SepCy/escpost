@@ -41,7 +41,7 @@ fn reports_the_renderer_profile_and_initial_state_assumption() {
         env!("CARGO_PKG_VERSION")
     );
     assert_eq!(rendered.metadata.profile_id, "NT-5890K");
-    assert_eq!(rendered.metadata.profile_revision, 6);
+    assert_eq!(rendered.metadata.profile_revision, 7);
     assert_eq!(rendered.metadata.canonical_profile_sha256.len(), 64);
     assert_eq!(
         rendered.metadata.upstream_repository,

@@ -133,6 +133,8 @@ vertical_units_per_inch = 203
 [defaults]
 line_spacing_dots = 30
 code_page = 0
+international_character_set = 0
+carriage_return = "ignored"
 
 [fonts.a]
 columns = 32
@@ -180,6 +182,17 @@ and after `ESC @`. The compiler imports the profile's complete `codePages`
 mapping from the pinned upstream record and rejects a default slot that is not
 present there. The renderer resolves `ESC t n` through this mapping because
 the same numeric `n` can identify different encodings on different printers.
+
+`defaults.international_character_set` is the `ESC R` set active at power-on
+and after `ESC @`. Version 1 accepts Epson's common sets 0–17. International
+substitution is applied to the documented ASCII positions before the selected
+code page is decoded and the glyph is requested.
+
+`defaults.carriage_return` is either `ignored` or `line_feed`. It captures the
+printer's effective auto-line-feed configuration: horizontal thermal printers
+ignore `CR` when auto line feed is disabled and process it like `LF` when
+enabled. When this device configuration has not been physically observed, the
+profile records the chosen value as an approximation.
 
 `features` is a partial table. Omitted flags retain their fully resolved
 upstream values. Present flags are classified as confirmed or corrected by
@@ -254,6 +267,7 @@ The compiler rejects:
 - unknown TOML fields;
 - invalid types or units;
 - non-positive DPI, dimensions, or character counts;
+- a default international character set without implemented semantics;
 - geometry inconsistent with the selected color or surface model;
 - references to conformance cases that do not exist;
 - approximation paths that do not identify canonical fields; and

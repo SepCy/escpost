@@ -4,7 +4,7 @@
     "NT-5890K": {
       "schema_version": 1,
       "id": "NT-5890K",
-      "revision": 6,
+      "revision": 7,
       "geometry": {
         "printable_width_dots": 384,
         "dpi_x": 203,
@@ -16,7 +16,9 @@
       },
       "defaults": {
         "line_spacing_dots": 30,
-        "code_page": 0
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
       },
       "fonts": {
         "a": {
@@ -120,6 +122,8 @@
       "sources": [
         "upstream:escpos-printer-db/NT-5890K",
         "manual:epson-escpos/esc_3#default-line-spacing",
+        "manual:epson-escpos/cr#print-and-carriage-return",
+        "manual:epson-escpos/esc_r#select-international-character-set",
         "manual:epson-escpos/esc_t#select-character-code-table",
         "case:tests/cases/graphics/esc-star-8dot-double-density",
         "case:tests/cases/motion/line-spacing-and-feed",
@@ -129,6 +133,10 @@
         {
           "field": "fonts.resident_glyph_shapes",
           "reason": "Representative glyphs will be used instead of printer ROM glyphs"
+        },
+        {
+          "field": "defaults.carriage_return",
+          "reason": "Assumes auto line feed is disabled until CR behavior is physically verified"
         }
       ],
       "source": {
@@ -136,8 +144,8 @@
         "upstream_commit": "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5",
         "upstream_license": "CC-BY-4.0",
         "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-        "enrichment_sha256": "01b6d8c44687a1a83c694dc6bf8ce1eb0d157bff0398e8539660473e818fa87d",
-        "canonical_profile_sha256": "408819604df5a89f28939e3d62d0c324d641d99b9f422c85cf942a7455d56c51"
+        "enrichment_sha256": "7c09f10785c926fd253520f99d2f3405d5492e107a8ae123fc25871e499f0bd9",
+        "canonical_profile_sha256": "d605e3465af2bbc41feecdf46965b627d521df2c2226b2130646c6c93cb55697"
       }
     }
   }

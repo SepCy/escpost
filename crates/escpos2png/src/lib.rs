@@ -1,13 +1,14 @@
 //! Dot-accurate ESC/POS rendering.
 
 mod barcode;
+mod international;
 mod qr;
 
 use encoding_rs::{
     Encoding, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255,
     WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
 };
-use escpos2png_profiles::{Font as ProfileFont, PrinterProfile};
+use escpos2png_profiles::{CarriageReturnMode, Font as ProfileFont, PrinterProfile};
 use fontdue::{Font, FontSettings};
 use oem_cp::{
     Cp437, Cp720, Cp737, Cp775, Cp850, Cp852, Cp855, Cp857, Cp858, Cp860, Cp861, Cp862, Cp863,
@@ -212,6 +213,9 @@ pub enum RenderError {
         offset: usize,
     },
 
+    #[error("unsupported international character set {character_set} at byte offset {offset}")]
+    UnsupportedInternationalCharacterSet { character_set: u8, offset: usize },
+
     #[error(
         "byte {byte:#04x} is undefined in code page {code_page} ({encoding}) at byte offset {offset}"
     )]
@@ -355,6 +359,10 @@ pub fn render_with_options(
             }
             0x0a => {
                 state.line_feed()?;
+                1
+            }
+            0x0d => {
+                state.carriage_return()?;
                 1
             }
             0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
@@ -575,6 +583,22 @@ fn execute_esc_command(
                 1 | 49 => state.select_font_b(),
                 font => return Err(RenderError::UnsupportedCharacterFont { font, offset }),
             }
+            Ok(3)
+        }
+        0x52 => {
+            let Some(character_set) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "ESC R",
+                    offset,
+                });
+            };
+            if character_set > 17 {
+                return Err(RenderError::UnsupportedInternationalCharacterSet {
+                    character_set,
+                    offset,
+                });
+            }
+            state.select_international_character_set(character_set);
             Ok(3)
         }
         0x5c => {
@@ -1534,6 +1558,9 @@ struct PrinterState {
     code_pages: BTreeMap<u8, String>,
     default_code_page: u8,
     active_code_page: u8,
+    default_international_character_set: u8,
+    active_international_character_set: u8,
+    carriage_return_mode: CarriageReturnMode,
     right_side_character_spacing: u32,
     default_tab_positions: Vec<u32>,
     tab_positions: Vec<u32>,
@@ -1603,6 +1630,9 @@ impl PrinterState {
             code_pages: profile.code_pages.clone(),
             default_code_page: profile.defaults.code_page,
             active_code_page: profile.defaults.code_page,
+            default_international_character_set: profile.defaults.international_character_set,
+            active_international_character_set: profile.defaults.international_character_set,
+            carriage_return_mode: profile.defaults.carriage_return,
             right_side_character_spacing: 0,
             tab_positions: default_tab_positions.clone(),
             default_tab_positions,
@@ -1647,6 +1677,7 @@ impl PrinterState {
         self.vertical_motion_units_per_inch = self.default_vertical_motion_units_per_inch;
         self.active_font = self.font_a.clone();
         self.active_code_page = self.default_code_page;
+        self.active_international_character_set = self.default_international_character_set;
         self.right_side_character_spacing = 0;
         self.tab_positions.clone_from(&self.default_tab_positions);
         self.character_width_multiplier = 1;
@@ -1888,6 +1919,10 @@ impl PrinterState {
         self.active_code_page = code_page;
     }
 
+    fn select_international_character_set(&mut self, character_set: u8) {
+        self.active_international_character_set = character_set;
+    }
+
     fn feed_lines(&mut self, lines: u8) -> Result<(), RenderError> {
         let remaining_width = self.line.width.saturating_sub(self.line_used_width);
         // Track logical data width rather than scanning black dots. This keeps
@@ -1942,7 +1977,11 @@ impl PrinterState {
             });
         }
 
-        let Some(character) = decode_printable_byte(byte, encoding) else {
+        // ESC R replaces a small set of ASCII positions independently of the
+        // active ESC t table. Other bytes continue through normal decoding.
+        let character = international::substitution(self.active_international_character_set, byte)
+            .or_else(|| decode_printable_byte(byte, encoding));
+        let Some(character) = character else {
             return Err(RenderError::UndefinedCodePageByte {
                 byte,
                 code_page: self.active_code_page,
@@ -2568,6 +2607,13 @@ impl PrinterState {
 
     fn line_feed(&mut self) -> Result<(), RenderError> {
         self.feed_lines(1)
+    }
+
+    fn carriage_return(&mut self) -> Result<(), RenderError> {
+        match self.carriage_return_mode {
+            CarriageReturnMode::Ignored => Ok(()),
+            CarriageReturnMode::LineFeed => self.line_feed(),
+        }
     }
 
     fn into_surfaces(mut self) -> Result<Vec<MonoSurface>, RenderError> {

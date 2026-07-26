@@ -27,6 +27,8 @@ a focused checklist, not a request to test every possible command ordering.
 | `GS L` and `GS W` print area | Barcodes and two-dimensional symbols | Origin, width, justification, clipping, and oversized data | Covered |
 | `ESC !`, `ESC M`, and `GS !` text metrics | Tabs, wrapping, spacing, and absolute or relative positioning | Cursor movement uses the active character cell and size at the documented time | Covered |
 | `ESC 2` and `ESC 3` line spacing | Text, `ESC *`, and raster graphics | Character-height clearance, explicit `ESC *` row advance, and commands that feed independently | Covered |
+| Profile `CR` mode | Line buffering and line spacing | Ignored CR and auto-line-feed CR behavior | Covered |
+| `ESC R` and `ESC t` character state | Printable ASCII substitutions and code-page decoding | Substitution precedes glyph lookup; `ESC @` restores both profile defaults | Covered |
 | Beginning-of-line state | Justification, print-area, raster, and cut commands | Commands are accepted, ignored, or treated as data exactly as documented | Covered |
 | `ESC @` initialization | Persistent modes, motion units, tabs, print area, and pending data | Defaults are restored, pending data is cleared, and already-fed paper remains | Covered |
 | Text print modes | Raster and buffered graphics, barcodes, and two-dimensional symbols | Modes that the specification excludes do not alter graphics or symbols | Covered |
@@ -37,6 +39,10 @@ a focused checklist, not a request to test every possible command ordering.
 - `render_justification.rs` owns behavior governed by `ESC a`.
 - `render_print_area.rs` owns behavior governed by `GS L` and `GS W`.
 - `render_initialization.rs` owns state reset and pending-buffer behavior.
+- `render_international.rs` owns `ESC R` framing, substitution, and reset
+  behavior with `ESC t`.
+- `render_line_spacing.rs` owns profile-selected `CR` behavior in addition to
+  explicit feed commands.
 - `render_buffering.rs` owns beginning-of-line and command-recognition rules.
 - Command-specific files continue to own framing, valid operands, scaling, and
   malformed-input behavior for that command.

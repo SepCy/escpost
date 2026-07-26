@@ -1,7 +1,7 @@
 use escpos2png_profiles::{
-    CanonicalProfileError, CompileProfileError, ProfileChange, ProfileChangeKind, compile_profile,
-    compile_profile_with_lock, from_canonical_json, from_canonical_profile_pack_json,
-    to_canonical_json, to_canonical_profile_pack_json,
+    CanonicalProfileError, CarriageReturnMode, CompileProfileError, ProfileChange,
+    ProfileChangeKind, compile_profile, compile_profile_with_lock, from_canonical_json,
+    from_canonical_profile_pack_json, to_canonical_json, to_canonical_profile_pack_json,
 };
 use serde_json::Value;
 
@@ -28,24 +28,29 @@ fn nt_5890k_compiles_to_rendering_geometry() {
             compiled.profile.geometry.dpi_y,
             compiled.profile.motion.horizontal_units_per_inch,
             compiled.profile.motion.vertical_units_per_inch,
-            compiled.profile.defaults.line_spacing_dots,
-            compiled.profile.defaults.code_page,
             compiled.source.upstream_profile_sha256.as_str(),
             compiled.source.upstream_commit.as_str(),
         ),
         (
             "NT-5890K",
-            6,
+            7,
             384,
             203,
             203,
             203,
             203,
-            30,
-            0,
             RESOLVED_PROFILE_SHA256,
             UPSTREAM_COMMIT,
         )
+    );
+    assert_eq!(
+        (
+            compiled.profile.defaults.line_spacing_dots,
+            compiled.profile.defaults.code_page,
+            compiled.profile.defaults.international_character_set,
+            compiled.profile.defaults.carriage_return,
+        ),
+        (30, 0, 0, CarriageReturnMode::Ignored)
     );
     assert_eq!(compiled.profile.source, compiled.source);
     assert_eq!(compiled.profile.schema_version, 1);
@@ -233,6 +238,8 @@ fn nt_5890k_reports_which_values_the_enrichment_confirms() {
         "motion.vertical_units_per_inch",
         "defaults.line_spacing_dots",
         "defaults.code_page",
+        "defaults.international_character_set",
+        "defaults.carriage_return",
         "fonts.a.columns",
         "fonts.a.cell_width_dots",
         "fonts.a.cell_height_dots",
@@ -247,6 +254,8 @@ fn nt_5890k_reports_which_values_the_enrichment_confirms() {
         kind: if field.starts_with("motion.")
             || field == "defaults.line_spacing_dots"
             || field == "defaults.code_page"
+            || field == "defaults.international_character_set"
+            || field == "defaults.carriage_return"
             || (field.starts_with("fonts.")
                 && field != "fonts.a.columns"
                 && field != "fonts.b.columns")
@@ -315,6 +324,22 @@ fn profiles_reject_a_default_code_page_missing_from_the_imported_profile() {
     assert!(matches!(
         error,
         CompileProfileError::UnknownDefaultCodePage { code_page: 15 }
+    ));
+}
+
+#[test]
+fn profiles_reject_an_international_set_outside_the_version_one_table() {
+    let invalid_enrichment = ENRICHMENT_TOML.replace(
+        "international_character_set = 0",
+        "international_character_set = 18",
+    );
+
+    let error = compile_profile(CAPABILITIES_JSON, &invalid_enrichment)
+        .expect_err("the default set must have implemented substitution semantics");
+
+    assert!(matches!(
+        error,
+        CompileProfileError::UnsupportedDefaultInternationalCharacterSet { character_set: 18 }
     ));
 }
 

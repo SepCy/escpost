@@ -75,6 +75,17 @@ pub struct PrinterDefaults {
     pub line_spacing_dots: u32,
     /// Character-table slot active at power-on and after `ESC @`.
     pub code_page: u8,
+    /// International character set active at power-on and after `ESC @`.
+    pub international_character_set: u8,
+    /// Whether CR is ignored or prints and feeds like LF.
+    pub carriage_return: CarriageReturnMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CarriageReturnMode {
+    Ignored,
+    LineFeed,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -181,6 +192,9 @@ pub enum CompileProfileError {
 
     #[error("default code page {code_page} does not exist in the imported printer profile")]
     UnknownDefaultCodePage { code_page: u8 },
+
+    #[error("unsupported default international character set {character_set}")]
+    UnsupportedDefaultInternationalCharacterSet { character_set: u8 },
 
     #[error(
         "resolved upstream profile hash changed for {profile:?}: \
@@ -514,6 +528,15 @@ fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<
             u32::from(enrichment.defaults.code_page),
         ),
         classify_change(
+            "defaults.international_character_set",
+            None,
+            u32::from(enrichment.defaults.international_character_set),
+        ),
+        ProfileChange {
+            field: "defaults.carriage_return".to_owned(),
+            kind: ProfileChangeKind::Added,
+        },
+        classify_change(
             "fonts.a.columns",
             font_a_columns,
             enrichment.fonts.a.columns,
@@ -799,10 +822,23 @@ fn validate_runtime_values(
     validate_positive("fonts.b.cell_height_dots", fonts.b.cell_height_dots)?;
     validate_font("fonts.a", &fonts.a)?;
     validate_font("fonts.b", &fonts.b)?;
+    validate_default_international_character_set(defaults.international_character_set)?;
     if let Some(code_pages) = code_pages {
         validate_default_code_page(defaults.code_page, code_pages)?;
     }
     Ok(())
+}
+
+fn validate_default_international_character_set(
+    character_set: u8,
+) -> Result<(), CompileProfileError> {
+    // Version 1 renders Epson's common 0–17 sets. The additional Indic sets
+    // need matching glyph coverage before profiles may select them by default.
+    if character_set <= 17 {
+        return Ok(());
+    }
+
+    Err(CompileProfileError::UnsupportedDefaultInternationalCharacterSet { character_set })
 }
 
 fn validate_positive(field: &'static str, value: u32) -> Result<(), CompileProfileError> {

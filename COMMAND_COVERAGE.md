@@ -40,7 +40,7 @@ rather than guess.
 | Printable bytes | Decode through the profile-selected table and compose text | Implemented | Implemented | Pending |
 | `HT` | Move to the next horizontal tab stop | Implemented | Implemented | Pending |
 | `LF` | Print and feed one line | Implemented | Implemented | Pending |
-| `CR` | Carriage-return behavior selected by the profile | Planned | Planned | Pending |
+| `CR` | Ignore or print/feed according to the profile's auto-line-feed behavior | Implemented | Implemented | Pending |
 | `ESC @` | Initialize printer state and clear pending print data | Implemented | Implemented | Pending |
 | `ESC SP` | Set right-side character spacing | Implemented | Implemented | Pending |
 | `ESC !` | Select Font A/B and common print modes | Implemented | Implemented | Pending |
@@ -51,7 +51,7 @@ rather than guess.
 | `ESC E` | Select emphasized printing | Implemented | Implemented | Pending |
 | `ESC J` | Print and feed by vertical motion units | Implemented | Implemented | Pending |
 | `ESC M` | Select Font A/B | Implemented | Implemented | Pending |
-| `ESC R` | Select international character substitutions | Planned | Planned | Pending |
+| `ESC R` | Select international character substitutions | Implemented | Implemented | Pending |
 | `ESC a` | Select line justification | Implemented | Implemented | Pending |
 | `ESC d` | Print and feed whole lines | Implemented | Implemented | Pending |
 | `ESC t` | Select a profile-defined character-code table | Implemented | Implemented | Pending |
@@ -61,6 +61,13 @@ rather than guess.
 `ESC a` is covered for text and every currently implemented version 1
 graphics and symbol family. See
 [`tests/INTERACTIONS.md`](tests/INTERACTIONS.md).
+
+`ESC R` implements Epson's common international sets 0–17 and resets to the
+profile default on `ESC @`. The additional Indic sets 66–75 and 82 remain
+post-v1 because the representative glyph asset does not yet cover those
+scripts. The NT-5890K currently assumes that auto line feed is disabled, so
+its ignored-`CR` behavior remains an explicit profile approximation until a
+physical probe confirms it.
 
 ## Positioning and print area
 

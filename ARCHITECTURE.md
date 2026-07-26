@@ -177,6 +177,8 @@ fonts
 ├── baseline
 ├── default character spacing
 ├── supported code pages
+├── default international character set
+├── carriage-return/auto-line-feed behavior
 └── glyph-provider selection
 
 capabilities

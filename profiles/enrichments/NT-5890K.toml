@@ -1,11 +1,13 @@
 schema_version = 1
 profile = "NT-5890K"
-revision = 6
+revision = 7
 upstream_profile_sha256 = "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
 
 sources = [
     "upstream:escpos-printer-db/NT-5890K",
     "manual:epson-escpos/esc_3#default-line-spacing",
+    "manual:epson-escpos/cr#print-and-carriage-return",
+    "manual:epson-escpos/esc_r#select-international-character-set",
     "manual:epson-escpos/esc_t#select-character-code-table",
     "case:tests/cases/graphics/esc-star-8dot-double-density",
     "case:tests/cases/motion/line-spacing-and-feed",
@@ -24,6 +26,10 @@ vertical_units_per_inch = 203
 [defaults]
 line_spacing_dots = 30
 code_page = 0
+international_character_set = 0
+# Most horizontal thermal printers ignore CR while auto line feed is disabled.
+# Keep this assumption visible below until the connected NT-5890K is probed.
+carriage_return = "ignored"
 
 [fonts.a]
 columns = 32
@@ -47,3 +53,7 @@ qr_code = true
 [[approximations]]
 field = "fonts.resident_glyph_shapes"
 reason = "Representative glyphs will be used instead of printer ROM glyphs"
+
+[[approximations]]
+field = "defaults.carriage_return"
+reason = "Assumes auto line feed is disabled until CR behavior is physically verified"

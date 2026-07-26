@@ -1,5 +1,5 @@
 use escpos2png_profiles::{
-    CanonicalProfileError, CarriageReturnMode, CompileProfileError, ProfileChange,
+    BarcodeSystem, CanonicalProfileError, CarriageReturnMode, CompileProfileError, ProfileChange,
     ProfileChangeKind, compile_profile, compile_profile_with_lock, from_canonical_json,
     from_canonical_profile_pack_json, to_canonical_json, to_canonical_profile_pack_json,
 };
@@ -33,7 +33,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         ),
         (
             "NT-5890K",
-            7,
+            8,
             384,
             203,
             203,
@@ -53,7 +53,7 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         (30, 0, 0, CarriageReturnMode::Ignored)
     );
     assert_eq!(compiled.profile.source, compiled.source);
-    assert_eq!(compiled.profile.schema_version, 1);
+    assert_eq!(compiled.profile.schema_version, 2);
     assert_eq!(compiled.source.enrichment_sha256.len(), 64);
     assert_eq!(compiled.source.canonical_profile_sha256.len(), 64);
     assert_eq!(
@@ -80,8 +80,8 @@ fn nt_5890k_compiles_to_rendering_geometry() {
     );
     assert_eq!(
         (
-            compiled.profile.features.barcode_a,
-            compiled.profile.features.barcode_b,
+            !compiled.profile.features.barcodes.function_a.is_empty(),
+            !compiled.profile.features.barcodes.function_b.is_empty(),
             compiled.profile.features.bit_image_column,
             compiled.profile.features.bit_image_raster,
             compiled.profile.features.paper_full_cut,
@@ -90,6 +90,120 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         ),
         (true, true, true, true, false, false, true)
     );
+}
+
+#[test]
+fn imported_barcode_flags_expand_only_to_the_legacy_systems_they_describe() {
+    let mut capabilities: Value =
+        serde_json::from_slice(CAPABILITIES_JSON).expect("the upstream fixture should be JSON");
+    capabilities["profiles"]["NT-5890K"]["features"]["barcodeA"] = Value::Bool(true);
+    capabilities["profiles"]["NT-5890K"]["features"]["barcodeB"] = Value::Bool(true);
+    let capabilities =
+        serde_json::to_vec(&capabilities).expect("the modified fixture should serialize");
+
+    // Remove the exact enrichment so this test exercises only the upstream
+    // booleans. The synthetic profile change gets its own reviewed hash below.
+    let table_start = ENRICHMENT_TOML
+        .find("[features.barcodes]")
+        .expect("the fixture should contain barcode enrichment");
+    let table_end = ENRICHMENT_TOML[table_start..]
+        .find("[[approximations]]")
+        .map(|offset| table_start + offset)
+        .expect("the barcode table should end before approximations");
+    let without_barcode_enrichment = format!(
+        "{}{}",
+        &ENRICHMENT_TOML[..table_start],
+        &ENRICHMENT_TOML[table_end..]
+    );
+    let first_error = compile_profile(&capabilities, &without_barcode_enrichment)
+        .expect_err("changing the synthetic upstream profile must change its hash");
+    let actual_hash = match first_error {
+        CompileProfileError::UpstreamProfileHashMismatch { actual, .. } => actual,
+        other => panic!("expected an upstream hash mismatch, got {other}"),
+    };
+    let reviewed_enrichment =
+        without_barcode_enrichment.replace(RESOLVED_PROFILE_SHA256, &actual_hash);
+
+    let compiled = compile_profile(&capabilities, &reviewed_enrichment)
+        .expect("reviewed upstream barcode flags should compile");
+
+    assert_eq!(
+        compiled
+            .profile
+            .features
+            .barcodes
+            .function_b
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        vec![
+            BarcodeSystem::UpcA,
+            BarcodeSystem::UpcE,
+            BarcodeSystem::Ean13,
+            BarcodeSystem::Ean8,
+            BarcodeSystem::Code39,
+            BarcodeSystem::Itf,
+            BarcodeSystem::Codabar,
+            BarcodeSystem::Code93,
+            BarcodeSystem::Code128,
+        ]
+    );
+    assert!(
+        !compiled
+            .profile
+            .features
+            .barcodes
+            .function_b
+            .contains(&BarcodeSystem::Code128Auto),
+        "model-dependent systems must require explicit profile evidence"
+    );
+}
+
+#[test]
+fn enrichment_can_advertise_model_dependent_function_b_systems_exactly() {
+    let enrichment = ENRICHMENT_TOML.replace(
+        "    \"code_128\",\n]",
+        "    \"code_128\",\n    \"gs1_128\",\n    \"code_128_auto\",\n]",
+    );
+
+    let compiled = compile_profile(CAPABILITIES_JSON, &enrichment)
+        .expect("explicit model-dependent barcode systems should compile");
+
+    assert!(
+        compiled
+            .profile
+            .features
+            .barcodes
+            .function_b
+            .contains(&BarcodeSystem::Gs1_128)
+    );
+    assert!(
+        compiled
+            .profile
+            .features
+            .barcodes
+            .function_b
+            .contains(&BarcodeSystem::Code128Auto)
+    );
+}
+
+#[test]
+fn enrichment_rejects_a_system_that_has_no_function_a_command_number() {
+    let enrichment = ENRICHMENT_TOML.replace(
+        "    \"codabar\",\n]\nfunction_b",
+        "    \"codabar\",\n    \"code_128\",\n]\nfunction_b",
+    );
+
+    let error = compile_profile(CAPABILITIES_JSON, &enrichment)
+        .expect_err("Function A cannot encode Code 128");
+
+    assert!(matches!(
+        error,
+        CompileProfileError::InvalidBarcodeSystemForFunction {
+            function: "A",
+            system: BarcodeSystem::Code128,
+        }
+    ));
 }
 
 #[test]
@@ -265,8 +379,8 @@ fn nt_5890k_reports_which_values_the_enrichment_confirms() {
             ProfileChangeKind::Confirmed
         },
     });
-    let expected_feature_corrections =
-        ["barcode_a", "barcode_b", "qr_code"].map(|feature| ProfileChange {
+    let expected_feature_corrections = ["barcodes.function_a", "barcodes.function_b", "qr_code"]
+        .map(|feature| ProfileChange {
             field: format!("features.{feature}"),
             kind: ProfileChangeKind::Corrected,
         });

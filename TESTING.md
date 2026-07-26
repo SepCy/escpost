@@ -116,8 +116,10 @@ corrections.
 The upstream NT-5890K profile inherits conservative native-symbol flags from
 the generic `simple` profile. A raw hardware probe on the connected printer
 successfully printed both `GS k` Function A/B EAN-13 symbols and a Model 2
-`GS ( k` QR symbol. Revision 6 therefore corrects those capability flags in
-the escpos2png enrichment. The exact stream and observation are retained in
+`GS ( k` QR symbol. The enrichment therefore advertises the established
+Function A/B systems and QR support. Newer model-dependent Function B systems
+such as GS1-128 and automatic Code 128 remain absent until they are separately
+verified on this printer. The exact stream and observation are retained in
 `tests/cases/symbols/native-symbols-nt-5890k`.
 
 ## Conformance case format

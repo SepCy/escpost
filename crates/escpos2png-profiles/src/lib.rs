@@ -1,16 +1,36 @@
 //! Printer profile import, enrichment, and validation.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-const ENRICHMENT_SCHEMA_VERSION: u32 = 1;
-const CANONICAL_PROFILE_SCHEMA_VERSION: u32 = 1;
+const ENRICHMENT_SCHEMA_VERSION: u32 = 2;
+const CANONICAL_PROFILE_SCHEMA_VERSION: u32 = 2;
 const UPSTREAM_LOCK_SCHEMA_VERSION: u32 = 1;
 const BUNDLED_UPSTREAM_LOCK_TOML: &str = include_str!("../../../profiles/upstream.lock.toml");
+const LEGACY_FUNCTION_A_SYSTEMS: [BarcodeSystem; 7] = [
+    BarcodeSystem::UpcA,
+    BarcodeSystem::UpcE,
+    BarcodeSystem::Ean13,
+    BarcodeSystem::Ean8,
+    BarcodeSystem::Code39,
+    BarcodeSystem::Itf,
+    BarcodeSystem::Codabar,
+];
+const LEGACY_FUNCTION_B_SYSTEMS: [BarcodeSystem; 9] = [
+    BarcodeSystem::UpcA,
+    BarcodeSystem::UpcE,
+    BarcodeSystem::Ean13,
+    BarcodeSystem::Ean8,
+    BarcodeSystem::Code39,
+    BarcodeSystem::Itf,
+    BarcodeSystem::Codabar,
+    BarcodeSystem::Code93,
+    BarcodeSystem::Code128,
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CompiledProfile {
@@ -110,8 +130,7 @@ pub struct Font {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Features {
-    pub barcode_a: bool,
-    pub barcode_b: bool,
+    pub barcodes: BarcodeCapabilities,
     pub bit_image_column: bool,
     pub bit_image_raster: bool,
     pub graphics: bool,
@@ -123,6 +142,47 @@ pub struct Features {
     pub pulse_standard: bool,
     pub qr_code: bool,
     pub star_commands: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BarcodeCapabilities {
+    pub function_a: BTreeSet<BarcodeSystem>,
+    pub function_b: BTreeSet<BarcodeSystem>,
+}
+
+/// A logical symbol system supported by one of the two `GS k` wire formats.
+///
+/// The enum is ordered in ESC/POS command-number order. A `BTreeSet` therefore
+/// produces deterministic canonical JSON without a separate sorting step.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BarcodeSystem {
+    UpcA,
+    UpcE,
+    #[serde(rename = "ean_13")]
+    Ean13,
+    #[serde(rename = "ean_8")]
+    Ean8,
+    #[serde(rename = "code_39")]
+    Code39,
+    Itf,
+    Codabar,
+    #[serde(rename = "code_93")]
+    Code93,
+    #[serde(rename = "code_128")]
+    Code128,
+    Gs1_128,
+    #[serde(rename = "gs1_databar_omnidirectional")]
+    Gs1DataBarOmnidirectional,
+    #[serde(rename = "gs1_databar_truncated")]
+    Gs1DataBarTruncated,
+    #[serde(rename = "gs1_databar_limited")]
+    Gs1DataBarLimited,
+    #[serde(rename = "gs1_databar_expanded")]
+    Gs1DataBarExpanded,
+    #[serde(rename = "code_128_auto")]
+    Code128Auto,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -195,6 +255,12 @@ pub enum CompileProfileError {
 
     #[error("unsupported default international character set {character_set}")]
     UnsupportedDefaultInternationalCharacterSet { character_set: u8 },
+
+    #[error("barcode system {system:?} has no GS k Function {function} command number")]
+    InvalidBarcodeSystemForFunction {
+        function: &'static str,
+        system: BarcodeSystem,
+    },
 
     #[error(
         "resolved upstream profile hash changed for {profile:?}: \
@@ -271,9 +337,7 @@ struct Enrichment {
 #[serde(default, deny_unknown_fields)]
 struct FeatureOverrides {
     #[serde(skip_serializing_if = "Option::is_none")]
-    barcode_a: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    barcode_b: Option<bool>,
+    barcodes: Option<BarcodeCapabilities>,
     #[serde(skip_serializing_if = "Option::is_none")]
     bit_image_column: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -316,9 +380,27 @@ struct UpstreamCapabilities {
 struct ImportedProfile {
     media: ImportedMedia,
     fonts: BTreeMap<String, ImportedFont>,
-    features: Features,
+    features: ImportedFeatures,
     #[serde(rename = "codePages")]
     code_pages: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ImportedFeatures {
+    barcode_a: bool,
+    barcode_b: bool,
+    bit_image_column: bool,
+    bit_image_raster: bool,
+    graphics: bool,
+    high_density: bool,
+    paper_full_cut: bool,
+    paper_part_cut: bool,
+    pdf417_code: bool,
+    pulse_bel: bool,
+    pulse_standard: bool,
+    qr_code: bool,
+    star_commands: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -581,9 +663,11 @@ fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<
     changes
 }
 
-fn apply_feature_overrides(mut features: Features, overrides: &FeatureOverrides) -> Features {
-    apply_bool_override(&mut features.barcode_a, overrides.barcode_a);
-    apply_bool_override(&mut features.barcode_b, overrides.barcode_b);
+fn apply_feature_overrides(imported: ImportedFeatures, overrides: &FeatureOverrides) -> Features {
+    let mut features = imported.into_canonical();
+    if let Some(barcodes) = &overrides.barcodes {
+        features.barcodes.clone_from(barcodes);
+    }
     apply_bool_override(&mut features.bit_image_column, overrides.bit_image_column);
     apply_bool_override(&mut features.bit_image_raster, overrides.bit_image_raster);
     apply_bool_override(&mut features.graphics, overrides.graphics);
@@ -598,6 +682,39 @@ fn apply_feature_overrides(mut features: Features, overrides: &FeatureOverrides)
     features
 }
 
+impl ImportedFeatures {
+    fn into_canonical(self) -> Features {
+        let function_a = if self.barcode_a {
+            BTreeSet::from(LEGACY_FUNCTION_A_SYSTEMS)
+        } else {
+            BTreeSet::new()
+        };
+        let function_b = if self.barcode_b {
+            BTreeSet::from(LEGACY_FUNCTION_B_SYSTEMS)
+        } else {
+            BTreeSet::new()
+        };
+
+        Features {
+            barcodes: BarcodeCapabilities {
+                function_a,
+                function_b,
+            },
+            bit_image_column: self.bit_image_column,
+            bit_image_raster: self.bit_image_raster,
+            graphics: self.graphics,
+            high_density: self.high_density,
+            paper_full_cut: self.paper_full_cut,
+            paper_part_cut: self.paper_part_cut,
+            pdf417_code: self.pdf417_code,
+            pulse_bel: self.pulse_bel,
+            pulse_standard: self.pulse_standard,
+            qr_code: self.qr_code,
+            star_commands: self.star_commands,
+        }
+    }
+}
+
 fn apply_bool_override(target: &mut bool, replacement: Option<bool>) {
     if let Some(replacement) = replacement {
         *target = replacement;
@@ -606,21 +723,24 @@ fn apply_bool_override(target: &mut bool, replacement: Option<bool>) {
 
 fn classify_feature_changes(
     changes: &mut Vec<ProfileChange>,
-    imported: &Features,
+    imported: &ImportedFeatures,
     overrides: &FeatureOverrides,
 ) {
-    push_feature_change(
-        changes,
-        "features.barcode_a",
-        imported.barcode_a,
-        overrides.barcode_a,
-    );
-    push_feature_change(
-        changes,
-        "features.barcode_b",
-        imported.barcode_b,
-        overrides.barcode_b,
-    );
+    if let Some(enriched) = &overrides.barcodes {
+        let imported = imported.clone().into_canonical().barcodes;
+        push_barcode_capability_change(
+            changes,
+            "features.barcodes.function_a",
+            &imported.function_a,
+            &enriched.function_a,
+        );
+        push_barcode_capability_change(
+            changes,
+            "features.barcodes.function_b",
+            &imported.function_b,
+            &enriched.function_b,
+        );
+    }
     push_feature_change(
         changes,
         "features.bit_image_column",
@@ -687,6 +807,22 @@ fn classify_feature_changes(
         imported.star_commands,
         overrides.star_commands,
     );
+}
+
+fn push_barcode_capability_change(
+    changes: &mut Vec<ProfileChange>,
+    field: &str,
+    imported: &BTreeSet<BarcodeSystem>,
+    enriched: &BTreeSet<BarcodeSystem>,
+) {
+    changes.push(ProfileChange {
+        field: field.to_owned(),
+        kind: if imported == enriched {
+            ProfileChangeKind::Confirmed
+        } else {
+            ProfileChangeKind::Corrected
+        },
+    });
 }
 
 fn push_feature_change(
@@ -780,7 +916,11 @@ fn validate_profile_values(enrichment: &Enrichment) -> Result<(), CompileProfile
         &enrichment.defaults,
         &enrichment.fonts,
         None,
-    )
+    )?;
+    if let Some(barcodes) = &enrichment.features.barcodes {
+        validate_barcode_capabilities(barcodes)?;
+    }
+    Ok(())
 }
 
 fn validate_runtime_profile(profile: &PrinterProfile) -> Result<(), CompileProfileError> {
@@ -790,7 +930,22 @@ fn validate_runtime_profile(profile: &PrinterProfile) -> Result<(), CompileProfi
         &profile.defaults,
         &profile.fonts,
         Some(&profile.code_pages),
-    )
+    )?;
+    validate_barcode_capabilities(&profile.features.barcodes)
+}
+
+fn validate_barcode_capabilities(
+    barcodes: &BarcodeCapabilities,
+) -> Result<(), CompileProfileError> {
+    for system in &barcodes.function_a {
+        if !LEGACY_FUNCTION_A_SYSTEMS.contains(system) {
+            return Err(CompileProfileError::InvalidBarcodeSystemForFunction {
+                function: "A",
+                system: *system,
+            });
+        }
+    }
+    Ok(())
 }
 
 fn validate_runtime_values(

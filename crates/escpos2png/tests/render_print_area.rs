@@ -122,10 +122,9 @@ fn gs_w_clips_column_format_graphics_at_the_print_area_edge() {
 
 #[test]
 fn barcodes_use_the_configured_print_area_and_reject_oversized_symbols() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")
         .profile;
-    profile.features.barcode_b = true;
     let barcode = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
         b'2', b'3', b'4', b'5',

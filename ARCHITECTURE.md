@@ -183,6 +183,7 @@ fonts
 
 capabilities
 ├── supported commands and parameter ranges
+├── exact `GS k` systems accepted by Function A and Function B
 ├── Standard/Page mode restrictions
 ├── color model
 ├── storage capacities
@@ -293,6 +294,13 @@ layout.
 This boundary keeps the standards-heavy QR error-correction and masking
 implementation replaceable. A future hardware finding can replace or fork the
 adapter without changing ESC/POS parsing or the public rendering API.
+
+Barcode availability is checked by logical system, not by one broad native
+barcode boolean. Imported Function A/B booleans enable only their established
+systems; newer model-dependent systems require explicit profile enrichment.
+This lets the core implement GS1-128 or automatic Code 128 without claiming
+that every printer with legacy Function B support can execute those command
+numbers.
 
 ## 10. Dot surfaces and color models
 

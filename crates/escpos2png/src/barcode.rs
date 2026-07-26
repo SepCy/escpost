@@ -535,11 +535,123 @@ pub(crate) fn encode_code128_auto(data: &[u8]) -> Result<EncodedBarcode, Barcode
     Ok(encoded)
 }
 
+pub(crate) fn encode_gs1_128(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
+    if data.len() < 2 {
+        return Err(BarcodeError::Length);
+    }
+    if data.iter().any(|byte| *byte > 0x7f) {
+        return Err(BarcodeError::Character);
+    }
+
+    // GS1 controls are logical Code 128 symbols rather than bytes. Keeping
+    // them as tokens lets the automatic code-set planner compact digits across
+    // FNC1 without ever confusing the control with user data.
+    let mut tokens = vec![Code128Token::Fnc1];
+    let mut hri = Vec::with_capacity(data.len());
+    let mut check_digit_data_start = None;
+    let mut separator_seen = false;
+    let mut index = 0;
+    while index < data.len() {
+        let byte = data[index];
+        if byte == b'{' {
+            let escaped = *data.get(index + 1).ok_or(BarcodeError::Format)?;
+            match escaped {
+                b'1' => {
+                    tokens.push(Code128Token::Fnc1);
+                    hri.push(' ');
+                    separator_seen = false;
+                    check_digit_data_start = None;
+                }
+                b'3' => {
+                    tokens.push(Code128Token::Fnc3);
+                    hri.push(' ');
+                }
+                b'(' | b')' | b'*' | b'{' => {
+                    tokens.push(Code128Token::Data(escaped));
+                    hri.push(char::from(escaped));
+                }
+                _ => return Err(BarcodeError::Format),
+            }
+            index += 2;
+            continue;
+        }
+
+        match byte {
+            b'(' => hri.push('('),
+            b')' => {
+                hri.push(')');
+                if !separator_seen {
+                    check_digit_data_start = Some(tokens.len());
+                    separator_seen = true;
+                }
+            }
+            b' ' => {
+                hri.push(' ');
+                if !separator_seen {
+                    check_digit_data_start = Some(tokens.len());
+                    separator_seen = true;
+                }
+            }
+            b'*' => {
+                let start = check_digit_data_start.ok_or(BarcodeError::Format)?;
+                let check_digit = gs1_modulus_10_tokens(&tokens[start..])?;
+                tokens.push(Code128Token::Data(check_digit + b'0'));
+                hri.push(char::from(check_digit + b'0'));
+            }
+            byte => {
+                tokens.push(Code128Token::Data(byte));
+                hri.push(if byte.is_ascii_control() {
+                    ' '
+                } else {
+                    char::from(byte)
+                });
+            }
+        }
+        index += 1;
+    }
+    if tokens.len() == 1 {
+        return Err(BarcodeError::Length);
+    }
+
+    // Epson chooses the Code 128 sets automatically for GS1-128.
+    let explicit = plan_code128_tokens(&tokens);
+    let mut encoded = encode_code128(&explicit)?;
+    encoded.hri = hri;
+    Ok(encoded)
+}
+
+fn gs1_modulus_10_tokens(tokens: &[Code128Token]) -> Result<u8, BarcodeError> {
+    let digits = tokens
+        .iter()
+        .map(|token| match token {
+            Code128Token::Data(byte) if byte.is_ascii_digit() => Ok(*byte),
+            _ => Err(BarcodeError::Format),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    if digits.is_empty() {
+        return Err(BarcodeError::Format);
+    }
+    let sum = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(index, digit)| u32::from(digit - b'0') * if index.is_multiple_of(2) { 3 } else { 1 })
+        .sum::<u32>();
+    Ok(((10 - sum % 10) % 10) as u8)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Code128Set {
     A,
     B,
     C,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Code128Token {
+    Data(u8),
+    Fnc1,
+    Fnc3,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -578,6 +690,15 @@ impl Code128Set {
 }
 
 fn plan_code128_auto(data: &[u8]) -> Vec<u8> {
+    let tokens = data
+        .iter()
+        .copied()
+        .map(Code128Token::Data)
+        .collect::<Vec<_>>();
+    plan_code128_tokens(&tokens)
+}
+
+fn plan_code128_tokens(data: &[Code128Token]) -> Vec<u8> {
     // A state combines the current code set (including "not started") with
     // FNC4's lower/upper latch. Every Code 128 symbol has the same width apart
     // from the fixed stop symbol, so minimizing symbol count also minimizes
@@ -596,8 +717,36 @@ fn plan_code128_auto(data: &[u8]) -> Vec<u8> {
             let (current, upper_mode) = code128_state(state_index);
             let mut best_cost = UNREACHABLE;
             let mut best_choice = None;
-            let text_character = data[position] & 0x7f;
-            let byte_uses_upper_half = !data[position].is_ascii();
+
+            if matches!(data[position], Code128Token::Fnc1 | Code128Token::Fnc3) {
+                for target in [Code128Set::B, Code128Set::A, Code128Set::C] {
+                    if data[position] == Code128Token::Fnc3 && target == Code128Set::C {
+                        continue;
+                    }
+                    consider_code128_auto_choice(
+                        Code128AutoChoice {
+                            target,
+                            advance: 1,
+                            shift: false,
+                            fnc4_count: 0,
+                            upper_after: upper_mode,
+                        },
+                        1 + usize::from(current != Some(target))
+                            + costs[position + 1][code128_state_index(Some(target), upper_mode)],
+                        &mut best_cost,
+                        &mut best_choice,
+                    );
+                }
+                costs[position][state_index] = best_cost;
+                choices[position][state_index] = best_choice;
+                continue;
+            }
+
+            let Code128Token::Data(byte) = data[position] else {
+                unreachable!("control tokens returned above")
+            };
+            let text_character = byte & 0x7f;
+            let byte_uses_upper_half = !byte.is_ascii();
             let needs_upper_shift = byte_uses_upper_half != upper_mode;
 
             // Prefer B when A and B are equally narrow. Ordinary text then
@@ -678,10 +827,18 @@ fn plan_code128_auto(data: &[u8]) -> Vec<u8> {
                 }
             }
 
-            if data
+            let decimal_pair = data
                 .get(position..position + 2)
-                .is_some_and(|pair| pair.iter().all(u8::is_ascii_digit))
-            {
+                .and_then(|pair| match pair {
+                    [Code128Token::Data(first), Code128Token::Data(second)]
+                        if first.is_ascii_digit() && second.is_ascii_digit() =>
+                    {
+                        Some(())
+                    }
+                    _ => None,
+                })
+                .is_some();
+            if decimal_pair {
                 let target = Code128Set::C;
                 consider_code128_auto_choice(
                     Code128AutoChoice {
@@ -725,16 +882,25 @@ fn plan_code128_auto(data: &[u8]) -> Vec<u8> {
             }
         }
 
-        for character in &data[position..position + choice.advance] {
-            let character = if choice.target == Code128Set::C {
-                *character
-            } else {
-                *character & 0x7f
-            };
-            if character == b'{' {
-                explicit.extend_from_slice(b"{{");
-            } else {
-                explicit.push(character);
+        match data[position] {
+            Code128Token::Fnc1 => explicit.extend_from_slice(b"{1"),
+            Code128Token::Fnc3 => explicit.extend_from_slice(b"{3"),
+            Code128Token::Data(_) => {
+                for token in &data[position..position + choice.advance] {
+                    let Code128Token::Data(character) = *token else {
+                        unreachable!("a data choice cannot span a control token")
+                    };
+                    let character = if choice.target == Code128Set::C {
+                        character
+                    } else {
+                        character & 0x7f
+                    };
+                    if character == b'{' {
+                        explicit.extend_from_slice(b"{{");
+                    } else {
+                        explicit.push(character);
+                    }
+                }
             }
         }
         upper_mode = choice.upper_after;

@@ -94,11 +94,17 @@ An upstream update that changes only an unrelated profile therefore does not
 invalidate `NT-5890K`. A change to `NT-5890K`, `POS-5890`, or another ancestor
 changes its resolved hash and requires review.
 
-The compiled runtime profile imports upstream command-capability flags, such
-as raster-image, barcode, QR-code, and cutter support. Rendering uses these
-flags to reject commands that the selected printer cannot execute. They remain
+The compiled runtime profile imports upstream command capabilities, such as
+raster-image, barcode, QR-code, and cutter support. Rendering uses them to
+reject commands that the selected printer cannot execute. They remain
 protected by the same resolved-profile hash, so an upstream capability change
 cannot silently alter a compiled profile.
+
+The upstream database represents each `GS k` Function A/B family with one
+boolean. The canonical profile is more precise: it stores the exact barcode
+systems accepted through each wire format. A true upstream boolean expands
+only to that function's established systems (`m=0`–`6` or `m=65`–`73`).
+Model-dependent systems `m=74`–`79` require explicit enrichment evidence.
 
 An enrichment may confirm or correct individual capability flags when a
 printer manual or physical case provides stronger evidence than an inherited
@@ -110,9 +116,9 @@ canonical hashes; the vendored upstream snapshot is never edited in place.
 Enrichments are partial, typed TOML documents:
 
 ```toml
-schema_version = 1
+schema_version = 2
 profile = "NT-5890K"
-revision = 1
+revision = 8
 upstream_profile_sha256 = "<resolved-profile-sha256>"
 
 sources = [
@@ -149,9 +155,29 @@ cell_height_dots = 17
 baseline_dots = 14
 
 [features]
-barcode_a = true
-barcode_b = true
 qr_code = true
+
+[features.barcodes]
+function_a = [
+    "upc_a",
+    "upc_e",
+    "ean_13",
+    "ean_8",
+    "code_39",
+    "itf",
+    "codabar",
+]
+function_b = [
+    "upc_a",
+    "upc_e",
+    "ean_13",
+    "ean_8",
+    "code_39",
+    "itf",
+    "codabar",
+    "code_93",
+    "code_128",
+]
 
 [[approximations]]
 field = "fonts.resident_glyph_shapes"
@@ -196,8 +222,11 @@ profile records the chosen value as an approximation.
 
 `features` is a partial table. Omitted flags retain their fully resolved
 upstream values. Present flags are classified as confirmed or corrected by
-comparison with upstream. Unknown feature names are rejected, just like other
-unknown enrichment fields.
+comparison with upstream. `features.barcodes.function_a` and `function_b`
+replace their respective imported system sets exactly; adding one
+model-dependent system does not imply support for its neighbors. Unknown
+feature or barcode-system names are rejected, just like other unknown
+enrichment fields.
 
 ## Automatic change classification
 
@@ -268,6 +297,8 @@ The compiler rejects:
 - invalid types or units;
 - non-positive DPI, dimensions, or character counts;
 - a default international character set without implemented semantics;
+- a barcode system listed under a `GS k` function that has no command number
+  for that system;
 - geometry inconsistent with the selected color or surface model;
 - references to conformance cases that do not exist;
 - approximation paths that do not identify canonical fields; and

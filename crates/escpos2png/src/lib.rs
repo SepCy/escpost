@@ -8,13 +8,13 @@ use encoding_rs::{
     Encoding, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255,
     WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
 };
-use escpos2png_profiles::{CarriageReturnMode, Font as ProfileFont, PrinterProfile};
+use escpos2png_profiles::{BarcodeSystem, CarriageReturnMode, Font as ProfileFont, PrinterProfile};
 use fontdue::{Font, FontSettings};
 use oem_cp::{
     Cp437, Cp720, Cp737, Cp775, Cp850, Cp852, Cp855, Cp857, Cp858, Cp860, Cp861, Cp862, Cp863,
     Cp864, Cp865, Cp866, Cp869, Cp874,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 use thiserror::Error;
 
@@ -924,13 +924,17 @@ fn execute_gs_k(
 
     let (system, payload, mut command_length, is_function_a) = match system {
         function_a @ 0..=6 => {
-            state.require_barcode_a(offset)?;
+            let barcode_system = barcode_system_from_function_b(function_a + 65)
+                .expect("every Function A command maps to a known barcode system");
+            state.require_barcode_system(barcode_system, true, offset)?;
             let (payload, command_length) = function_a_barcode_payload(data, function_a, offset)?;
             state.validate_command_payload_size(payload.len())?;
             (function_a + 65, payload, command_length, true)
         }
         function_b @ 65..=79 => {
-            state.require_barcode_b(offset)?;
+            let barcode_system = barcode_system_from_function_b(function_b)
+                .expect("the accepted Function B range contains known barcode systems");
+            state.require_barcode_system(barcode_system, false, offset)?;
             let payload_length =
                 usize::from(*data.get(3).ok_or(RenderError::TruncatedCommand {
                     command: "GS k",
@@ -1075,6 +1079,17 @@ fn execute_gs_k(
                 },
             })?
         }
+        74 => {
+            barcode::encode_gs1_128(payload).map_err(|error| RenderError::InvalidBarcodeData {
+                system: "GS1-128",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => "expected 2 through 255 bytes",
+                    barcode::BarcodeError::Character => "expected bytes 00h through 7Fh",
+                    barcode::BarcodeError::Format => "invalid GS1-128 data structure",
+                },
+            })?
+        }
         79 => barcode::encode_code128_auto(payload).map_err(|error| {
             RenderError::InvalidBarcodeData {
                 system: "Code 128 auto",
@@ -1096,6 +1111,27 @@ fn execute_gs_k(
     };
     state.print_barcode(&barcode, offset)?;
     Ok(command_length)
+}
+
+fn barcode_system_from_function_b(system: u8) -> Option<BarcodeSystem> {
+    Some(match system {
+        65 => BarcodeSystem::UpcA,
+        66 => BarcodeSystem::UpcE,
+        67 => BarcodeSystem::Ean13,
+        68 => BarcodeSystem::Ean8,
+        69 => BarcodeSystem::Code39,
+        70 => BarcodeSystem::Itf,
+        71 => BarcodeSystem::Codabar,
+        72 => BarcodeSystem::Code93,
+        73 => BarcodeSystem::Code128,
+        74 => BarcodeSystem::Gs1_128,
+        75 => BarcodeSystem::Gs1DataBarOmnidirectional,
+        76 => BarcodeSystem::Gs1DataBarTruncated,
+        77 => BarcodeSystem::Gs1DataBarLimited,
+        78 => BarcodeSystem::Gs1DataBarExpanded,
+        79 => BarcodeSystem::Code128Auto,
+        _ => return None,
+    })
 }
 
 fn function_a_barcode_payload(
@@ -1612,8 +1648,8 @@ struct PrinterState {
     barcode_module_width: u32,
     hri_position: HriPosition,
     hri_font: ProfileFont,
-    supports_barcode_a: bool,
-    supports_barcode_b: bool,
+    function_a_barcodes: BTreeSet<BarcodeSystem>,
+    function_b_barcodes: BTreeSet<BarcodeSystem>,
     supports_qr: bool,
     supports_column_bit_image: bool,
     supports_raster_bit_image: bool,
@@ -1684,8 +1720,8 @@ impl PrinterState {
             barcode_module_width: DEFAULT_BARCODE_MODULE_WIDTH_DOTS,
             hri_position: HriPosition::None,
             hri_font,
-            supports_barcode_a: profile.features.barcode_a,
-            supports_barcode_b: profile.features.barcode_b,
+            function_a_barcodes: profile.features.barcodes.function_a.clone(),
+            function_b_barcodes: profile.features.barcodes.function_b.clone(),
             supports_qr: profile.features.qr_code,
             supports_column_bit_image: profile.features.bit_image_column,
             supports_raster_bit_image: profile.features.bit_image_raster,
@@ -2544,12 +2580,18 @@ impl PrinterState {
         self.require_profile_feature(self.supports_graphics, "GS ( L graphics", offset)
     }
 
-    fn require_barcode_b(&self, offset: usize) -> Result<(), RenderError> {
-        self.require_profile_feature(self.supports_barcode_b, "GS k Function B barcode", offset)
-    }
-
-    fn require_barcode_a(&self, offset: usize) -> Result<(), RenderError> {
-        self.require_profile_feature(self.supports_barcode_a, "GS k Function A barcode", offset)
+    fn require_barcode_system(
+        &self,
+        system: BarcodeSystem,
+        is_function_a: bool,
+        offset: usize,
+    ) -> Result<(), RenderError> {
+        let supported = if is_function_a {
+            self.function_a_barcodes.contains(&system)
+        } else {
+            self.function_b_barcodes.contains(&system)
+        };
+        self.require_profile_feature(supported, barcode_system_command_name(system), offset)
     }
 
     fn require_qr(&self, offset: usize) -> Result<(), RenderError> {
@@ -2664,6 +2706,26 @@ impl PrinterState {
             self.completed_sheets.push(self.roll);
         }
         Ok(self.completed_sheets)
+    }
+}
+
+fn barcode_system_command_name(system: BarcodeSystem) -> &'static str {
+    match system {
+        BarcodeSystem::UpcA => "GS k UPC-A",
+        BarcodeSystem::UpcE => "GS k UPC-E",
+        BarcodeSystem::Ean13 => "GS k EAN-13",
+        BarcodeSystem::Ean8 => "GS k EAN-8",
+        BarcodeSystem::Code39 => "GS k Code 39",
+        BarcodeSystem::Itf => "GS k ITF",
+        BarcodeSystem::Codabar => "GS k Codabar",
+        BarcodeSystem::Code93 => "GS k Code 93",
+        BarcodeSystem::Code128 => "GS k Code 128",
+        BarcodeSystem::Gs1_128 => "GS k GS1-128",
+        BarcodeSystem::Gs1DataBarOmnidirectional => "GS k GS1 DataBar Omnidirectional",
+        BarcodeSystem::Gs1DataBarTruncated => "GS k GS1 DataBar Truncated",
+        BarcodeSystem::Gs1DataBarLimited => "GS k GS1 DataBar Limited",
+        BarcodeSystem::Gs1DataBarExpanded => "GS k GS1 DataBar Expanded",
+        BarcodeSystem::Code128Auto => "GS k Code 128 auto",
     }
 }
 

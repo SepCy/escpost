@@ -131,10 +131,9 @@ fn esc_at_restores_default_code_page_and_tab_stops() {
 
 #[test]
 fn esc_at_restores_barcode_defaults() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")
         .profile;
-    profile.features.barcode_b = true;
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'H', 2, GS, b'f', 1, ESC, b'@', GS, b'k', 67, 12, b'5',
         b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',

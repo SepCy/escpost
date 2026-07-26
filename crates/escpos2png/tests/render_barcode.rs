@@ -1,5 +1,5 @@
 use escpos2png::{RenderError, render};
-use escpos2png_profiles::compile_profile;
+use escpos2png_profiles::{BarcodeSystem, compile_profile};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
@@ -8,9 +8,8 @@ const GS: u8 = 0x1d;
 
 #[test]
 fn prints_ean13_with_the_generated_check_digit_and_default_dimensions() {
-    let mut profile = test_profile();
+    let profile = test_profile();
     // Keep the command test explicit about its required profile capability.
-    profile.features.barcode_b = true;
     let input = [
         GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
     ];
@@ -37,8 +36,7 @@ fn prints_ean13_with_the_generated_check_digit_and_default_dimensions() {
 
 #[test]
 fn gs_h_sets_barcode_height_and_independent_paper_advance() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'h', 7, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3',
         b'4', b'5',
@@ -53,8 +51,7 @@ fn gs_h_sets_barcode_height_and_independent_paper_advance() {
 
 #[test]
 fn gs_w_sets_the_multilevel_barcode_module_width() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'w', 2, GS, b'h', 1, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
         b'2', b'3', b'4', b'5',
@@ -77,8 +74,7 @@ fn gs_w_sets_the_multilevel_barcode_module_width() {
 
 #[test]
 fn prints_upca_with_the_generated_check_digit() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 65, 11, b'0', b'3', b'6', b'0', b'0', b'0', b'2', b'9',
         b'1', b'4', b'5',
@@ -102,8 +98,7 @@ fn prints_upca_with_the_generated_check_digit() {
 
 #[test]
 fn prints_ean8_with_the_generated_check_digit() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 68, 7, b'5', b'5', b'1', b'2', b'3', b'4', b'5',
     ];
@@ -125,8 +120,7 @@ fn prints_ean8_with_the_generated_check_digit() {
 
 #[test]
 fn prints_upce_using_the_number_system_and_check_digit_parity() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     // This is the compressed representation of UPC-A 042100005264:
     // number system 0, data 425261, and caller-supplied check digit 4.
     let input = [
@@ -150,8 +144,7 @@ fn prints_upce_using_the_number_system_and_check_digit_parity() {
 
 #[test]
 fn upce_compresses_the_documented_eleven_digit_upca_form() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     // UPC-A 04210000526 plus its generated check digit compresses to
     // number system 0, data 425261, and check digit 4.
     let input = [
@@ -176,9 +169,7 @@ fn upce_compresses_the_documented_eleven_digit_upca_form() {
 
 #[test]
 fn function_a_and_function_b_produce_the_same_ean13_pattern() {
-    let mut profile = test_profile();
-    profile.features.barcode_a = true;
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let function_a = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 2, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
         b'2', b'3', b'4', b'5', 0,
@@ -204,9 +195,7 @@ fn function_a_and_function_b_produce_the_same_ean13_pattern() {
 
 #[test]
 fn function_a_itf_ignores_the_final_digit_when_the_count_is_odd() {
-    let mut profile = test_profile();
-    profile.features.barcode_a = true;
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let function_a = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 5, b'1', b'2', b'3', 0];
     let function_b = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 70, 2, b'1', b'2'];
 
@@ -218,8 +207,7 @@ fn function_a_itf_ignores_the_final_digit_when_the_count_is_odd() {
 
 #[test]
 fn prints_code39_with_printer_specific_narrow_and_wide_elements() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 69, 1, b'A'];
 
     let rendered = render(&input, &profile).expect("GS k should render a Code 39 barcode");
@@ -237,8 +225,7 @@ fn prints_code39_with_printer_specific_narrow_and_wide_elements() {
 
 #[test]
 fn code39_stops_at_an_asterisk_and_returns_later_bytes_to_text_processing() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let terminated_early = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 69, 3, b'A', b'*', b'B', 0x0a,
     ];
@@ -255,9 +242,7 @@ fn code39_stops_at_an_asterisk_and_returns_later_bytes_to_text_processing() {
 
 #[test]
 fn function_a_code39_stops_at_an_asterisk_without_waiting_for_nul() {
-    let mut profile = test_profile();
-    profile.features.barcode_a = true;
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let function_a = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 4, b'A', b'*', b'B', 0x0a,
     ];
@@ -277,9 +262,7 @@ fn function_a_code39_stops_at_an_asterisk_without_waiting_for_nul() {
 
 #[test]
 fn function_a_code39_does_not_treat_a_leading_start_character_as_the_stop() {
-    let mut profile = test_profile();
-    profile.features.barcode_a = true;
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let function_a = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 4, b'*', b'A', b'*', b'B', 0x0a,
     ];
@@ -297,8 +280,7 @@ fn function_a_code39_does_not_treat_a_leading_start_character_as_the_stop() {
 
 #[test]
 fn prints_itf_by_interleaving_each_pair_of_digit_patterns() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 70, 2, b'1', b'2'];
 
     let rendered = render(&input, &profile).expect("GS k should render an ITF barcode");
@@ -316,8 +298,7 @@ fn prints_itf_by_interleaving_each_pair_of_digit_patterns() {
 
 #[test]
 fn prints_codabar_with_transmitted_start_and_stop_characters() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 71, 3, b'A', b'0', b'B'];
 
     let rendered = render(&input, &profile).expect("GS k should render a Codabar barcode");
@@ -335,8 +316,7 @@ fn prints_codabar_with_transmitted_start_and_stop_characters() {
 
 #[test]
 fn prints_code93_with_c_and_k_checksums_and_the_termination_bar() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 6, b'C', b'O', b'D', b'E', b'9', b'3',
     ];
@@ -359,8 +339,7 @@ fn prints_code93_with_c_and_k_checksums_and_the_termination_bar() {
 
 #[test]
 fn code93_maps_the_complete_ascii_range_through_shift_characters() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 3, 0x00, b'a', 0x7f];
 
     let rendered = render(&input, &profile).expect("Code 93 should encode full ASCII data");
@@ -381,8 +360,7 @@ fn code93_maps_the_complete_ascii_range_through_shift_characters() {
 
 #[test]
 fn code93_hri_includes_start_and_stop_placeholders() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 1, b'A'];
 
     let rendered = render(&input, &profile).expect("Code 93 HRI should render");
@@ -404,8 +382,7 @@ fn code93_hri_includes_start_and_stop_placeholders() {
 
 #[test]
 fn code93_hri_expands_shifted_control_data_to_square_and_letter() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 1, 0x00];
 
     let rendered = render(&input, &profile).expect("Code 93 control HRI should render");
@@ -427,8 +404,7 @@ fn code93_hri_expands_shifted_control_data_to_square_and_letter() {
 
 #[test]
 fn prints_code128_from_the_explicit_escpos_code_set() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 4, b'{', b'B', b'H', b'i',
     ];
@@ -451,8 +427,7 @@ fn prints_code128_from_the_explicit_escpos_code_set() {
 
 #[test]
 fn gs_h_prints_hri_below_the_bars_and_includes_it_in_paper_advance() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'H', 2, GS, b'h', 3, GS, b'w', 2, GS, b'k', 68, 7, b'5', b'5', b'1', b'2', b'3', b'4',
         b'5',
@@ -471,8 +446,7 @@ fn gs_h_prints_hri_below_the_bars_and_includes_it_in_paper_advance() {
 
 #[test]
 fn gs_f_selects_the_hri_font_without_changing_normal_text_state() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'H', 2, GS, b'f', 1, GS, b'h', 3, GS, b'w', 2, GS, b'k', 68, 7, b'5', b'5', b'1',
         b'2', b'3', b'4', b'5',
@@ -486,8 +460,7 @@ fn gs_f_selects_the_hri_font_without_changing_normal_text_state() {
 
 #[test]
 fn code128_switches_code_sets_using_escpos_control_sequences() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 8, b'{', b'B', b'A', b'B', b'{', b'C', b'1', b'2',
     ];
@@ -510,8 +483,7 @@ fn code128_switches_code_sets_using_escpos_control_sequences() {
 
 #[test]
 fn code128_shift_uses_the_other_code_set_for_one_character() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile();
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 7, b'{', b'B', b'A', b'{', b'S', 0x01, b'B',
     ];
@@ -533,9 +505,193 @@ fn code128_shift_uses_the_other_code_set_for_one_character() {
 }
 
 #[test]
+fn gs1_128_adds_fnc1_and_the_requested_modulus_10_check_digit() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    let gs1 = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 74, 18, b'(', b'0', b'1', b')', b'9', b'5', b'0', b'1',
+        b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'*',
+    ];
+    let explicit_code128 = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 20, b'{', b'C', b'{', b'1', b'0', b'1', b'9', b'5',
+        b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'3',
+    ];
+
+    let actual = render(&gs1, &profile).expect("the Epson GS1-128 example should render");
+    let expected =
+        render(&explicit_code128, &profile).expect("the equivalent Code 128 should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn gs1_128_encodes_an_explicit_fnc1_between_concatenated_fields() {
+    let mut profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    // The complete Epson concatenation example is wider than 58 mm even at
+    // the minimum module width, so use a synthetic 80 mm print area.
+    profile.geometry.printable_width_dots = 576;
+    let gs1 = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 74, 33, b'(', b'0', b'1', b')', b'9', b'5', b'0', b'1',
+        b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'*', b' ', b'{', b'1', b'(', b'3',
+        b'1', b'0', b'2', b')', b'0', b'0', b'0', b'4', b'0', b'0',
+    ];
+    let explicit_code128 = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 32, b'{', b'C', b'{', b'1', b'0', b'1', b'9', b'5',
+        b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'3', b'{', b'1', b'3',
+        b'1', b'0', b'2', b'0', b'0', b'0', b'4', b'0', b'0',
+    ];
+
+    let actual = render(&gs1, &profile).expect("concatenated GS1-128 fields should render");
+    let expected =
+        render(&explicit_code128, &profile).expect("the equivalent Code 128 should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn gs1_128_hri_keeps_parentheses_and_shows_the_inserted_check_digit() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    let input = [
+        GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 74, 18, b'(', b'0', b'1', b')', b'9',
+        b'5', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'*',
+    ];
+
+    let actual = render(&input, &profile).expect("GS1-128 HRI should render");
+    let expected_text =
+        render(b"(01)95012345678903\n", &profile).expect("the HRI reference text should render");
+    // Eleven ordinary Code 128 symbols use 11 modules each; stop uses 13.
+    let barcode_width = (11 * 11 + 13) * 2;
+    let hri_width = 18 * profile.fonts.a.cell_width_dots;
+    let hri_left = (barcode_width - hri_width) / 2;
+
+    for y in 0..profile.fonts.a.cell_height_dots {
+        for x in 0..hri_width {
+            assert_eq!(
+                actual.sheets[0].surface.is_printed(hri_left + x, 1 + y),
+                expected_text.sheets[0].surface.is_printed(x, y),
+                "unexpected GS1-128 HRI dot at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn gs1_128_escapes_literal_special_characters_and_encodes_fnc3() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    let gs1 = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 74, 11, b'{', b'(', b'{', b')', b'{', b'*', b'{', b'{',
+        b'{', b'3', b'A',
+    ];
+    let explicit_code128 = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 12, b'{', b'B', b'{', b'1', b'(', b')', b'*', b'{',
+        b'{', b'{', b'3', b'A',
+    ];
+
+    let actual = render(&gs1, &profile).expect("escaped GS1-128 data should render");
+    let expected =
+        render(&explicit_code128, &profile).expect("the equivalent Code 128 should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn gs1_128_hri_shows_escaped_literals_and_spaces_for_controls() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    let input = [
+        GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 74, 11, b'{', b'(', b'{', b')', b'{',
+        b'*', b'{', b'{', b'{', b'3', b'A',
+    ];
+
+    let actual = render(&input, &profile).expect("GS1-128 special-character HRI should render");
+    let expected_text =
+        render(b"()*{ A\n", &profile).expect("the HRI reference text should render");
+    let barcode_width = (9 * 11 + 13) * 2;
+    let hri_width = 6 * profile.fonts.a.cell_width_dots;
+    let hri_left = (barcode_width - hri_width) / 2;
+
+    for y in 0..profile.fonts.a.cell_height_dots {
+        for x in 0..hri_width {
+            assert_eq!(
+                actual.sheets[0].surface.is_printed(hri_left + x, 1 + y),
+                expected_text.sheets[0].surface.is_printed(x, y),
+                "unexpected special-character HRI dot at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn gs1_128_requires_its_exact_profile_capability() {
+    let profile = test_profile();
+    let input = [GS, b'k', 74, 2, b'0', b'1'];
+
+    let error =
+        render(&input, &profile).expect_err("legacy Function B support must not imply GS1-128");
+
+    assert!(matches!(
+        error,
+        RenderError::CommandUnsupportedByProfile {
+            command: "GS k GS1-128",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn gs1_128_rejects_a_payload_shorter_than_two_bytes() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    let input = [GS, b'k', 74, 1, b'A'];
+
+    let error = render(&input, &profile).expect_err("GS1-128 requires at least two source bytes");
+
+    assert!(matches!(
+        error,
+        RenderError::InvalidBarcodeData {
+            system: "GS1-128",
+            reason: "expected 2 through 255 bytes",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn gs1_128_rejects_an_undefined_brace_escape() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    let input = [GS, b'k', 74, 2, b'{', b'A'];
+
+    let error =
+        render(&input, &profile).expect_err("GS1-128 accepts only its documented brace escapes");
+
+    assert!(matches!(
+        error,
+        RenderError::InvalidBarcodeData {
+            system: "GS1-128",
+            reason: "invalid GS1-128 data structure",
+            ..
+        }
+    ));
+}
+
+#[test]
+fn gs1_128_requires_an_ai_data_delimiter_before_a_check_placeholder() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1_128);
+    let input = [GS, b'k', 74, 3, b'0', b'1', b'*'];
+
+    let error =
+        render(&input, &profile).expect_err("the printer cannot infer the AI boundary by itself");
+
+    assert!(matches!(
+        error,
+        RenderError::InvalidBarcodeData {
+            system: "GS1-128",
+            reason: "invalid GS1-128 data structure",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn code128_auto_encodes_plain_text_without_an_explicit_code_set() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, b'A', b'B', b'C'];
     let explicit = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 5, b'{', b'B', b'A', b'B', b'C',
@@ -551,8 +707,7 @@ fn code128_auto_encodes_plain_text_without_an_explicit_code_set() {
 
 #[test]
 fn code128_auto_compacts_an_even_digit_run_with_code_c() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 4, b'1', b'2', b'3', b'4',
     ];
@@ -570,8 +725,7 @@ fn code128_auto_compacts_an_even_digit_run_with_code_c() {
 
 #[test]
 fn code128_auto_switches_into_and_out_of_code_c_for_a_numeric_run() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 10, b'a', b'b', b'1', b'2', b'3', b'4', b'5', b'6',
         b'c', b'd',
@@ -591,8 +745,7 @@ fn code128_auto_switches_into_and_out_of_code_c_for_a_numeric_run() {
 
 #[test]
 fn code128_auto_shifts_for_one_character_in_the_other_text_set() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, 0x01, b'a', 0x02];
     let explicit = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 7, b'{', b'A', 0x01, b'{', b'S', b'a', 0x02,
@@ -607,8 +760,7 @@ fn code128_auto_shifts_for_one_character_in_the_other_text_set() {
 
 #[test]
 fn code128_auto_combines_fnc4_and_shift_for_one_upper_character() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, 0x01, 0xe1, 0x02];
     let explicit = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 9, b'{', b'A', 0x01, b'{', b'4', b'{', b'S', b'a',
@@ -625,8 +777,7 @@ fn code128_auto_combines_fnc4_and_shift_for_one_upper_character() {
 
 #[test]
 fn code128_auto_encodes_an_upper_byte_with_fnc4() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 1, 0xff];
     let explicit = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 5, b'{', b'B', b'{', b'4', 0x7f,
@@ -642,8 +793,7 @@ fn code128_auto_encodes_an_upper_byte_with_fnc4() {
 
 #[test]
 fn code128_auto_hri_shows_the_source_byte_not_automatic_fnc4_symbols() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let input = [GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 1, 0xff];
 
     let rendered = render(&input, &profile).expect("Code 128 auto HRI should render");
@@ -664,8 +814,7 @@ fn code128_auto_hri_shows_the_source_byte_not_automatic_fnc4_symbols() {
 
 #[test]
 fn code128_auto_latches_upper_mode_for_a_run_of_upper_bytes() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 3, 0xe1, 0xe2, 0xe3];
     let explicit = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 9, b'{', b'B', b'{', b'4', b'{', b'4', b'a', b'b',
@@ -682,8 +831,7 @@ fn code128_auto_latches_upper_mode_for_a_run_of_upper_bytes() {
 
 #[test]
 fn code128_auto_unlatches_upper_mode_when_lower_bytes_resume() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 10, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, b'a', b'b', b'c',
         b'd', b'e',
@@ -703,8 +851,7 @@ fn code128_auto_unlatches_upper_mode_when_lower_bytes_resume() {
 
 #[test]
 fn code128_auto_accepts_every_byte_value() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
 
     // Exercise each value in its own narrow symbol. A single 255-byte symbol
     // would exceed this 58 mm profile's print area before testing the full
@@ -718,8 +865,7 @@ fn code128_auto_accepts_every_byte_value() {
 
 #[test]
 fn code128_auto_rejects_an_empty_payload() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let input = [GS, b'k', 79, 0];
 
     let error = render(&input, &profile).expect_err("Code 128 auto requires at least one byte");
@@ -736,8 +882,7 @@ fn code128_auto_rejects_an_empty_payload() {
 
 #[test]
 fn code128_auto_treats_an_opening_brace_as_data() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = true;
+    let profile = test_profile_with_function_b(BarcodeSystem::Code128Auto);
     let automatic = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 79, 1, b'{'];
     let explicit = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 4, b'{', b'B', b'{', b'{',
@@ -753,8 +898,7 @@ fn code128_auto_treats_an_opening_brace_as_data() {
 
 #[test]
 fn code128_auto_requires_function_b_support_from_the_profile() {
-    let mut profile = test_profile();
-    profile.features.barcode_b = false;
+    let profile = test_profile();
     let input = [GS, b'k', 79, 1, b'A'];
 
     let error = render(&input, &profile)
@@ -763,7 +907,7 @@ fn code128_auto_requires_function_b_support_from_the_profile() {
     assert!(matches!(
         error,
         RenderError::CommandUnsupportedByProfile {
-            command: "GS k Function B barcode",
+            command: "GS k Code 128 auto",
             ..
         }
     ));
@@ -774,7 +918,7 @@ fn rejects_native_barcodes_when_the_profile_does_not_support_them() {
     let mut profile = test_profile();
     // Capability gating remains important even though the physical Netum
     // probe corrected this particular profile to support native barcodes.
-    profile.features.barcode_b = false;
+    profile.features.barcodes.function_b.clear();
     let input = [
         GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
     ];
@@ -784,7 +928,7 @@ fn rejects_native_barcodes_when_the_profile_does_not_support_them() {
     assert!(matches!(
         error,
         RenderError::CommandUnsupportedByProfile {
-            command: "GS k Function B barcode",
+            command: "GS k EAN-13",
             ..
         }
     ));
@@ -794,6 +938,12 @@ fn test_profile() -> escpos2png_profiles::PrinterProfile {
     compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")
         .profile
+}
+
+fn test_profile_with_function_b(system: BarcodeSystem) -> escpos2png_profiles::PrinterProfile {
+    let mut profile = test_profile();
+    profile.features.barcodes.function_b.insert(system);
+    profile
 }
 
 fn cell_contains_printed_dots(

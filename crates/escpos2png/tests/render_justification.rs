@@ -76,10 +76,9 @@ fn esc_a_centers_a_raster_image_inside_the_active_print_area() {
 
 #[test]
 fn esc_a_places_one_dimensional_barcodes_inside_the_active_print_area() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")
         .profile;
-    profile.features.barcode_b = true;
 
     for (justification, expected_left) in [(0, 0), (1, 97), (2, 194)] {
         let input = [

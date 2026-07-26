@@ -756,6 +756,83 @@ fn gs1_databar_truncated_reuses_the_omnidirectional_pattern_at_its_own_minimum_h
 }
 
 #[test]
+fn gs1_databar_limited_matches_the_iso_figure_7_vector_and_minimum_height() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarLimited);
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 77, 13, b'1', b'5', b'0', b'1', b'2', b'3', b'4', b'5',
+        b'6', b'7', b'8', b'9', b'0',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS1 DataBar Limited should render");
+    let surface = &rendered.sheets[0].surface;
+    // ISO/IEC 24724:2011 Figure 7, independently reproduced by Zint. The
+    // final five light modules are the revision's right-side clear area.
+    let modules =
+        modules("0100011001100011011010100111010010101101001101001001011000110111001100110100000");
+
+    // Epson overrides GS h when it is below 10 times the module width.
+    assert_eq!(surface.height(), 20);
+    assert_module_pattern(surface, &modules, 2, 20);
+}
+
+#[test]
+fn gs1_databar_limited_matches_zint_vectors_across_all_reachable_pair_groups() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarLimited);
+    // These vectors cover every right-pair group plus the two non-zero
+    // left-pair groups reachable within Limited's permitted numeric range.
+    let cases = [
+        (
+            b"0000000000000".as_slice(),
+            "0101010101010000001000000111010111010100100101010101010100000010000001110100000",
+        ),
+        (
+            b"0000000183064".as_slice(),
+            "0101010101010000001000000111001010101011100101010101010100011110000011110100000",
+        ),
+        (
+            b"0000000820064".as_slice(),
+            "0101010101010000001000000111011010110100100101010101010101111110001111110100000",
+        ),
+        (
+            b"0000001000776".as_slice(),
+            "0101010101010000001000000111010111010101000101010101010100000110000011110100000",
+        ),
+        (
+            b"0000001491021".as_slice(),
+            "0101010101010000001000000111010100101011001101010101010100111110000111110100000",
+        ),
+        (
+            b"0000001979845".as_slice(),
+            "0101010101010000001000000111010111010010100101010101010100000010000000010100000",
+        ),
+        (
+            b"0000001996939".as_slice(),
+            "0101010101010000001000000111011011010101000101010101010101111110111111110100000",
+        ),
+        (
+            b"0368610347973".as_slice(),
+            "0100000011100000010101010101001010101110100101010101010100000010000001110100000",
+        ),
+        (
+            b"1651255079973".as_slice(),
+            "0100000111100011110101010101010101101100100101010110010010001001100000010100000",
+        ),
+        (
+            b"1999999999999".as_slice(),
+            "0100111100110110101101111101010101101011000101010000101110001101011110010100000",
+        ),
+    ];
+
+    for (payload, expected) in cases {
+        let mut input = vec![GS, b'h', 1, GS, b'w', 2, GS, b'k', 77, 13];
+        input.extend_from_slice(payload);
+
+        let rendered = render(&input, &profile).expect("the Zint reference value should render");
+        assert_module_pattern(&rendered.sheets[0].surface, &modules(expected), 2, 20);
+    }
+}
+
+#[test]
 fn gs1_databar_uses_gs_h_when_it_exceeds_the_symbol_minimum() {
     let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarOmnidirectional);
     let input = [
@@ -783,6 +860,24 @@ fn gs1_databar_omnidirectional_hri_adds_the_ai_and_check_digit() {
         66,
         192,
         "(01)20012345678909",
+    );
+}
+
+#[test]
+fn gs1_databar_limited_hri_adds_the_ai_and_check_digit() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarLimited);
+    let input = [
+        GS, b'H', 2, GS, b'h', 1, GS, b'w', 2, GS, b'k', 77, 13, b'1', b'5', b'0', b'1', b'2',
+        b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0',
+    ];
+
+    let rendered = render(&input, &profile).expect("DataBar Limited HRI should render");
+    assert_hri_below(
+        &rendered.sheets[0].surface,
+        &profile,
+        20,
+        158,
+        "(01)15012345678907",
     );
 }
 
@@ -826,6 +921,27 @@ fn gs1_databar_omnidirectional_rejects_non_decimal_data() {
 }
 
 #[test]
+fn gs1_databar_limited_rejects_values_above_1999999999999() {
+    let profile = test_profile_with_function_b(BarcodeSystem::Gs1DataBarLimited);
+    let input = [
+        GS, b'k', 77, 13, b'2', b'0', b'0', b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9',
+        b'0',
+    ];
+
+    let error =
+        render(&input, &profile).expect_err("Limited permits only leading digits zero and one");
+
+    assert!(matches!(
+        error,
+        RenderError::InvalidBarcodeData {
+            system: "GS1 DataBar Limited",
+            reason: "expected a value between 0000000000000 and 1999999999999",
+            ..
+        }
+    ));
+}
+
+#[test]
 fn gs1_databar_systems_require_their_exact_profile_capability() {
     let profile = test_profile();
 
@@ -840,6 +956,7 @@ fn gs1_databar_systems_require_their_exact_profile_capability() {
             b"2001234567890".as_slice(),
             "GS k GS1 DataBar Truncated",
         ),
+        (77, b"1501234567890".as_slice(), "GS k GS1 DataBar Limited"),
     ] {
         let mut input = vec![GS, b'k', system, payload.len() as u8];
         input.extend_from_slice(payload);

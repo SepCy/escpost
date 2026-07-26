@@ -22,16 +22,15 @@ Version 1 targets safe, deterministic Standard-mode previews for:
 - column, raster, and modern graphics;
 - native one-dimensional barcodes and QR codes;
 - full and partial cuts plus non-printing drawer pulses; and
-- structured diagnostics, device events, limits, and reproducibility metadata.
+- device events, bounded resource use, and reproducibility metadata.
 
 This boundary covers the commands emitted by Receiptful's current
 HTML-to-ESC/POS renderer and adds common native graphics and symbol commands
 found in print jobs produced elsewhere.
 
 Page mode, downloaded or non-volatile resources, macros, bidirectional status
-emulation, multiple-tone graphics, and spot colors remain post-v1 work. The
-architecture keeps room for them; version 1 must report them as unsupported
-rather than guess.
+emulation, multiple-tone graphics, and spot colors remain post-v1 work.
+Version 1 reports them as unsupported rather than guessing their behavior.
 
 ## Standard-mode controls and text
 
@@ -122,8 +121,11 @@ latches. GS1 DataBar Omnidirectional (`m=75`) and Truncated (`m=76`) implement
 the identical 96-module symbol pattern, automatic AI `01` and check digit,
 18-character HRI, and their respective `33X` and `13X` minimum heights. Their
 logical patterns are checked against independent BWIPP vectors. DataBar
-Limited (`m=77`) and Expanded (`m=78`) remain pending. Both barcode command
-framings return bytes after an early Code 39 stop to normal ESC/POS processing.
+Limited (`m=77`) implements its restricted numeric range, 79-module pattern,
+automatic AI and check digit, HRI, and `10X` minimum height. Its combinatorial
+groups and ISO Figure 7 pattern are checked against independent Zint vectors.
+DataBar Expanded (`m=78`) remains pending. Both barcode command framings return
+bytes after an early Code 39 stop to normal ESC/POS processing.
 Code 93 HRI includes the specified start/stop and control-character
 placeholders. Every system is gated independently by the printer profile. The
 Epson barcode reset defaults, GS1-128, automatic Code 128, and the implemented

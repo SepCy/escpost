@@ -1050,6 +1050,19 @@ fn execute_gs_k(
                 },
             }
         })?,
+        77 => barcode::encode_gs1_databar_limited(payload).map_err(|error| {
+            RenderError::InvalidBarcodeData {
+                system: "GS1 DataBar Limited",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => "expected exactly 13 digits",
+                    barcode::BarcodeError::Character => "expected decimal digits only",
+                    barcode::BarcodeError::Format => {
+                        "expected a value between 0000000000000 and 1999999999999"
+                    }
+                },
+            }
+        })?,
         79 => barcode::encode_code128_auto(payload).map_err(|error| {
             RenderError::InvalidBarcodeData {
                 system: "Code 128 auto",

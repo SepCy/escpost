@@ -636,6 +636,10 @@ pub(crate) fn encode_gs1_databar_truncated(data: &[u8]) -> Result<EncodedBarcode
     encode_gs1_databar_gtin(data, 13, crate::databar::encode_omnidirectional)
 }
 
+pub(crate) fn encode_gs1_databar_limited(data: &[u8]) -> Result<EncodedBarcode, BarcodeError> {
+    encode_gs1_databar_gtin(data, 10, crate::databar::encode_limited)
+}
+
 fn encode_gs1_databar_gtin(
     data: &[u8],
     minimum_height_modules: u8,

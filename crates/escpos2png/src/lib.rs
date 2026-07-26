@@ -9,7 +9,9 @@ use encoding_rs::{
     Encoding, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255,
     WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
 };
-use escpos2png_profiles::{BarcodeSystem, CarriageReturnMode, Font as ProfileFont, PrinterProfile};
+use escpos2png_profiles::{
+    Approximation, BarcodeSystem, CarriageReturnMode, Font as ProfileFont, PrinterProfile,
+};
 use fontdue::{Font, FontSettings};
 use oem_cp::{
     Cp437, Cp720, Cp737, Cp775, Cp850, Cp852, Cp855, Cp857, Cp858, Cp860, Cp861, Cp862, Cp863,
@@ -85,8 +87,7 @@ enum HriPosition {
 pub struct RenderResult {
     pub sheets: Vec<RenderedSheet>,
     pub device_events: Vec<DeviceEvent>,
-    pub diagnostics: Vec<Diagnostic>,
-    pub completeness: Completeness,
+    pub approximations: Vec<Approximation>,
     pub metadata: RenderMetadata,
 }
 
@@ -100,50 +101,10 @@ pub enum DeviceEvent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Diagnostic {
-    pub severity: DiagnosticSeverity,
-    pub byte_offset: Option<usize>,
-    pub command: Option<&'static str>,
-    pub message: String,
-    pub effect: DiagnosticEffect,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiagnosticSeverity {
-    Information,
-    Warning,
-    Error,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiagnosticEffect {
-    None,
-    NonVisualBehaviorOnly,
-    VisualOutputIncomplete,
-    ParsingAborted,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Completeness {
-    Complete,
-    CompleteWithNonVisualEvents,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenderMetadata {
     pub renderer_version: &'static str,
     pub profile_id: String,
     pub canonical_profile_sha256: String,
-    pub upstream_repository: String,
-    pub upstream_commit: String,
-    pub upstream_profile_sha256: String,
-    pub enrichment_sha256: String,
-    pub initial_state: InitialStateAssumption,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum InitialStateAssumption {
-    ProfileResetDefaults,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -384,40 +345,14 @@ pub fn render_with_options(
         sheets.push(RenderedSheet { surface, png });
     }
 
-    let completeness = if device_events.is_empty() {
-        Completeness::Complete
-    } else {
-        Completeness::CompleteWithNonVisualEvents
-    };
-    let diagnostics = profile
-        .approximations
-        .iter()
-        .map(|approximation| Diagnostic {
-            severity: DiagnosticSeverity::Information,
-            byte_offset: None,
-            command: None,
-            message: format!(
-                "profile approximation {}: {}",
-                approximation.field, approximation.reason
-            ),
-            effect: DiagnosticEffect::None,
-        })
-        .collect();
-
     Ok(RenderResult {
         sheets,
         device_events,
-        diagnostics,
-        completeness,
+        approximations: profile.approximations.clone(),
         metadata: RenderMetadata {
             renderer_version: env!("CARGO_PKG_VERSION"),
             profile_id: profile.id.clone(),
-            canonical_profile_sha256: profile.source.canonical_profile_sha256.clone(),
-            upstream_repository: profile.source.upstream_repository.clone(),
-            upstream_commit: profile.source.upstream_commit.clone(),
-            upstream_profile_sha256: profile.source.upstream_profile_sha256.clone(),
-            enrichment_sha256: profile.source.enrichment_sha256.clone(),
-            initial_state: InitialStateAssumption::ProfileResetDefaults,
+            canonical_profile_sha256: profile.canonical_profile_sha256.clone(),
         },
     })
 }

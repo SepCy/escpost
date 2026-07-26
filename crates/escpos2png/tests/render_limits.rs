@@ -73,9 +73,7 @@ fn rejects_output_that_would_create_more_than_the_allowed_sheet_count() {
 }
 
 fn test_profile() -> escpos2png_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile
+    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }
 
 fn options_with(update: impl FnOnce(&mut RenderLimits)) -> RenderOptions {

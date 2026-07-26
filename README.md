@@ -1,6 +1,6 @@
 # escpos2png
 
-`escpos2png` is a planned standalone Rust library for rendering ESC/POS byte
+`escpos2png` is a standalone Rust library for rendering ESC/POS byte
 streams as PNG receipt previews. A thin Python package exposes the Rust engine
 to applications such as FastAPI services.
 
@@ -25,16 +25,15 @@ printer profile. Supported `GS V` cuts create separate output sheets. It emits
 one-bit grayscale PNG.
 
 The bundled representative font currently covers Latin, Greek, and Cyrillic.
-A decoded character outside that asset returns a diagnostic rather than a
+A decoded character outside that asset returns an error rather than a
 misleading replacement glyph.
 
 The Python binding and conformance-case CLI can render, raw-print, or calibrate
 the same verified byte stream.
 
 The Rust result includes bounded rendering, device events, profile
-approximations, completeness, and reproducible renderer/profile metadata.
-Canonical profile JSON records the pinned upstream commit and verifies a
-content hash when it is loaded.
+approximations, and reproducible renderer/profile identity. Canonical profile
+JSON verifies its content hash when loaded.
 
 This is not yet a general-purpose ESC/POS renderer. Unsupported data and
 commands return errors while command coverage grows one conformance case at a
@@ -58,8 +57,7 @@ the pinned upstream source:
 docker compose run --rm test cargo run --quiet \
   -p escpos2png-profiles --bin compile-profile-pack -- \
   profiles/upstream/escpos-printer-db/dist/capabilities.json \
-  profiles/upstream.lock.toml profiles/enrichments \
-  profiles/generated/profiles.json
+  profiles/enrichments profiles/generated/profiles.json
 ```
 
 `./escpos2png` forwards every argument to the Python CLI in the Compose
@@ -123,7 +121,7 @@ allows:
 - command-driven margins, print areas, positioning, alignment, and line feeds;
 - character-cell metrics, wrapping, scaling, and baseline placement;
 - raster image, barcode, and two-dimensional-code dimensions and placement;
-- Standard mode and Page mode buffering semantics;
+- implemented Standard-mode buffering semantics;
 - paper feeds, cuts, and multiple sheets in one job; and
 - model-specific command availability, defaults, and known quirks.
 

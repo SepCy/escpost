@@ -11,20 +11,12 @@ const CAPABILITIES_JSON: &[u8] =
 const NT_5890K_ENRICHMENT: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
 
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CaseManifest {
+    schema_version: u32,
     name: String,
     profile: String,
-    input: String,
-    input_encoding: String,
     input_sha256: String,
-    expected_sheets: Vec<ExpectedSheet>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ExpectedSheet {
-    file: String,
-    width_dots: u32,
-    height_dots: u32,
 }
 
 #[derive(Debug)]
@@ -103,6 +95,7 @@ fn compare_case(
 ) -> Result<(), String> {
     let manifest = load_manifest(case_directory)?;
     let input = load_input(case_directory, &manifest)?;
+    let expected_sheets = find_expected_sheets(case_directory)?;
     let profile = load_profile(&manifest.profile)?;
     let rendered = render(&input, &profile)
         .map_err(|error| format!("{}: render failed: {error}", manifest.name))?;
@@ -132,18 +125,17 @@ fn compare_case(
             )
         })?;
 
-        let expected = manifest.expected_sheets.get(index);
-        let expected_path = expected.map(|sheet| case_directory.join(&sheet.file));
+        let expected_path = expected_sheets.get(index);
         comparison_rows.push(comparison_row(
             sheet_number,
-            expected_path.as_deref(),
+            expected_path.map(PathBuf::as_path),
             &actual_path,
             None,
             &output_directory,
             repository,
         ));
 
-        let Some(expected) = expected else {
+        let Some(expected_path) = expected_path else {
             failures.push(format!(
                 "{} sheet {sheet_number:03}: unexpected generated sheet\nactual: {}",
                 manifest.name,
@@ -151,14 +143,13 @@ fn compare_case(
             ));
             continue;
         };
-        let expected_path = case_directory.join(&expected.file);
-        let expected_png = match decode_png_file(&expected_path) {
+        let expected_png = match decode_png_file(expected_path) {
             Ok(png) => png,
             Err(error) => {
                 failures.push(format!(
                     "{} sheet {sheet_number:03}: {error}\nexpected: {}\nactual:   {}",
                     manifest.name,
-                    display_path(&expected_path, repository),
+                    display_path(expected_path, repository),
                     display_path(&actual_path, repository)
                 ));
                 continue;
@@ -171,21 +162,6 @@ fn compare_case(
             )
         })?;
 
-        if expected_png.width != expected.width_dots || expected_png.height != expected.height_dots
-        {
-            failures.push(format!(
-                "{} sheet {sheet_number:03}: manifest expects {}x{}, golden is {}x{}\nexpected: {}\nactual:   {}",
-                manifest.name,
-                expected.width_dots,
-                expected.height_dots,
-                expected_png.width,
-                expected_png.height,
-                display_path(&expected_path, repository),
-                display_path(&actual_path, repository)
-            ));
-            continue;
-        }
-
         if let Some(difference) = compare_pixels(&expected_png, &actual_png) {
             let diff_path = output_directory.join(format!("diff-{sheet_number:03}.png"));
             write_diff_png(&expected_png, &actual_png, &diff_path).map_err(|error| {
@@ -197,7 +173,7 @@ fn compare_case(
             })?;
             comparison_rows[index] = comparison_row(
                 sheet_number,
-                Some(&expected_path),
+                Some(expected_path),
                 &actual_path,
                 Some(&diff_path),
                 &output_directory,
@@ -207,7 +183,7 @@ fn compare_case(
                 &manifest.name,
                 sheet_number,
                 &difference,
-                &expected_path,
+                expected_path,
                 &actual_path,
                 &diff_path,
                 repository,
@@ -215,14 +191,17 @@ fn compare_case(
         }
     }
 
-    if rendered.sheets.len() < manifest.expected_sheets.len() {
-        for index in rendered.sheets.len()..manifest.expected_sheets.len() {
+    if rendered.sheets.len() < expected_sheets.len() {
+        for (index, expected_path) in expected_sheets
+            .iter()
+            .enumerate()
+            .skip(rendered.sheets.len())
+        {
             let sheet_number = index + 1;
-            let expected_path = case_directory.join(&manifest.expected_sheets[index].file);
             failures.push(format!(
                 "{} sheet {sheet_number:03}: expected sheet was not generated\nexpected: {}",
                 manifest.name,
-                display_path(&expected_path, repository)
+                display_path(expected_path, repository)
             ));
         }
     }
@@ -257,18 +236,19 @@ fn load_manifest(case_directory: &Path) -> Result<CaseManifest, String> {
     let path = case_directory.join("case.toml");
     let source =
         fs::read_to_string(&path).map_err(|error| format!("could not read {path:?}: {error}"))?;
-    toml::from_str(&source).map_err(|error| format!("invalid {path:?}: {error}"))
+    let manifest: CaseManifest =
+        toml::from_str(&source).map_err(|error| format!("invalid {path:?}: {error}"))?;
+    if manifest.schema_version != 1 {
+        return Err(format!(
+            "unsupported case schema version {}",
+            manifest.schema_version
+        ));
+    }
+    Ok(manifest)
 }
 
 fn load_input(case_directory: &Path, manifest: &CaseManifest) -> Result<Vec<u8>, String> {
-    if manifest.input_encoding != "hex" {
-        return Err(format!(
-            "{}: unsupported input encoding {:?}",
-            manifest.name, manifest.input_encoding
-        ));
-    }
-
-    let path = case_directory.join(&manifest.input);
+    let path = case_directory.join("input.hex");
     let source = fs::read_to_string(&path)
         .map_err(|error| format!("{}: could not read {path:?}: {error}", manifest.name))?;
     let mut input = Vec::new();
@@ -300,13 +280,34 @@ fn load_input(case_directory: &Path, manifest: &CaseManifest) -> Result<Vec<u8>,
     Ok(input)
 }
 
+fn find_expected_sheets(case_directory: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries = fs::read_dir(case_directory)
+        .map_err(|error| format!("could not inspect {case_directory:?}: {error}"))?;
+    let mut sheets = entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("expected-") && name.ends_with(".png"))
+        })
+        .collect::<Vec<_>>();
+    sheets.sort();
+    if sheets.is_empty() {
+        return Err(format!(
+            "case {} has no expected-NNN.png files",
+            display_path(case_directory, &repository_root())
+        ));
+    }
+    Ok(sheets)
+}
+
 fn load_profile(profile: &str) -> Result<escpos2png_profiles::PrinterProfile, String> {
     let enrichment = match profile {
         "NT-5890K" => NT_5890K_ENRICHMENT,
         profile => return Err(format!("unknown golden-case profile {profile:?}")),
     };
     compile_profile(CAPABILITIES_JSON, enrichment)
-        .map(|compiled| compiled.profile)
         .map_err(|error| format!("could not compile profile {profile:?}: {error}"))
 }
 

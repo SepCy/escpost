@@ -28,7 +28,6 @@ Most regression tests call the public Rust rendering API with:
 
 - ESC/POS input bytes;
 - a resolved printer profile;
-- an explicit initial-state assumption; and
 - explicit resource limits and render options where relevant.
 
 They assert observable results:
@@ -37,7 +36,7 @@ They assert observable results:
 - decoded output pixels or logical dots;
 - feeds and cuts;
 - device events;
-- diagnostics and completeness; and
+- profile approximations; and
 - reproducibility metadata.
 
 These tests should survive refactoring of tokenizers, command handlers,
@@ -80,7 +79,7 @@ Binding tests prove that Python callers receive the same behavior as Rust
 callers. They cover:
 
 - byte input and profile selection;
-- PNG and diagnostic results;
+- PNG, approximation, event, and metadata results;
 - Rust error conversion to documented Python exceptions; and
 - repeated or concurrent calls.
 
@@ -89,8 +88,8 @@ They should not duplicate the complete Rust conformance suite.
 ### Robustness tests
 
 Malformed, truncated, adversarial, and resource-intensive streams verify that
-the renderer returns controlled errors or incomplete results instead of
-panicking, hanging, or allocating without bounds.
+the renderer returns controlled errors instead of panicking, hanging, or
+allocating without bounds.
 
 Fuzzing targets command framing and state-machine execution. A discovered
 failure becomes a permanent minimal regression case before the implementation
@@ -148,32 +147,19 @@ the same immutable byte buffer to the renderer and physical-printer transport.
 Neither path may regenerate, normalize, prefix, suffix, or otherwise transform
 those decoded bytes.
 
-`case.toml` records machine-readable expectations and provenance:
+`case.toml` records only values the loaders consume:
 
 ```toml
 schema_version = 1
 name = "default Font A advances by 12 dots"
 profile = "NT-5890K"
-input = "input.hex"
-input_encoding = "hex"
 input_sha256 = "<sha256>"
-expected_completeness = "complete"
-
-[[expected_sheets]]
-file = "expected-001.png"
-width_dots = 384
-height_dots = 30
-
-[initial_state]
-assumption = "profile-reset-defaults"
-
-[[references]]
-source = "printer-manual"
-location = "character font section"
 ```
 
-The exact manifest schema remains versioned and may grow as implementation
-needs become concrete.
+The input file is always `input.hex`. Expected sheets are discovered as
+`expected-001.png`, `expected-002.png`, and so on. Their decoded dimensions are
+the authority, so the manifest does not duplicate filenames or sizes.
+References and physical observations belong in `notes.md`.
 
 `expected-001.png` is a lossless, reviewable representation of expected dots.
 Tests decode it and compare its pixel values and dimensions. PNG encoder output
@@ -224,8 +210,8 @@ escpos2png case print <case> --printer <local-name>
 escpos2png case calibrate <case> --printer <local-name>
 ```
 
-`render` invokes the Rust engine through the Python binding and writes an
-actual PNG plus diagnostics.
+`render` invokes the Rust engine through the Python binding and writes the
+actual PNG sheets.
 
 `print` sends the decoded input bytes unchanged to the selected physical
 transport.
@@ -274,8 +260,7 @@ Before sending bytes, the CLI shows:
 - the selected case and input hash;
 - printer profile;
 - USB identity or other transport destination;
-- byte count; and
-- whether the stream contains a cut command.
+- byte count.
 
 The explicit `case print` or `case calibrate` command is the authorization to
 perform the physical action. Automated tests and build scripts never invoke
@@ -336,7 +321,7 @@ Hardware evidence can justify:
 - correcting profile geometry or defaults;
 - documenting a firmware or compatibility-mode variant;
 - adding a model-specific command quirk;
-- changing a profile's completeness level; or
+- correcting a profile capability or approximation; or
 - filing an upstream printer-database correction.
 
 It does not justify changing Epson command framing or another model's behavior
@@ -353,7 +338,8 @@ Golden images are updated deliberately:
 
 1. Explain which documented behavior or physical evidence changed.
 2. Render the affected case to a separate actual-output path.
-3. Review dimensions, pixel differences, diagnostics, and unrelated regions.
+3. Review dimensions, pixel differences, approximations, and unrelated
+   regions.
 4. Replace the golden only after the new result is accepted.
 5. Commit the input, manifest, expected image, and notes together.
 
@@ -368,11 +354,11 @@ Run applicable physical cases before accepting changes to:
 - text cell metrics, baselines, spacing, or wrapping;
 - motion-unit conversion and rounding;
 - raster, barcode, or two-dimensional-code placement;
-- Standard or Page mode composition;
+- Standard-mode composition;
 - feed, cutter, or sheet-boundary behavior; and
 - model-specific commands or quirks.
 
-Parser refactors, diagnostics-only changes, packaging, and equivalent PNG
+Parser refactors, error-reporting changes, packaging, and equivalent PNG
 compression changes normally require the automated suite but not new paper,
 provided their existing conformance cases remain unchanged.
 

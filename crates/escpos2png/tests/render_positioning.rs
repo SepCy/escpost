@@ -12,8 +12,7 @@ const LF: u8 = 0x0a;
 #[test]
 fn esc_dollar_sets_an_absolute_position_in_horizontal_motion_units() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [ESC, b'$', 30, 0, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
 
     let rendered = render(&input, &profile).expect("ESC $ should position the marker");
@@ -30,8 +29,7 @@ fn esc_dollar_sets_an_absolute_position_in_horizontal_motion_units() {
 #[test]
 fn esc_backslash_moves_right_or_left_from_the_current_position() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         // Start at x=30 and move ten units right.
         ESC,
@@ -77,8 +75,7 @@ fn esc_backslash_moves_right_or_left_from_the_current_position() {
 #[test]
 fn esc_space_adds_profile_scaled_right_side_character_spacing() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [ESC, b' ', 5, b'A', ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
 
     let rendered = render(&input, &profile).expect("ESC SP should add character spacing");
@@ -94,8 +91,7 @@ fn esc_space_adds_profile_scaled_right_side_character_spacing() {
 #[test]
 fn gs_p_changes_units_for_future_positions_without_moving_the_cursor() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         // Resolve x=10 with the profile's default 203-units-per-inch pitch.
         ESC,
@@ -138,8 +134,7 @@ fn gs_p_changes_units_for_future_positions_without_moving_the_cursor() {
 #[test]
 fn ht_moves_to_the_next_default_eight_character_tab_stop() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [HT, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
 
     let rendered = render(&input, &profile).expect("HT should use the default tab stops");
@@ -155,8 +150,7 @@ fn ht_moves_to_the_next_default_eight_character_tab_stop() {
 #[test]
 fn esc_d_freezes_custom_tab_stops_using_the_current_character_advance() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         // Font B is 9 dots wide; one dot of ESC SP makes a 10-dot advance.
         ESC,

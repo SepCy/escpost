@@ -1,19 +1,4 @@
 schema_version = 1
 name = "Positioning and print area"
 profile = "NT-5890K"
-input = "input.hex"
-input_encoding = "hex"
 input_sha256 = "e24ad1d22d6c72f26df6cf63d376db3f4a8ab65ddb9da860cf7ee84a77cea9e8"
-expected_completeness = "complete"
-
-[initial_state]
-assumption = "profile-reset-defaults"
-
-[[expected_sheets]]
-file = "expected-001.png"
-width_dots = 384
-height_dots = 120
-
-[[references]]
-source = "epson-escpos-manual"
-location = "ESC SP, ESC $, ESC \\, ESC a, GS L, GS P, and GS W"

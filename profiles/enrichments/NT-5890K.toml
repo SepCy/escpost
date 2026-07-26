@@ -31,13 +31,11 @@ international_character_set = 0
 carriage_return = "ignored"
 
 [fonts.a]
-columns = 32
 cell_width_dots = 12
 cell_height_dots = 24
 baseline_dots = 20
 
 [fonts.b]
-columns = 42
 cell_width_dots = 9
 cell_height_dots = 17
 baseline_dots = 14

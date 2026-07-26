@@ -5,11 +5,10 @@ use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use escpos2png_profiles::{compile_profile_with_lock, to_canonical_profile_pack_json};
+use escpos2png_profiles::{compile_profile, to_canonical_profile_pack_json};
 
 struct Paths {
     capabilities: PathBuf,
-    upstream_lock: PathBuf,
     enrichments: PathBuf,
     output: PathBuf,
 }
@@ -17,14 +16,12 @@ struct Paths {
 fn main() -> Result<(), Box<dyn Error>> {
     let paths = parse_paths()?;
     let capabilities = fs::read(&paths.capabilities)?;
-    let upstream_lock = fs::read_to_string(&paths.upstream_lock)?;
     let enrichment_paths = find_enrichments(&paths.enrichments)?;
     let mut profiles = Vec::with_capacity(enrichment_paths.len());
 
     for enrichment_path in enrichment_paths {
         let enrichment = fs::read_to_string(&enrichment_path)?;
-        let compiled = compile_profile_with_lock(&capabilities, &enrichment, &upstream_lock)?;
-        profiles.push(compiled.profile);
+        profiles.push(compile_profile(&capabilities, &enrichment)?);
     }
 
     let json = to_canonical_profile_pack_json(profiles)?;
@@ -40,7 +37,6 @@ fn parse_paths() -> Result<Paths, Box<dyn Error>> {
     let mut arguments = env::args_os().skip(1).map(PathBuf::from);
     let paths = Paths {
         capabilities: required_argument(&mut arguments, "capabilities JSON")?,
-        upstream_lock: required_argument(&mut arguments, "upstream lock")?,
         enrichments: required_argument(&mut arguments, "enrichments directory")?,
         output: required_argument(&mut arguments, "output profile pack")?,
     };
@@ -60,8 +56,7 @@ fn required_argument(
 }
 
 fn usage() -> &'static str {
-    "usage: compile-profile-pack <capabilities.json> <upstream.lock.toml> \
-     <enrichments-directory> <output.json>"
+    "usage: compile-profile-pack <capabilities.json> <enrichments-directory> <output.json>"
 }
 
 fn find_enrichments(directory: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {

@@ -10,8 +10,7 @@ const GS: u8 = 0x1d;
 #[test]
 fn text_print_modes_do_not_change_raster_graphics() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         ESC,
         b'!',
@@ -51,8 +50,7 @@ fn text_print_modes_do_not_change_raster_graphics() {
 #[test]
 fn text_print_modes_do_not_change_one_dimensional_barcodes() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let barcode = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
         b'2', b'3', b'4', b'5',
@@ -69,8 +67,7 @@ fn text_print_modes_do_not_change_one_dimensional_barcodes() {
 #[test]
 fn text_print_modes_do_not_change_qr_symbols() {
     let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     profile.features.qr_code = true;
     let qr = [
         GS, b'(', b'k', 4, 0, 49, 80, 48, b'A', GS, b'(', b'k', 3, 0, 49, 81, 48,

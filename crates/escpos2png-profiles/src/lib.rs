@@ -9,8 +9,6 @@ use thiserror::Error;
 
 const ENRICHMENT_SCHEMA_VERSION: u32 = 1;
 const CANONICAL_PROFILE_SCHEMA_VERSION: u32 = 1;
-const UPSTREAM_LOCK_SCHEMA_VERSION: u32 = 1;
-const BUNDLED_UPSTREAM_LOCK_TOML: &str = include_str!("../../../profiles/upstream.lock.toml");
 const LEGACY_FUNCTION_A_SYSTEMS: [BarcodeSystem; 7] = [
     BarcodeSystem::UpcA,
     BarcodeSystem::UpcE,
@@ -32,13 +30,6 @@ const LEGACY_FUNCTION_B_SYSTEMS: [BarcodeSystem; 9] = [
     BarcodeSystem::Code128,
 ];
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct CompiledProfile {
-    pub profile: PrinterProfile,
-    pub source: ProfileSource,
-    pub changes: Vec<ProfileChange>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PrinterProfile {
@@ -51,9 +42,9 @@ pub struct PrinterProfile {
     pub features: Features,
     /// Maps each printer-specific `ESC t n` slot to a named encoding.
     pub code_pages: BTreeMap<u8, String>,
-    pub sources: Vec<String>,
     pub approximations: Vec<Approximation>,
-    pub source: ProfileSource,
+    pub upstream_profile_sha256: String,
+    pub canonical_profile_sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -117,7 +108,6 @@ pub struct Fonts {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Font {
-    pub columns: u32,
     /// Cursor advance for one unscaled character cell.
     pub cell_width_dots: u32,
     /// Maximum dot height of one unscaled character cell.
@@ -133,14 +123,10 @@ pub struct Features {
     pub bit_image_column: bool,
     pub bit_image_raster: bool,
     pub graphics: bool,
-    pub high_density: bool,
     pub paper_full_cut: bool,
     pub paper_part_cut: bool,
-    pub pdf417_code: bool,
-    pub pulse_bel: bool,
     pub pulse_standard: bool,
     pub qr_code: bool,
-    pub star_commands: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,31 +177,6 @@ pub struct Approximation {
     pub reason: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProfileSource {
-    pub upstream_repository: String,
-    pub upstream_commit: String,
-    pub upstream_license: String,
-    pub upstream_profile_sha256: String,
-    pub enrichment_sha256: String,
-    pub canonical_profile_sha256: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct ProfileChange {
-    pub field: String,
-    pub kind: ProfileChangeKind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProfileChangeKind {
-    Added,
-    Confirmed,
-    Corrected,
-}
-
 #[derive(Debug, Error)]
 pub enum CompileProfileError {
     #[error("invalid upstream capabilities JSON")]
@@ -224,14 +185,8 @@ pub enum CompileProfileError {
     #[error("invalid profile enrichment TOML")]
     InvalidEnrichment(#[source] toml::de::Error),
 
-    #[error("invalid upstream lock TOML")]
-    InvalidUpstreamLock(#[source] toml::de::Error),
-
     #[error("unsupported profile enrichment schema version {found}")]
     UnsupportedSchemaVersion { found: u32 },
-
-    #[error("unsupported upstream lock schema version {found}")]
-    UnsupportedUpstreamLockSchemaVersion { found: u32 },
 
     #[error("profile field {field} must be greater than zero")]
     NonPositiveValue { field: &'static str },
@@ -274,9 +229,6 @@ pub enum CompileProfileError {
     #[error("could not normalize resolved upstream profile")]
     NormalizeUpstreamProfile(#[source] serde_json::Error),
 
-    #[error("could not normalize profile enrichment")]
-    NormalizeEnrichment(#[source] serde_json::Error),
-
     #[error("could not normalize canonical profile content")]
     NormalizeCanonicalProfile(#[source] serde_json::Error),
 
@@ -315,13 +267,15 @@ pub enum CanonicalProfileError {
     DuplicateProfile { profile_id: String },
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Enrichment {
     schema_version: u32,
     profile: String,
     upstream_profile_sha256: String,
-    sources: Vec<String>,
+    /// Authoring evidence is validated as strings but does not enter runtime profiles.
+    #[serde(rename = "sources")]
+    _sources: Vec<String>,
     geometry: Geometry,
     motion: MotionUnits,
     defaults: PrinterDefaults,
@@ -331,42 +285,17 @@ struct Enrichment {
     approximations: Vec<Approximation>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct FeatureOverrides {
-    #[serde(skip_serializing_if = "Option::is_none")]
     barcodes: Option<BarcodeCapabilities>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     bit_image_column: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     bit_image_raster: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     graphics: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    high_density: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     paper_full_cut: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     paper_part_cut: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pdf417_code: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pulse_bel: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pulse_standard: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     qr_code: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    star_commands: Option<bool>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct UpstreamLock {
-    schema_version: u32,
-    repository: String,
-    commit: String,
-    license: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -376,45 +305,23 @@ struct UpstreamCapabilities {
 
 #[derive(Debug, Deserialize)]
 struct ImportedProfile {
-    media: ImportedMedia,
-    fonts: BTreeMap<String, ImportedFont>,
     features: ImportedFeatures,
     #[serde(rename = "codePages")]
     code_pages: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct ImportedFeatures {
     barcode_a: bool,
     barcode_b: bool,
     bit_image_column: bool,
     bit_image_raster: bool,
     graphics: bool,
-    high_density: bool,
     paper_full_cut: bool,
     paper_part_cut: bool,
-    pdf417_code: bool,
-    pulse_bel: bool,
     pulse_standard: bool,
     qr_code: bool,
-    star_commands: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct ImportedMedia {
-    dpi: Option<u32>,
-    width: ImportedWidth,
-}
-
-#[derive(Debug, Deserialize)]
-struct ImportedWidth {
-    pixels: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ImportedFont {
-    columns: Option<u32>,
 }
 
 #[derive(Serialize)]
@@ -433,28 +340,13 @@ struct CanonicalProfileContent<'a> {
 pub fn compile_profile(
     capabilities_json: &[u8],
     enrichment_toml: &str,
-) -> Result<CompiledProfile, CompileProfileError> {
-    compile_profile_with_lock(
-        capabilities_json,
-        enrichment_toml,
-        BUNDLED_UPSTREAM_LOCK_TOML,
-    )
-}
-
-pub fn compile_profile_with_lock(
-    capabilities_json: &[u8],
-    enrichment_toml: &str,
-    upstream_lock_toml: &str,
-) -> Result<CompiledProfile, CompileProfileError> {
+) -> Result<PrinterProfile, CompileProfileError> {
     let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
         .map_err(CompileProfileError::InvalidCapabilities)?;
     let enrichment: Enrichment =
         toml::from_str(enrichment_toml).map_err(CompileProfileError::InvalidEnrichment)?;
-    let upstream_lock: UpstreamLock =
-        toml::from_str(upstream_lock_toml).map_err(CompileProfileError::InvalidUpstreamLock)?;
 
     validate_schema_version(enrichment.schema_version)?;
-    validate_upstream_lock_schema_version(upstream_lock.schema_version)?;
     validate_profile_values(&enrichment)?;
 
     let upstream_profile = capabilities
@@ -469,10 +361,8 @@ pub fn compile_profile_with_lock(
     let imported = import_upstream_profile(upstream_profile, &enrichment.profile)?;
     let code_pages = import_code_pages(&imported)?;
     validate_default_code_page(enrichment.defaults.code_page, &code_pages)?;
-    let changes = classify_changes(&imported, &enrichment);
     let features = apply_feature_overrides(imported.features, &enrichment.features);
 
-    let enrichment_sha256 = hash_enrichment(&enrichment)?;
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: enrichment.profile,
@@ -482,25 +372,14 @@ pub fn compile_profile_with_lock(
         fonts: enrichment.fonts,
         features,
         code_pages,
-        sources: enrichment.sources,
         approximations: enrichment.approximations,
-        source: ProfileSource {
-            upstream_repository: upstream_lock.repository,
-            upstream_commit: upstream_lock.commit,
-            upstream_license: upstream_lock.license,
-            upstream_profile_sha256: actual_hash,
-            enrichment_sha256,
-            canonical_profile_sha256: String::new(),
-        },
+        upstream_profile_sha256: actual_hash,
+        canonical_profile_sha256: String::new(),
     };
-    profile.source.canonical_profile_sha256 =
+    profile.canonical_profile_sha256 =
         hash_canonical_profile(&profile).map_err(CompileProfileError::NormalizeCanonicalProfile)?;
 
-    Ok(CompiledProfile {
-        changes,
-        source: profile.source.clone(),
-        profile,
-    })
+    Ok(profile)
 }
 
 pub fn to_canonical_json(profile: &PrinterProfile) -> Result<Vec<u8>, CanonicalProfileError> {
@@ -565,100 +444,6 @@ fn import_upstream_profile(
     })
 }
 
-fn classify_changes(imported: &ImportedProfile, enrichment: &Enrichment) -> Vec<ProfileChange> {
-    let font_a_columns = imported.fonts.get("0").and_then(|font| font.columns);
-    let font_b_columns = imported.fonts.get("1").and_then(|font| font.columns);
-
-    let mut changes = vec![
-        classify_change(
-            "geometry.printable_width_dots",
-            imported.media.width.pixels,
-            enrichment.geometry.printable_width_dots,
-        ),
-        classify_change(
-            "geometry.dpi_x",
-            imported.media.dpi,
-            enrichment.geometry.dpi_x,
-        ),
-        classify_change(
-            "geometry.dpi_y",
-            imported.media.dpi,
-            enrichment.geometry.dpi_y,
-        ),
-        classify_change(
-            "motion.horizontal_units_per_inch",
-            None,
-            enrichment.motion.horizontal_units_per_inch,
-        ),
-        classify_change(
-            "motion.vertical_units_per_inch",
-            None,
-            enrichment.motion.vertical_units_per_inch,
-        ),
-        classify_change(
-            "defaults.line_spacing_dots",
-            None,
-            enrichment.defaults.line_spacing_dots,
-        ),
-        classify_change(
-            "defaults.code_page",
-            None,
-            u32::from(enrichment.defaults.code_page),
-        ),
-        classify_change(
-            "defaults.international_character_set",
-            None,
-            u32::from(enrichment.defaults.international_character_set),
-        ),
-        ProfileChange {
-            field: "defaults.carriage_return".to_owned(),
-            kind: ProfileChangeKind::Added,
-        },
-        classify_change(
-            "fonts.a.columns",
-            font_a_columns,
-            enrichment.fonts.a.columns,
-        ),
-        classify_change(
-            "fonts.a.cell_width_dots",
-            None,
-            enrichment.fonts.a.cell_width_dots,
-        ),
-        classify_change(
-            "fonts.a.cell_height_dots",
-            None,
-            enrichment.fonts.a.cell_height_dots,
-        ),
-        classify_change(
-            "fonts.a.baseline_dots",
-            None,
-            enrichment.fonts.a.baseline_dots,
-        ),
-        classify_change(
-            "fonts.b.columns",
-            font_b_columns,
-            enrichment.fonts.b.columns,
-        ),
-        classify_change(
-            "fonts.b.cell_width_dots",
-            None,
-            enrichment.fonts.b.cell_width_dots,
-        ),
-        classify_change(
-            "fonts.b.cell_height_dots",
-            None,
-            enrichment.fonts.b.cell_height_dots,
-        ),
-        classify_change(
-            "fonts.b.baseline_dots",
-            None,
-            enrichment.fonts.b.baseline_dots,
-        ),
-    ];
-    classify_feature_changes(&mut changes, &imported.features, &enrichment.features);
-    changes
-}
-
 fn apply_feature_overrides(imported: ImportedFeatures, overrides: &FeatureOverrides) -> Features {
     let mut features = imported.into_canonical();
     if let Some(barcodes) = &overrides.barcodes {
@@ -667,14 +452,10 @@ fn apply_feature_overrides(imported: ImportedFeatures, overrides: &FeatureOverri
     apply_bool_override(&mut features.bit_image_column, overrides.bit_image_column);
     apply_bool_override(&mut features.bit_image_raster, overrides.bit_image_raster);
     apply_bool_override(&mut features.graphics, overrides.graphics);
-    apply_bool_override(&mut features.high_density, overrides.high_density);
     apply_bool_override(&mut features.paper_full_cut, overrides.paper_full_cut);
     apply_bool_override(&mut features.paper_part_cut, overrides.paper_part_cut);
-    apply_bool_override(&mut features.pdf417_code, overrides.pdf417_code);
-    apply_bool_override(&mut features.pulse_bel, overrides.pulse_bel);
     apply_bool_override(&mut features.pulse_standard, overrides.pulse_standard);
     apply_bool_override(&mut features.qr_code, overrides.qr_code);
-    apply_bool_override(&mut features.star_commands, overrides.star_commands);
     features
 }
 
@@ -699,14 +480,10 @@ impl ImportedFeatures {
             bit_image_column: self.bit_image_column,
             bit_image_raster: self.bit_image_raster,
             graphics: self.graphics,
-            high_density: self.high_density,
             paper_full_cut: self.paper_full_cut,
             paper_part_cut: self.paper_part_cut,
-            pdf417_code: self.pdf417_code,
-            pulse_bel: self.pulse_bel,
             pulse_standard: self.pulse_standard,
             qr_code: self.qr_code,
-            star_commands: self.star_commands,
         }
     }
 }
@@ -715,129 +492,6 @@ fn apply_bool_override(target: &mut bool, replacement: Option<bool>) {
     if let Some(replacement) = replacement {
         *target = replacement;
     }
-}
-
-fn classify_feature_changes(
-    changes: &mut Vec<ProfileChange>,
-    imported: &ImportedFeatures,
-    overrides: &FeatureOverrides,
-) {
-    if let Some(enriched) = &overrides.barcodes {
-        let imported = imported.clone().into_canonical().barcodes;
-        push_barcode_capability_change(
-            changes,
-            "features.barcodes.function_a",
-            &imported.function_a,
-            &enriched.function_a,
-        );
-        push_barcode_capability_change(
-            changes,
-            "features.barcodes.function_b",
-            &imported.function_b,
-            &enriched.function_b,
-        );
-    }
-    push_feature_change(
-        changes,
-        "features.bit_image_column",
-        imported.bit_image_column,
-        overrides.bit_image_column,
-    );
-    push_feature_change(
-        changes,
-        "features.bit_image_raster",
-        imported.bit_image_raster,
-        overrides.bit_image_raster,
-    );
-    push_feature_change(
-        changes,
-        "features.graphics",
-        imported.graphics,
-        overrides.graphics,
-    );
-    push_feature_change(
-        changes,
-        "features.high_density",
-        imported.high_density,
-        overrides.high_density,
-    );
-    push_feature_change(
-        changes,
-        "features.paper_full_cut",
-        imported.paper_full_cut,
-        overrides.paper_full_cut,
-    );
-    push_feature_change(
-        changes,
-        "features.paper_part_cut",
-        imported.paper_part_cut,
-        overrides.paper_part_cut,
-    );
-    push_feature_change(
-        changes,
-        "features.pdf417_code",
-        imported.pdf417_code,
-        overrides.pdf417_code,
-    );
-    push_feature_change(
-        changes,
-        "features.pulse_bel",
-        imported.pulse_bel,
-        overrides.pulse_bel,
-    );
-    push_feature_change(
-        changes,
-        "features.pulse_standard",
-        imported.pulse_standard,
-        overrides.pulse_standard,
-    );
-    push_feature_change(
-        changes,
-        "features.qr_code",
-        imported.qr_code,
-        overrides.qr_code,
-    );
-    push_feature_change(
-        changes,
-        "features.star_commands",
-        imported.star_commands,
-        overrides.star_commands,
-    );
-}
-
-fn push_barcode_capability_change(
-    changes: &mut Vec<ProfileChange>,
-    field: &str,
-    imported: &BTreeSet<BarcodeSystem>,
-    enriched: &BTreeSet<BarcodeSystem>,
-) {
-    changes.push(ProfileChange {
-        field: field.to_owned(),
-        kind: if imported == enriched {
-            ProfileChangeKind::Confirmed
-        } else {
-            ProfileChangeKind::Corrected
-        },
-    });
-}
-
-fn push_feature_change(
-    changes: &mut Vec<ProfileChange>,
-    field: &str,
-    imported: bool,
-    enriched: Option<bool>,
-) {
-    let Some(enriched) = enriched else {
-        return;
-    };
-    changes.push(ProfileChange {
-        field: field.to_owned(),
-        kind: if imported == enriched {
-            ProfileChangeKind::Confirmed
-        } else {
-            ProfileChangeKind::Corrected
-        },
-    });
 }
 
 fn import_code_pages(
@@ -872,35 +526,12 @@ fn validate_default_code_page(
     })
 }
 
-fn classify_change(field: &str, imported: Option<u32>, enriched: u32) -> ProfileChange {
-    let kind = match imported {
-        None => ProfileChangeKind::Added,
-        Some(value) if value == enriched => ProfileChangeKind::Confirmed,
-        Some(_) => ProfileChangeKind::Corrected,
-    };
-
-    ProfileChange {
-        field: field.to_owned(),
-        kind,
-    }
-}
-
 fn validate_schema_version(schema_version: u32) -> Result<(), CompileProfileError> {
     if schema_version == ENRICHMENT_SCHEMA_VERSION {
         return Ok(());
     }
 
     Err(CompileProfileError::UnsupportedSchemaVersion {
-        found: schema_version,
-    })
-}
-
-fn validate_upstream_lock_schema_version(schema_version: u32) -> Result<(), CompileProfileError> {
-    if schema_version == UPSTREAM_LOCK_SCHEMA_VERSION {
-        return Ok(());
-    }
-
-    Err(CompileProfileError::UnsupportedUpstreamLockSchemaVersion {
         found: schema_version,
     })
 }
@@ -965,10 +596,8 @@ fn validate_runtime_values(
         "motion.vertical_units_per_inch",
         motion.vertical_units_per_inch,
     )?;
-    validate_positive("fonts.a.columns", fonts.a.columns)?;
     validate_positive("fonts.a.cell_width_dots", fonts.a.cell_width_dots)?;
     validate_positive("fonts.a.cell_height_dots", fonts.a.cell_height_dots)?;
-    validate_positive("fonts.b.columns", fonts.b.columns)?;
     validate_positive("fonts.b.cell_width_dots", fonts.b.cell_width_dots)?;
     validate_positive("fonts.b.cell_height_dots", fonts.b.cell_height_dots)?;
     validate_font("fonts.a", &fonts.a)?;
@@ -1018,18 +647,9 @@ fn hash_resolved_profile(profile: &Value) -> Result<String, CompileProfileError>
     Ok(hash_bytes(&normalized))
 }
 
-fn hash_enrichment(enrichment: &Enrichment) -> Result<String, CompileProfileError> {
-    // Hash parsed values rather than TOML bytes so comments and whitespace do
-    // not create a new provenance identity for the same enrichment.
-    let normalized =
-        serde_json::to_vec(enrichment).map_err(CompileProfileError::NormalizeEnrichment)?;
-    Ok(hash_bytes(&normalized))
-}
-
 fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json::Error> {
-    // Evidence labels and repository provenance do not affect rendering.
-    // Excluding them keeps the hash stable when source notes are clarified,
-    // while every runtime value and diagnostic approximation remains covered.
+    // The stored hash cannot cover itself. Every other canonical field affects
+    // rendering behavior or the fidelity disclosure returned with a render.
     let content = CanonicalProfileContent {
         schema_version: profile.schema_version,
         id: &profile.id,
@@ -1056,12 +676,12 @@ fn verify_canonical_profile(profile: &PrinterProfile) -> Result<(), CanonicalPro
     })?;
 
     let actual = hash_canonical_profile(profile).map_err(CanonicalProfileError::Normalize)?;
-    if actual == profile.source.canonical_profile_sha256 {
+    if actual == profile.canonical_profile_sha256 {
         return Ok(());
     }
 
     Err(CanonicalProfileError::CanonicalHashMismatch {
-        expected: profile.source.canonical_profile_sha256.clone(),
+        expected: profile.canonical_profile_sha256.clone(),
         actual,
     })
 }

@@ -21,13 +21,11 @@
       },
       "fonts": {
         "a": {
-          "columns": 32,
           "cell_width_dots": 12,
           "cell_height_dots": 24,
           "baseline_dots": 20
         },
         "b": {
-          "columns": 42,
           "cell_width_dots": 9,
           "cell_height_dots": 17,
           "baseline_dots": 14
@@ -59,14 +57,10 @@
         "bitImageColumn": true,
         "bitImageRaster": true,
         "graphics": false,
-        "highDensity": true,
         "paperFullCut": false,
         "paperPartCut": false,
-        "pdf417Code": false,
-        "pulseBel": false,
         "pulseStandard": true,
-        "qrCode": true,
-        "starCommands": false
+        "qrCode": true
       },
       "code_pages": {
         "0": "CP437",
@@ -138,16 +132,6 @@
         "96": "Unknown",
         "255": "Unknown"
       },
-      "sources": [
-        "upstream:escpos-printer-db/NT-5890K",
-        "manual:epson-escpos/esc_3#default-line-spacing",
-        "manual:epson-escpos/cr#print-and-carriage-return",
-        "manual:epson-escpos/esc_r#select-international-character-set",
-        "manual:epson-escpos/esc_t#select-character-code-table",
-        "case:tests/cases/graphics/esc-star-8dot-double-density",
-        "case:tests/cases/motion/line-spacing-and-feed",
-        "case:tests/cases/symbols/native-symbols-nt-5890k"
-      ],
       "approximations": [
         {
           "field": "fonts.resident_glyph_shapes",
@@ -158,14 +142,8 @@
           "reason": "Assumes auto line feed is disabled until CR behavior is physically verified"
         }
       ],
-      "source": {
-        "upstream_repository": "https://github.com/receipt-print-hq/escpos-printer-db.git",
-        "upstream_commit": "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5",
-        "upstream_license": "CC-BY-4.0",
-        "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-        "enrichment_sha256": "13f00afd39bb537afc661441fa1724efa728581302fe9216a7ce8eb4fc71d990",
-        "canonical_profile_sha256": "c540d5a5e13dfc30f5cb1dd90e6dced9f3b0147c521d9e1f439f72ba355072e0"
-      }
+      "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
+      "canonical_profile_sha256": "1d847847bd3fd5aceffcc4d2458addf0cebf611866b179855e97998c03c733ea"
     }
   }
 }

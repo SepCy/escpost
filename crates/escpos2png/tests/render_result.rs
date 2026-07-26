@@ -1,6 +1,4 @@
-use escpos2png::{
-    Completeness, DeviceEvent, DiagnosticEffect, DiagnosticSeverity, InitialStateAssumption, render,
-};
+use escpos2png::{DeviceEvent, render};
 use escpos2png_profiles::compile_profile;
 
 const CAPABILITIES_JSON: &[u8] =
@@ -24,14 +22,10 @@ fn reports_nonprinting_device_actions_as_structured_events() {
             off_time_units: 100,
         }]
     );
-    assert_eq!(
-        rendered.completeness,
-        Completeness::CompleteWithNonVisualEvents
-    );
 }
 
 #[test]
-fn reports_the_renderer_profile_and_initial_state_assumption() {
+fn reports_the_renderer_and_canonical_profile_identity() {
     let profile = test_profile();
 
     let rendered = render(&[LF], &profile).expect("the blank line should render");
@@ -42,43 +36,20 @@ fn reports_the_renderer_profile_and_initial_state_assumption() {
     );
     assert_eq!(rendered.metadata.profile_id, "NT-5890K");
     assert_eq!(rendered.metadata.canonical_profile_sha256.len(), 64);
-    assert_eq!(
-        rendered.metadata.upstream_repository,
-        "https://github.com/receipt-print-hq/escpos-printer-db.git"
-    );
-    assert_eq!(
-        rendered.metadata.upstream_commit,
-        "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5"
-    );
-    assert_eq!(
-        rendered.metadata.upstream_profile_sha256,
-        "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
-    );
-    assert_eq!(rendered.metadata.enrichment_sha256.len(), 64);
-    assert_eq!(
-        rendered.metadata.initial_state,
-        InitialStateAssumption::ProfileResetDefaults
-    );
 }
 
 #[test]
-fn exposes_profile_approximations_without_marking_pixels_incomplete() {
+fn exposes_profile_approximations_directly() {
     let profile = test_profile();
 
     let rendered = render(&[LF], &profile).expect("the blank line should render");
 
-    assert_eq!(rendered.completeness, Completeness::Complete);
-    assert!(rendered.diagnostics.iter().any(|diagnostic| {
-        diagnostic.severity == DiagnosticSeverity::Information
-            && diagnostic.byte_offset.is_none()
-            && diagnostic.command.is_none()
-            && diagnostic.effect == DiagnosticEffect::None
-            && diagnostic.message.contains("fonts.resident_glyph_shapes")
+    assert!(rendered.approximations.iter().any(|approximation| {
+        approximation.field == "fonts.resident_glyph_shapes"
+            && approximation.reason.contains("Representative glyphs")
     }));
 }
 
 fn test_profile() -> escpos2png_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile
+    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }

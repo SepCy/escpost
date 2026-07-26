@@ -10,8 +10,7 @@ const LF: u8 = 0x0a;
 #[test]
 fn gs_l_and_gs_w_are_ignored_after_the_line_has_started() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         GS, b'B', 1, b' ', GS, b'L', 24, 0, GS, b'W', 120, 0, LF, b' ', LF,
     ];
@@ -28,8 +27,7 @@ fn gs_l_and_gs_w_are_ignored_after_the_line_has_started() {
 #[test]
 fn gs_v0_processes_its_parameters_as_normal_data_after_the_line_has_started() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         // Reverse mode makes otherwise blank spaces fully measurable.
         GS, b'B', 1, b' ', GS, b'v', b'0', b' ', b' ', LF,
@@ -48,8 +46,7 @@ fn gs_v0_processes_its_parameters_as_normal_data_after_the_line_has_started() {
 #[test]
 fn esc_a_is_ignored_after_the_line_has_started() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [GS, b'B', 1, b' ', 0x1b, b'a', 2, LF, b' ', LF];
 
     let rendered = render(&input, &profile).expect("mid-line ESC a should be ignored");
@@ -64,8 +61,7 @@ fn esc_a_is_ignored_after_the_line_has_started() {
 #[test]
 fn gs_v_is_ignored_after_the_line_has_started() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [GS, b'B', 1, b' ', GS, b'V', 0, LF, b' ', LF];
 
     let rendered = render(&input, &profile).expect("mid-line GS V should be ignored");

@@ -1,90 +1,74 @@
 use escpos2png_profiles::{
-    BarcodeSystem, CanonicalProfileError, CarriageReturnMode, CompileProfileError, ProfileChange,
-    ProfileChangeKind, compile_profile, compile_profile_with_lock, from_canonical_json,
-    from_canonical_profile_pack_json, to_canonical_json, to_canonical_profile_pack_json,
+    BarcodeSystem, CanonicalProfileError, CarriageReturnMode, CompileProfileError, compile_profile,
+    from_canonical_json, from_canonical_profile_pack_json, to_canonical_json,
+    to_canonical_profile_pack_json,
 };
 use serde_json::Value;
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
 const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
-const UPSTREAM_LOCK_TOML: &str = include_str!("../../../profiles/upstream.lock.toml");
 const GENERATED_PROFILE_PACK: &[u8] = include_bytes!("../../../profiles/generated/profiles.json");
 const RESOLVED_PROFILE_SHA256: &str =
     "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b";
-const UPSTREAM_COMMIT: &str = "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5";
 
 #[test]
 fn nt_5890k_compiles_to_rendering_geometry() {
-    let compiled = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the pinned NT-5890K profile should compile");
 
     assert_eq!(
         (
-            compiled.profile.id.as_str(),
-            compiled.profile.geometry.printable_width_dots,
-            compiled.profile.geometry.dpi_x,
-            compiled.profile.geometry.dpi_y,
-            compiled.profile.motion.horizontal_units_per_inch,
-            compiled.profile.motion.vertical_units_per_inch,
-            compiled.source.upstream_profile_sha256.as_str(),
-            compiled.source.upstream_commit.as_str(),
+            profile.id.as_str(),
+            profile.geometry.printable_width_dots,
+            profile.geometry.dpi_x,
+            profile.geometry.dpi_y,
+            profile.motion.horizontal_units_per_inch,
+            profile.motion.vertical_units_per_inch,
+            profile.upstream_profile_sha256.as_str(),
         ),
-        (
-            "NT-5890K",
-            384,
-            203,
-            203,
-            203,
-            203,
-            RESOLVED_PROFILE_SHA256,
-            UPSTREAM_COMMIT,
-        )
+        ("NT-5890K", 384, 203, 203, 203, 203, RESOLVED_PROFILE_SHA256,)
     );
     assert_eq!(
         (
-            compiled.profile.defaults.line_spacing_dots,
-            compiled.profile.defaults.code_page,
-            compiled.profile.defaults.international_character_set,
-            compiled.profile.defaults.carriage_return,
+            profile.defaults.line_spacing_dots,
+            profile.defaults.code_page,
+            profile.defaults.international_character_set,
+            profile.defaults.carriage_return,
         ),
         (30, 0, 0, CarriageReturnMode::Ignored)
     );
-    assert_eq!(compiled.profile.source, compiled.source);
-    assert_eq!(compiled.profile.schema_version, 1);
-    assert_eq!(compiled.source.enrichment_sha256.len(), 64);
-    assert_eq!(compiled.source.canonical_profile_sha256.len(), 64);
+    assert_eq!(profile.schema_version, 1);
+    assert_eq!(profile.canonical_profile_sha256.len(), 64);
     assert_eq!(
         (
-            compiled.profile.fonts.a.columns,
-            compiled.profile.fonts.a.cell_width_dots,
-            compiled.profile.fonts.a.cell_height_dots,
-            compiled.profile.fonts.a.baseline_dots,
+            profile.fonts.a.cell_width_dots,
+            profile.fonts.a.cell_height_dots,
+            profile.fonts.a.baseline_dots,
         ),
-        (32, 12, 24, 20)
+        (12, 24, 20)
     );
     assert_eq!(
         (
-            compiled.profile.fonts.b.columns,
-            compiled.profile.fonts.b.cell_width_dots,
-            compiled.profile.fonts.b.cell_height_dots,
-            compiled.profile.fonts.b.baseline_dots,
+            profile.fonts.b.cell_width_dots,
+            profile.fonts.b.cell_height_dots,
+            profile.fonts.b.baseline_dots,
         ),
-        (42, 9, 17, 14)
+        (9, 17, 14)
     );
     assert_eq!(
-        compiled.profile.code_pages.get(&0).map(String::as_str),
+        profile.code_pages.get(&0).map(String::as_str),
         Some("CP437")
     );
     assert_eq!(
         (
-            !compiled.profile.features.barcodes.function_a.is_empty(),
-            !compiled.profile.features.barcodes.function_b.is_empty(),
-            compiled.profile.features.bit_image_column,
-            compiled.profile.features.bit_image_raster,
-            compiled.profile.features.paper_full_cut,
-            compiled.profile.features.paper_part_cut,
-            compiled.profile.features.qr_code,
+            !profile.features.barcodes.function_a.is_empty(),
+            !profile.features.barcodes.function_b.is_empty(),
+            profile.features.bit_image_column,
+            profile.features.bit_image_raster,
+            profile.features.paper_full_cut,
+            profile.features.paper_part_cut,
+            profile.features.qr_code,
         ),
         (true, true, true, true, false, false, true)
     );
@@ -122,12 +106,11 @@ fn imported_barcode_flags_expand_only_to_the_legacy_systems_they_describe() {
     let reviewed_enrichment =
         without_barcode_enrichment.replace(RESOLVED_PROFILE_SHA256, &actual_hash);
 
-    let compiled = compile_profile(&capabilities, &reviewed_enrichment)
+    let profile = compile_profile(&capabilities, &reviewed_enrichment)
         .expect("reviewed upstream barcode flags should compile");
 
     assert_eq!(
-        compiled
-            .profile
+        profile
             .features
             .barcodes
             .function_b
@@ -147,8 +130,7 @@ fn imported_barcode_flags_expand_only_to_the_legacy_systems_they_describe() {
         ]
     );
     assert!(
-        !compiled
-            .profile
+        !profile
             .features
             .barcodes
             .function_b
@@ -164,20 +146,18 @@ fn enrichment_can_advertise_model_dependent_function_b_systems_exactly() {
         "    \"code_128\",\n    \"gs1_128\",\n    \"code_128_auto\",\n]",
     );
 
-    let compiled = compile_profile(CAPABILITIES_JSON, &enrichment)
+    let profile = compile_profile(CAPABILITIES_JSON, &enrichment)
         .expect("explicit model-dependent barcode systems should compile");
 
     assert!(
-        compiled
-            .profile
+        profile
             .features
             .barcodes
             .function_b
             .contains(&BarcodeSystem::Gs1_128)
     );
     assert!(
-        compiled
-            .profile
+        profile
             .features
             .barcodes
             .function_b
@@ -207,8 +187,7 @@ fn enrichment_rejects_a_system_that_has_no_function_a_command_number() {
 #[test]
 fn canonical_profile_json_round_trips_and_verifies_its_hash() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the pinned NT-5890K profile should compile")
-        .profile;
+        .expect("the pinned NT-5890K profile should compile");
 
     let json = to_canonical_json(&profile).expect("the compiled profile should serialize");
     let loaded = from_canonical_json(&json).expect("the canonical profile should verify");
@@ -223,8 +202,7 @@ fn canonical_profile_json_round_trips_and_verifies_its_hash() {
 #[test]
 fn canonical_profile_json_rejects_behavior_changed_without_a_new_hash() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the pinned NT-5890K profile should compile")
-        .profile;
+        .expect("the pinned NT-5890K profile should compile");
     let json = to_canonical_json(&profile).expect("the compiled profile should serialize");
     let mut document: Value =
         serde_json::from_slice(&json).expect("the test should parse canonical JSON");
@@ -243,8 +221,7 @@ fn canonical_profile_json_rejects_behavior_changed_without_a_new_hash() {
 #[test]
 fn canonical_profile_pack_indexes_verified_profiles_by_id() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the pinned NT-5890K profile should compile")
-        .profile;
+        .expect("the pinned NT-5890K profile should compile");
 
     let json = to_canonical_profile_pack_json([profile.clone()])
         .expect("the canonical profile pack should serialize");
@@ -262,20 +239,19 @@ fn canonical_profile_pack_indexes_verified_profiles_by_id() {
 
 #[test]
 fn generated_profile_pack_matches_the_reviewed_sources() {
-    let compiled = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the pinned NT-5890K profile should compile");
     let pack = from_canonical_profile_pack_json(GENERATED_PROFILE_PACK)
         .expect("the committed profile pack should verify");
 
-    assert_eq!(pack.get("NT-5890K"), Some(&compiled.profile));
+    assert_eq!(pack.get("NT-5890K"), Some(&profile));
     assert_eq!(pack.profiles().count(), 1);
 }
 
 #[test]
 fn canonical_profile_pack_rejects_a_key_that_disagrees_with_the_profile_id() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the pinned NT-5890K profile should compile")
-        .profile;
+        .expect("the pinned NT-5890K profile should compile");
     let json =
         to_canonical_profile_pack_json([profile]).expect("the profile pack should serialize");
     let mut document: Value =
@@ -301,23 +277,6 @@ fn canonical_profile_pack_rejects_a_key_that_disagrees_with_the_profile_id() {
 }
 
 #[test]
-fn explicit_upstream_lock_is_preserved_as_profile_provenance() {
-    let alternate_lock = UPSTREAM_LOCK_TOML.replace(UPSTREAM_COMMIT, &"a".repeat(40));
-
-    let compiled = compile_profile_with_lock(CAPABILITIES_JSON, ENRICHMENT_TOML, &alternate_lock)
-        .expect("an explicit pinned source should compile");
-
-    assert_eq!(compiled.source.upstream_commit, "a".repeat(40));
-    assert_eq!(
-        compiled.profile.source.canonical_profile_sha256,
-        compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-            .expect("the bundled source should compile")
-            .source
-            .canonical_profile_sha256
-    );
-}
-
-#[test]
 fn nt_5890k_rejects_unreviewed_upstream_changes() {
     let stale_hash = "0".repeat(64);
     let stale_enrichment = ENRICHMENT_TOML.replace(RESOLVED_PROFILE_SHA256, &stale_hash);
@@ -335,61 +294,6 @@ fn nt_5890k_rejects_unreviewed_upstream_changes() {
             && expected == &stale_hash
             && actual == RESOLVED_PROFILE_SHA256
     ));
-}
-
-#[test]
-fn nt_5890k_reports_which_values_the_enrichment_confirms() {
-    let compiled = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the pinned NT-5890K profile should compile");
-
-    let expected_base_changes = [
-        "geometry.printable_width_dots",
-        "geometry.dpi_x",
-        "geometry.dpi_y",
-        "motion.horizontal_units_per_inch",
-        "motion.vertical_units_per_inch",
-        "defaults.line_spacing_dots",
-        "defaults.code_page",
-        "defaults.international_character_set",
-        "defaults.carriage_return",
-        "fonts.a.columns",
-        "fonts.a.cell_width_dots",
-        "fonts.a.cell_height_dots",
-        "fonts.a.baseline_dots",
-        "fonts.b.columns",
-        "fonts.b.cell_width_dots",
-        "fonts.b.cell_height_dots",
-        "fonts.b.baseline_dots",
-    ]
-    .map(|field| ProfileChange {
-        field: field.to_owned(),
-        kind: if field.starts_with("motion.")
-            || field == "defaults.line_spacing_dots"
-            || field == "defaults.code_page"
-            || field == "defaults.international_character_set"
-            || field == "defaults.carriage_return"
-            || (field.starts_with("fonts.")
-                && field != "fonts.a.columns"
-                && field != "fonts.b.columns")
-        {
-            ProfileChangeKind::Added
-        } else {
-            ProfileChangeKind::Confirmed
-        },
-    });
-    let expected_feature_corrections = ["barcodes.function_a", "barcodes.function_b", "qr_code"]
-        .map(|feature| ProfileChange {
-            field: format!("features.{feature}"),
-            kind: ProfileChangeKind::Corrected,
-        });
-
-    assert_eq!(
-        compiled.changes,
-        expected_base_changes
-            .into_iter()
-            .chain(expected_feature_corrections)
-            .collect::<Vec<_>>()
-    );
 }
 
 #[test]

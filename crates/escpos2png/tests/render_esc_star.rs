@@ -11,8 +11,7 @@ const INPUT_HEX: &str =
 #[test]
 fn renders_esc_star_8_dot_double_density_in_printer_dots() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = decode_hex(INPUT_HEX);
 
     let rendered = render(&input, &profile).expect("the conformance case should render");
@@ -37,8 +36,7 @@ fn renders_esc_star_8_dot_double_density_in_printer_dots() {
 #[test]
 fn renders_esc_star_8_dot_single_density_at_two_by_three_printer_dots() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1b, 0x40, 0x1b, 0x2a, 0, 1, 0, 0x81, 0x0a];
 
     let rendered = render(&input, &profile).expect("single-density ESC * should render");
@@ -60,8 +58,7 @@ fn renders_esc_star_8_dot_single_density_at_two_by_three_printer_dots() {
 #[test]
 fn renders_esc_star_24_dot_single_density_at_two_by_one_printer_dots() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1b, 0x40, 0x1b, 0x2a, 32, 1, 0, 0x80, 0x00, 0x01, 0x0a];
 
     let rendered = render(&input, &profile).expect("24-dot ESC * should render");
@@ -83,8 +80,7 @@ fn renders_esc_star_24_dot_single_density_at_two_by_one_printer_dots() {
 #[test]
 fn renders_esc_star_24_dot_double_density_at_one_printer_dot_per_source_dot() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1b, 0x40, 0x1b, 0x2a, 33, 1, 0, 0x80, 0x00, 0x01, 0x0a];
 
     let rendered = render(&input, &profile).expect("24-dot ESC * should render");
@@ -106,8 +102,7 @@ fn renders_esc_star_24_dot_double_density_at_one_printer_dot_per_source_dot() {
 #[test]
 fn encodes_the_rendered_sheet_as_one_bit_grayscale_png() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = decode_hex(INPUT_HEX);
 
     let rendered = render(&input, &profile).expect("the conformance case should render");
@@ -143,8 +138,7 @@ fn encodes_the_rendered_sheet_as_one_bit_grayscale_png() {
 #[test]
 fn reports_column_bit_images_that_the_profile_does_not_support() {
     let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     profile.features.bit_image_column = false;
 
     let error = render(&[0x1b, b'*', 1, 1, 0, 0x80], &profile)

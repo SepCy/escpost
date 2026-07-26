@@ -144,8 +144,7 @@ fn esc_at_clears_buffered_graphics_before_restoring_defaults() {
 #[test]
 fn modern_graphics_are_rejected_by_a_profile_without_the_graphics_feature() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = gs_l_store(1, 1, 1, 1, &[0x80]);
 
     let error = render(&input, &profile)
@@ -200,8 +199,7 @@ fn gs_8_l_rejects_an_oversized_declared_payload_before_reading_it() {
 
 fn graphics_profile() -> PrinterProfile {
     let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     profile.features.graphics = true;
     profile
 }

@@ -12,8 +12,7 @@ const LF: u8 = 0x0a;
 #[test]
 fn cr_uses_the_profile_auto_line_feed_behavior() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [GS, b'B', 1, b' ', CR, b' ', LF];
 
     let rendered = render(&input, &profile).expect("CR should use the selected printer behavior");
@@ -28,8 +27,7 @@ fn cr_uses_the_profile_auto_line_feed_behavior() {
 #[test]
 fn cr_prints_and_feeds_when_the_profile_enables_auto_line_feed() {
     let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     profile.defaults.carriage_return = CarriageReturnMode::LineFeed;
     let input = [GS, b'B', 1, b' ', CR, b' ', LF];
 
@@ -47,8 +45,7 @@ fn cr_prints_and_feeds_when_the_profile_enables_auto_line_feed() {
 #[test]
 fn esc_3_sets_line_spacing_in_profile_motion_units() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [ESC, 0x33, 7, LF];
 
     let rendered = render(&input, &profile).expect("ESC 3 should set line spacing");
@@ -60,8 +57,7 @@ fn esc_3_sets_line_spacing_in_profile_motion_units() {
 #[test]
 fn esc_2_restores_the_profile_default_line_spacing() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [ESC, 0x33, 7, LF, ESC, 0x32, LF];
 
     let rendered = render(&input, &profile).expect("ESC 2 should restore line spacing");
@@ -73,8 +69,7 @@ fn esc_2_restores_the_profile_default_line_spacing() {
 #[test]
 fn esc_d_feeds_n_current_lines_without_changing_line_spacing() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [ESC, 0x33, 7, ESC, 0x64, 3, LF];
 
     let rendered = render(&input, &profile).expect("ESC d should feed whole lines");
@@ -86,8 +81,7 @@ fn esc_d_feeds_n_current_lines_without_changing_line_spacing() {
 #[test]
 fn esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         ESC,
         b'*',
@@ -120,8 +114,7 @@ fn esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
 #[test]
 fn gs_v0_feeds_by_image_height_instead_of_the_selected_line_spacing() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         ESC,
         b'3',
@@ -151,8 +144,7 @@ fn gs_v0_feeds_by_image_height_instead_of_the_selected_line_spacing() {
 #[test]
 fn column_graphics_advance_by_the_selected_line_spacing() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         ESC,
         b'3',

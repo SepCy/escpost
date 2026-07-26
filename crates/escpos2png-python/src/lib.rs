@@ -1,10 +1,9 @@
 //! Python bindings for escpos2png.
 
-use escpos2png::{
-    Completeness, DeviceEvent, DiagnosticEffect, DiagnosticSeverity, InitialStateAssumption,
-    RenderResult, render as render_escpos,
+use escpos2png::{DeviceEvent, RenderResult, render as render_escpos};
+use escpos2png_profiles::{
+    Approximation, PrinterProfile, ProfilePack, from_canonical_profile_pack_json,
 };
-use escpos2png_profiles::{PrinterProfile, ProfilePack, from_canonical_profile_pack_json};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
@@ -88,10 +87,9 @@ fn render_result_to_python<'py>(
         device_events_to_python(py, &rendered.device_events)?,
     )?;
     result.set_item(
-        "diagnostics",
-        diagnostics_to_python(py, &rendered.diagnostics)?,
+        "approximations",
+        approximations_to_python(py, &rendered.approximations)?,
     )?;
-    result.set_item("completeness", completeness_name(rendered.completeness))?;
     result.set_item("metadata", metadata_to_python(py, rendered)?)?;
     Ok(result)
 }
@@ -120,18 +118,15 @@ fn device_events_to_python<'py>(
     Ok(result)
 }
 
-fn diagnostics_to_python<'py>(
+fn approximations_to_python<'py>(
     py: Python<'py>,
-    diagnostics: &[escpos2png::Diagnostic],
+    approximations: &[Approximation],
 ) -> PyResult<Bound<'py, PyList>> {
     let result = PyList::empty(py);
-    for diagnostic in diagnostics {
+    for approximation in approximations {
         let item = PyDict::new(py);
-        item.set_item("severity", diagnostic_severity_name(diagnostic.severity))?;
-        item.set_item("byte_offset", diagnostic.byte_offset)?;
-        item.set_item("command", diagnostic.command)?;
-        item.set_item("message", &diagnostic.message)?;
-        item.set_item("effect", diagnostic_effect_name(diagnostic.effect))?;
+        item.set_item("field", &approximation.field)?;
+        item.set_item("reason", &approximation.reason)?;
         result.append(item)?;
     }
     Ok(result)
@@ -148,51 +143,7 @@ fn metadata_to_python<'py>(
         "canonical_profile_sha256",
         &rendered.metadata.canonical_profile_sha256,
     )?;
-    metadata.set_item(
-        "upstream_repository",
-        &rendered.metadata.upstream_repository,
-    )?;
-    metadata.set_item("upstream_commit", &rendered.metadata.upstream_commit)?;
-    metadata.set_item(
-        "upstream_profile_sha256",
-        &rendered.metadata.upstream_profile_sha256,
-    )?;
-    metadata.set_item("enrichment_sha256", &rendered.metadata.enrichment_sha256)?;
-    metadata.set_item(
-        "initial_state",
-        initial_state_name(rendered.metadata.initial_state),
-    )?;
     Ok(metadata)
-}
-
-fn completeness_name(completeness: Completeness) -> &'static str {
-    match completeness {
-        Completeness::Complete => "complete",
-        Completeness::CompleteWithNonVisualEvents => "complete_with_non_visual_events",
-    }
-}
-
-fn diagnostic_severity_name(severity: DiagnosticSeverity) -> &'static str {
-    match severity {
-        DiagnosticSeverity::Information => "information",
-        DiagnosticSeverity::Warning => "warning",
-        DiagnosticSeverity::Error => "error",
-    }
-}
-
-fn diagnostic_effect_name(effect: DiagnosticEffect) -> &'static str {
-    match effect {
-        DiagnosticEffect::None => "none",
-        DiagnosticEffect::NonVisualBehaviorOnly => "non_visual_behavior_only",
-        DiagnosticEffect::VisualOutputIncomplete => "visual_output_incomplete",
-        DiagnosticEffect::ParsingAborted => "parsing_aborted",
-    }
-}
-
-fn initial_state_name(initial_state: InitialStateAssumption) -> &'static str {
-    match initial_state {
-        InitialStateAssumption::ProfileResetDefaults => "profile_reset_defaults",
-    }
 }
 
 impl BindingError {

@@ -10,8 +10,7 @@ const LF: u8 = 0x0a;
 #[test]
 fn esc_p_consumes_a_supported_drawer_pulse_without_painting_dots() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [ESC, b'p', 0, 50, 50, LF];
 
     let rendered = render(&input, &profile).expect("the profile supports standard drawer pulses");

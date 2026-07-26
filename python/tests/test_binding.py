@@ -30,30 +30,21 @@ class RenderBindingTest(unittest.TestCase):
         self.assertIsInstance(sheets[0], bytes)
         self.assertEqual(_read_png_header(sheets[0]), (384, 30, 1, 0))
 
-    def test_render_result_preserves_diagnostics_and_reproducibility_metadata(self):
+    def test_render_result_preserves_approximations_and_rendering_identity(self):
         rendered = render_result(b"\n", profile="NT-5890K")
 
         self.assertEqual(len(rendered["sheets"]), 1)
-        self.assertEqual(rendered["completeness"], "complete")
         self.assertEqual(rendered["device_events"], [])
         self.assertTrue(
             any(
-                diagnostic["message"].startswith("profile approximation ")
-                for diagnostic in rendered["diagnostics"]
+                approximation["field"] == "fonts.resident_glyph_shapes"
+                for approximation in rendered["approximations"]
             )
         )
         self.assertEqual(rendered["metadata"]["profile_id"], "NT-5890K")
         self.assertEqual(
-            rendered["metadata"]["upstream_commit"],
-            "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5",
-        )
-        self.assertEqual(
             len(rendered["metadata"]["canonical_profile_sha256"]),
             64,
-        )
-        self.assertEqual(
-            rendered["metadata"]["initial_state"],
-            "profile_reset_defaults",
         )
 
 
@@ -90,8 +81,6 @@ class CaseLoaderTest(unittest.TestCase):
                 """
 schema_version = 1
 profile = "NT-5890K"
-input = "input.hex"
-input_encoding = "hex"
 input_sha256 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 """.strip()
             )

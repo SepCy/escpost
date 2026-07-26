@@ -116,7 +116,7 @@ model-specific truncation and mechanical-pitch rules.
   representable.
 - Rounding behavior belongs to command/profile semantics.
 
-## DD-006 — Treat printer profiles as versioned behavioral inputs
+## DD-006 — Treat printer profiles as content-addressed behavioral inputs
 
 **Status:** Accepted
 
@@ -128,14 +128,15 @@ firmware or configured compatibility mode.
 
 ### Decision
 
-Rendering always uses an explicit, versioned printer profile. A profile covers
-behavior as well as geometry.
+Rendering always uses an explicit printer profile covering behavior as well as
+geometry. The canonical content hash is the exact profile identity; no manual
+profile revision is maintained.
 
 ### Consequences
 
 - There is no unqualified, universally accurate "ESC/POS default printer."
-- Callers can reproduce historical previews by retaining profile identity and
-  version.
+- Callers can reproduce historical previews by retaining the profile id and
+  canonical hash.
 - Profile validation and conformance fixtures are first-class project work.
 
 ## DD-007 — Match character metrics without cloning resident glyphs
@@ -178,19 +179,18 @@ The long-term protocol target is the full Epson-documented ESC/POS command set,
 including model-specific behavior, Standard mode, Page mode, downloaded and NV
 resources, native symbols, color/tone graphics, and non-visual device actions.
 
-Implementation and release coverage may grow incrementally. Non-Epson
-extensions use dialect or profile extension points and are not implied by the
-initial completeness claim.
+Implementation and release coverage grows incrementally. Non-Epson extensions
+are not implied by the initial support claim.
 
 ### Consequences
 
-- Parser framing and state abstractions must be designed for commands not yet
-  rendered.
+- Each command family adds the smallest framing, state, and profile model needed
+  by its first tested vertical slice.
 - A support matrix is required.
 - "Full support" is evaluated for a selected profile, because individual
   printers intentionally support only subsets.
 
-## DD-009 — Model color as bitplanes; implement monochrome first
+## DD-009 — Implement monochrome before modeling additional color
 
 **Status:** Accepted
 
@@ -202,16 +202,15 @@ models support spot colors such as black and red.
 
 ### Decision
 
-The surface abstraction supports one or more bitplanes and an explicit color
-model. Implement `MONO1` first, while reserving `TONE4` and indexed spot-color
-composition in the architecture.
+V1 uses one printed/not-printed surface. Multiple-tone or spot-color
+representations will be designed with the first implemented command that needs
+them instead of reserving an unused abstraction.
 
 ### Consequences
 
-- The common case remains compact and simple.
-- Multiple-tone and two-color commands do not require replacing the canonical
-  surface later.
-- Profiles map logical planes to preview palette or tone values.
+- The implemented surface matches current one-bit command semantics directly.
+- Future color work may extend or replace the surface representation based on
+  concrete command and printer evidence.
 
 ## DD-010 — Emulate buffers and state instead of translating commands directly
 
@@ -225,14 +224,15 @@ defined in one command and printed later.
 
 ### Decision
 
-Interpret commands through a virtual-printer state machine with Standard-mode
-line buffers, Page-mode surfaces, and model-aware resource stores. Do not
-translate each command independently into final pixels.
+Interpret implemented commands through a virtual-printer state machine with
+Standard-mode line composition and the resource stores those commands require.
+Do not translate each command independently into final pixels. Add Page mode
+state when Page mode becomes an implemented vertical slice.
 
 ### Consequences
 
 - Command ordering and reset behavior can be represented correctly.
-- Rendering an isolated job may require an initial device-resource snapshot.
+- State that is not part of the submitted isolated job is outside v1.
 - State transitions need extensive unit tests.
 
 ## DD-011 — Represent cuts as sheet boundaries
@@ -255,7 +255,7 @@ starts the next one when subsequent printable output appears.
 - Feed-to-cutter behavior affects sheet height.
 - Non-cut jobs finalize at the final content/feed position.
 
-## DD-012 — Produce structured diagnostics and never guess unsafe framing
+## DD-012 — Fail explicitly and never guess unsafe framing
 
 **Status:** Accepted
 
@@ -267,15 +267,15 @@ desynchronize the remainder of the stream and create a misleading preview.
 
 ### Decision
 
-Known unsupported commands with reliable framing may be skipped with a
-diagnostic. If framing cannot be determined safely, stop interpretation at the
-offending byte and mark the result incomplete.
+V1 returns a structured `RenderError` for malformed, truncated, unknown, or
+unsupported input. It does not continue with a partial preview after an error.
+Binary payloads are consumed only through documented framing.
 
 ### Consequences
 
-- Partial previews can still be useful without pretending to be complete.
-- Every diagnostic retains a byte offset and command identity when known.
-- The tokenizer needs exact length rules independently of rendering support.
+- Errors retain byte offsets and command identity when known.
+- A future partial-preview mode requires concrete recovery semantics and a new
+  result model.
 
 ## DD-013 — Enforce explicit resource limits
 
@@ -294,8 +294,7 @@ and repeated execution.
 
 ### Consequences
 
-- Limit violations are controlled diagnostics, not crashes or unbounded
-  allocation.
+- Limit violations are controlled errors, not crashes or unbounded allocation.
 - Applications may select stricter limits for untrusted public input.
 - Tests must include adversarial streams.
 
@@ -305,24 +304,24 @@ and repeated execution.
 
 ### Context
 
-The same byte stream can render differently after a profile correction,
-renderer behavior change, or change in device-resident resources. Raw streams
-may also omit `ESC @` and rely on state established before the job.
+The same byte stream can render differently after a profile correction or
+renderer behavior change. A physical printer may also have state established
+before an isolated job.
 
 ### Decision
 
-A render result records the renderer version, profile identity and version, and
-initial-state assumption. Callers may provide an explicit state/resource
-snapshot. Without one, rendering starts from documented profile reset defaults
-and reports that assumption.
+V1 defines every submitted byte stream as an isolated job starting from the
+selected profile's reset defaults. A result records the renderer version,
+profile id, and canonical profile hash.
 
 ### Consequences
 
 - Reproducing a historical preview requires more than retaining its ESC/POS
   bytes.
-- Applications can include renderer and profile versions in cache keys.
-- Missing device-resident resources produce incomplete-preview diagnostics
-  rather than invented output.
+- Applications can include renderer version and canonical profile hash in cache
+  keys.
+- Device-resident state is outside the v1 input model rather than represented
+  by an unused snapshot abstraction.
 
 ## DD-018 — Import and enrich the shared ESC/POS printer database
 
@@ -343,9 +342,9 @@ Maintain escpos2png enrichment files for exact rendering metrics, behavioral
 details, corrections, and explicit approximations. Resolve and validate both
 sources into a canonical profile pack embedded in the Rust library.
 
-Do not fetch profile data at installation or render time. Record the upstream
-commit and canonical content hash for reproducibility. Allow downstream
-projects to run custom upstream-compatible profiles through the same importer.
+Do not fetch profile data at installation or render time. The Git submodule
+pins the upstream repository, and the canonical content hash identifies the
+runtime profile.
 
 ### Consequences
 
@@ -374,16 +373,12 @@ or one of its inherited ancestors.
 
 ### Decision
 
-Maintain one global lock containing the upstream repository and Git commit.
-For each enriched printer, store the SHA-256 of its fully resolved,
-deterministically normalized upstream profile.
+Use the Git submodule itself as the global repository and commit pin. For each
+enriched printer, store the SHA-256 of its fully resolved, deterministically
+normalized upstream profile.
 
-Express enrichments as partial typed TOML in escpos2png's canonical profile
-structure. The compiler automatically classifies each value as added,
-confirmed, or corrected by comparing it with the imported canonical draft.
-
-Use simple source and conformance-case references plus explicit approximation
-records. Generate deterministic canonical JSON, an enrichment hash, and a
+Express enrichments as typed TOML. Use simple source references plus explicit
+approximation records, and generate deterministic canonical JSON with a
 canonical profile hash.
 
 Reject unknown enrichment fields and stale upstream-profile hashes. Defer a
@@ -396,10 +391,9 @@ maintenance needs require them.
 - Upstream drift affecting an enriched printer cannot pass silently.
 - Unrelated upstream profile changes do not force every enrichment to change.
 - Profile authors edit ordinary typed values rather than patch operations.
-- The compiler produces an auditable change classification automatically.
 - The canonical renderer input is independent of the upstream YAML schema.
-- Version 1 provenance is intentionally coarse and may require a future schema
-  revision if profile reviews become ambiguous.
+- Git history records evidence and review without copying authoring provenance
+  into every runtime profile.
 
 ## DD-023 — Embed and pin the default representative glyph source
 

@@ -1,19 +1,4 @@
 schema_version = 1
 name = "ASCII fonts and styles"
 profile = "NT-5890K"
-input = "input.hex"
-input_encoding = "hex"
 input_sha256 = "0bacacab0759ac2b82e92c11ccaaa9b1f504863590289201a9a8949ab8da293b"
-expected_completeness = "complete"
-
-[initial_state]
-assumption = "profile-reset-defaults"
-
-[[expected_sheets]]
-file = "expected-001.png"
-width_dots = 384
-height_dots = 198
-
-[[references]]
-source = "epson-escpos-manual"
-location = "ESC !, ESC -, ESC E, ESC M, ESC a, and GS B"

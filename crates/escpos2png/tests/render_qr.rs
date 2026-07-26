@@ -175,9 +175,7 @@ fn reports_an_empty_qr_store_when_print_is_requested() {
 }
 
 fn test_profile() -> escpos2png_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile
+    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }
 
 fn assert_finder_pattern(

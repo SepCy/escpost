@@ -1102,9 +1102,7 @@ fn rejects_native_barcodes_when_the_profile_does_not_support_them() {
 }
 
 fn test_profile() -> escpos2png_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile
+    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }
 
 fn test_profile_with_function_b(system: BarcodeSystem) -> escpos2png_profiles::PrinterProfile {

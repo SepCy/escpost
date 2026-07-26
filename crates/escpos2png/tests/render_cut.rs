@@ -11,8 +11,7 @@ const LF: u8 = 0x0a;
 #[test]
 fn gs_v_full_cut_finishes_one_sheet_and_starts_the_next() {
     let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     // The physical NT-5890K has no cutter. Enable this capability only in the
     // test profile so the generic renderer's sheet behavior can be exercised.
     profile.features.paper_full_cut = true;
@@ -36,8 +35,7 @@ fn gs_v_full_cut_finishes_one_sheet_and_starts_the_next() {
 #[test]
 fn gs_v_reports_a_cut_that_the_profile_does_not_support() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
 
     let error =
         render(&[GS, b'V', 0], &profile).expect_err("the NT-5890K has no full-cut capability");

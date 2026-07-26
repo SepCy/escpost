@@ -8,8 +8,7 @@ const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-589
 #[test]
 fn prints_a_normal_raster_image_and_feeds_by_its_height() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [
         0x1b, 0x40, 0x1d, 0x76, 0x30, 0, 1, 0, 8, 0, 0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81,
     ];
@@ -35,8 +34,7 @@ fn prints_a_normal_raster_image_and_feeds_by_its_height() {
 #[test]
 fn accepts_the_ascii_digit_alias_for_normal_mode() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1d, 0x76, 0x30, 48, 1, 0, 1, 0, 0b1000_0001];
 
     let rendered = render(&input, &profile).expect("GS v 0 mode 48 should render");
@@ -50,8 +48,7 @@ fn accepts_the_ascii_digit_alias_for_normal_mode() {
 #[test]
 fn doubles_each_raster_dot_horizontally_in_double_width_mode() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1d, 0x76, 0x30, 1, 1, 0, 1, 0, 0b1000_0001];
 
     let rendered = render(&input, &profile).expect("GS v 0 mode 1 should render");
@@ -70,8 +67,7 @@ fn doubles_each_raster_dot_horizontally_in_double_width_mode() {
 #[test]
 fn doubles_each_raster_row_and_the_paper_advance_in_double_height_mode() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1d, 0x76, 0x30, 2, 1, 0, 1, 0, 0b1000_0000];
 
     let rendered = render(&input, &profile).expect("GS v 0 mode 2 should render");
@@ -85,8 +81,7 @@ fn doubles_each_raster_row_and_the_paper_advance_in_double_height_mode() {
 #[test]
 fn doubles_raster_dots_in_both_directions_in_ascii_quadruple_mode() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1d, 0x76, 0x30, 51, 1, 0, 1, 0, 0b1000_0000];
 
     let rendered = render(&input, &profile).expect("GS v 0 mode 51 should render");
@@ -103,8 +98,7 @@ fn doubles_raster_dots_in_both_directions_in_ascii_quadruple_mode() {
 #[test]
 fn rejects_zero_raster_dimensions_without_panicking() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     let input = [0x1d, 0x76, 0x30, 0, 0, 0, 1, 0];
 
     let result = render(&input, &profile);
@@ -122,8 +116,7 @@ fn rejects_zero_raster_dimensions_without_panicking() {
 #[test]
 fn reports_raster_bit_images_that_the_profile_does_not_support() {
     let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile")
-        .profile;
+        .expect("the test profile should compile");
     profile.features.bit_image_raster = false;
 
     let error = render(&[0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0x80], &profile)

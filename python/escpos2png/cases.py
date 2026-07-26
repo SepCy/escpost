@@ -20,13 +20,9 @@ class Case:
         directory = Path(directory).resolve()
         manifest = _load_manifest(directory / "case.toml")
         _require_schema_version(manifest)
+        _reject_unknown_fields(manifest)
 
-        input_path = _resolve_case_file(directory, _require_string(manifest, "input"))
-        encoding = _require_string(manifest, "input_encoding")
-        if encoding != "hex":
-            raise CaseError(f"unsupported input encoding {encoding!r}")
-
-        input_bytes = _decode_hex(input_path)
+        input_bytes = _decode_hex(directory / "input.hex")
         expected_hash = _require_string(manifest, "input_sha256")
         actual_hash = hashlib.sha256(input_bytes).hexdigest()
         if actual_hash != expected_hash:
@@ -62,18 +58,22 @@ def _require_schema_version(manifest: dict) -> None:
         raise CaseError(f"unsupported case schema version {version!r}")
 
 
+def _reject_unknown_fields(manifest: dict) -> None:
+    unknown = set(manifest) - {
+        "schema_version",
+        "name",
+        "profile",
+        "input_sha256",
+    }
+    if unknown:
+        raise CaseError(f"unknown case field {sorted(unknown)[0]!r}")
+
+
 def _require_string(manifest: dict, field: str) -> str:
     value = manifest.get(field)
     if not isinstance(value, str) or not value:
         raise CaseError(f"case field {field!r} must be a non-empty string")
     return value
-
-
-def _resolve_case_file(directory: Path, relative_path: str) -> Path:
-    path = (directory / relative_path).resolve()
-    if not path.is_relative_to(directory):
-        raise CaseError(f"case file escapes its directory: {relative_path}")
-    return path
 
 
 def _decode_hex(path: Path) -> bytes:

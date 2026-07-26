@@ -1,119 +1,53 @@
 # Printer Profile Enrichments
 
-escpos2png imports the community-maintained ESC/POS printer database and adds
-only the information required for faithful emulation. This document defines
-the initial authoring and compilation protocol for those additions and
-corrections.
+escpos2png imports command capabilities and code-page mappings from
+`receipt-print-hq/escpos-printer-db`. A small typed enrichment supplies the
+geometry, defaults, font metrics, corrections, and fidelity disclosures needed
+by the renderer.
 
-The protocol is deliberately small. It provides reproducibility, validation,
-upstream-drift detection, and provenance without introducing a generic patch
-language or a separate evidence database.
+The renderer consumes generated canonical JSON. It never resolves upstream
+inheritance or parses enrichment TOML while rendering.
 
-## Data layers
+## Data flow
 
 ```text
-Pinned upstream database
+Pinned upstream Git submodule
         │
         ▼
-Resolved upstream profile
+Resolved upstream profile ── SHA-256 review guard
         │
         ├── typed TOML enrichment
         ▼
-Canonical profile
-        │
-        ├── validation report
-        └── canonical SHA-256
+Validated canonical profile ── canonical SHA-256
 ```
 
-The Rust renderer consumes only the resolved canonical profile. It does not
-interpret TOML overlays or upstream inheritance while rendering.
+## Upstream pinning and drift detection
 
-## Repository layout
-
-The intended source layout is:
+The upstream database is a Git submodule:
 
 ```text
-profiles/
-├── upstream.lock.toml
-├── upstream/
-│   └── escpos-printer-db/
-├── enrichments/
-│   └── NT-5890K.toml
-└── generated/
-    └── profiles.json
+profiles/upstream/escpos-printer-db
 ```
 
-The exact generated-artifact location may change with the Rust workspace
-layout. The separation between source data, enrichments, and generated output
-does not.
+The repository gitlink pins its exact commit. `.gitmodules` records the
+repository URL. A second lock file would duplicate those values, so v1 does not
+have one.
 
-## Upstream lock
+Each enrichment stores the SHA-256 of its fully resolved upstream profile. This
+hash differs by printer and includes inherited values.
 
-One repository-level lock identifies the complete upstream snapshot:
+For `NT-5890K`, the importer hashes the resolved JSON object from the upstream
+`capabilities.json`. `serde_json` stores object keys deterministically in this
+project configuration, and the resulting compact UTF-8 JSON bytes are hashed
+with SHA-256.
 
-```toml
-schema_version = 1
-repository = "https://github.com/receipt-print-hq/escpos-printer-db.git"
-commit = "e3bf6056ee75cf70ffaccb925081fffa7ad6ced5"
-license = "CC-BY-4.0"
-```
+When an upstream update affects only another printer, the enrichment remains
+valid. When it changes `NT-5890K` or an inherited ancestor, compilation stops
+until the new effective profile is reviewed and its hash is accepted.
 
-The Git commit applies to every imported printer. Updating it is an explicit,
-reviewable dependency change.
+## Enrichment format
 
-The build does not fetch the repository. It verifies that the local upstream
-checkout matches the lock.
-
-## Profile-specific upstream hash
-
-Each enrichment records the SHA-256 of its one fully resolved upstream
-profile. This value differs by printer.
-
-For `NT-5890K`, the importer first resolves its inheritance from `POS-5890`
-and any further ancestors. It then hashes the effective profile rather than
-the original YAML bytes.
-
-The initial normalization algorithm is:
-
-1. Resolve upstream inheritance using the pinned database's semantics.
-2. Preserve the resulting values, including explicit `Unknown` strings.
-3. Serialize the resolved profile as UTF-8 JSON.
-4. Sort every object by key recursively.
-5. Emit no insignificant whitespace or trailing newline.
-6. Calculate SHA-256 over those exact bytes.
-
-The normalization algorithm is part of the enrichment schema and requires test
-fixtures. It cannot change silently.
-
-The global Git commit and per-profile SHA-256 serve different purposes:
-
-- the commit identifies the complete database snapshot;
-- the resolved hash detects changes relevant to one enriched printer.
-
-An upstream update that changes only an unrelated profile therefore does not
-invalidate `NT-5890K`. A change to `NT-5890K`, `POS-5890`, or another ancestor
-changes its resolved hash and requires review.
-
-The compiled runtime profile imports upstream command capabilities, such as
-raster-image, barcode, QR-code, and cutter support. Rendering uses them to
-reject commands that the selected printer cannot execute. They remain
-protected by the same resolved-profile hash, so an upstream capability change
-cannot silently alter a compiled profile.
-
-The upstream database represents each `GS k` Function A/B family with one
-boolean. The canonical profile is more precise: it stores the exact barcode
-systems accepted through each wire format. A true upstream boolean expands
-only to that function's established systems (`m=0`–`6` or `m=65`–`73`).
-Model-dependent systems `m=74`–`79` require explicit enrichment evidence.
-
-An enrichment may confirm or correct individual capability flags when a
-printer manual or physical case provides stronger evidence than an inherited
-upstream default. These typed overrides are also covered by the enrichment and
-canonical hashes; the vendored upstream snapshot is never edited in place.
-
-## Enrichment document
-
-Enrichments are partial, typed TOML documents:
+Enrichments are typed TOML documents:
 
 ```toml
 schema_version = 1
@@ -122,8 +56,7 @@ upstream_profile_sha256 = "<resolved-profile-sha256>"
 
 sources = [
     "upstream:escpos-printer-db/NT-5890K",
-    "case:tests/cases/geometry/printable-width",
-    "case:tests/cases/text/default-font",
+    "case:tests/cases/text/ascii-fonts-and-styles",
 ]
 
 [geometry]
@@ -142,13 +75,11 @@ international_character_set = 0
 carriage_return = "ignored"
 
 [fonts.a]
-columns = 32
 cell_width_dots = 12
 cell_height_dots = 24
 baseline_dots = 20
 
 [fonts.b]
-columns = 42
 cell_width_dots = 9
 cell_height_dots = 17
 baseline_dots = 14
@@ -183,187 +114,110 @@ field = "fonts.resident_glyph_shapes"
 reason = "Representative glyphs are used instead of printer ROM glyphs"
 ```
 
-The document follows escpos2png's typed canonical structure, not the raw
-upstream YAML structure. This insulates rendering behavior from upstream
-schema changes.
+Unknown fields are errors. A misspelled correction therefore cannot silently
+enter a profile.
 
-Only fields needed by the current implementation should be introduced. The
-schema grows vertically with implemented behavior rather than attempting to
-describe the full ESC/POS command set before the first render works.
+## Enrichment fields
 
-Motion-unit values define the profile's reset defaults. Commands convert
-distances into immutable printer-dot coordinates using the corresponding
-horizontal or vertical DPI. A value equal to the axis DPI therefore represents
-one printer dot per motion unit.
+`schema_version` describes the TOML structure. This unreleased format remains
+version 1.
 
-Font metrics define ESC/POS character geometry. `cell_width_dots` controls
-advancement, `cell_height_dots` controls line height, and `baseline_dots` is
-measured downward from the top of the unscaled cell. The glyph provider is
-fitted and clipped inside this geometry; its native advance width never
-changes layout.
+`profile` is the shared upstream profile identifier.
 
-`defaults.code_page` is the numeric character-table slot active at power-on
-and after `ESC @`. The compiler imports the profile's complete `codePages`
-mapping from the pinned upstream record and rejects a default slot that is not
-present there. The renderer resolves `ESC t n` through this mapping because
-the same numeric `n` can identify different encodings on different printers.
+`upstream_profile_sha256` is the review guard described above.
 
-`defaults.international_character_set` is the `ESC R` set active at power-on
-and after `ESC @`. Version 1 accepts Epson's common sets 0–17. International
-substitution is applied to the documented ASCII positions before the selected
-code page is decoded and the glyph is requested.
+`sources` contains human-readable evidence references. Sources remain in the
+authoring file and Git history; they are not copied into the runtime profile.
+Detailed manual citations and physical observations belong in the applicable
+case's `notes.md`.
 
-`defaults.carriage_return` is either `ignored` or `line_feed`. It captures the
-printer's effective auto-line-feed configuration: horizontal thermal printers
-ignore `CR` when auto line feed is disabled and process it like `LF` when
-enabled. When this device configuration has not been physically observed, the
-profile records the chosen value as an approximation.
+Geometry, motion, defaults, and fonts are complete for the runtime fields
+currently needed by the renderer. Font column counts are derived from printable
+width and cell width when humans need them; they are not separate runtime
+values.
 
-`features` is a partial table. Omitted flags retain their fully resolved
-upstream values. Present flags are classified as confirmed or corrected by
-comparison with upstream. `features.barcodes.function_a` and `function_b`
-replace their respective imported system sets exactly; adding one
-model-dependent system does not imply support for its neighbors. Unknown
-feature or barcode-system names are rejected, just like other unknown
-enrichment fields.
+Feature overrides exist only for implemented command handlers. New upstream
+capabilities are added to the canonical schema with the renderer behavior that
+consumes them.
 
-## Automatic change classification
-
-Authors do not label values as additions, confirmations, or corrections. The
-compiler compares each overlay value with the canonical draft imported from
-upstream:
-
-| Upstream state | Overlay state | Classification |
-|---|---|---|
-| Missing or `Unknown` | Value | Added |
-| Same value | Same value | Confirmed |
-| Different value | Value | Corrected |
-
-The compiler emits this classification in its validation report. The overlay
-itself remains a straightforward typed document.
-
-An upstream-profile hash mismatch stops compilation before applying the
-overlay. A review command should show the old and new resolved profiles,
-classifications, and proposed new hash.
-
-## Sources and physical evidence
-
-Version 1 uses simple source references rather than separate evidence files or
-per-field provenance wrappers.
-
-Useful source forms include:
-
-```text
-upstream:escpos-printer-db/NT-5890K
-manual:<document-id>#<section-or-page>
-case:tests/cases/<case-directory>
-observation:<short-identifier>
-```
-
-Detailed physical evidence belongs in the conformance case's `notes.md` and
-hardware-validation report as defined by `TESTING.md`. The input hash in the
-case manifest binds that evidence to exact ESC/POS bytes.
-
-A source reference can support a group of related profile values. Field-level
-evidence may be added in a future schema if real review ambiguity demonstrates
-the need.
+The upstream database represents each `GS k` Function A/B family with one
+boolean. The canonical profile stores exact barcode systems. An upstream true
+value expands only to the established legacy systems; model-dependent systems
+require explicit enrichment evidence.
 
 ## Approximations
 
-Known approximations are explicit:
+An approximation names a fidelity boundary and explains it:
 
 ```toml
 [[approximations]]
 field = "fonts.resident_glyph_shapes"
-reason = "Exact Netum ROM glyph bitmaps are unavailable"
-source = "decision:DD-007"
+reason = "Exact printer ROM glyphs are unavailable"
 ```
 
-An approximation identifies a canonical field or field group and explains the
-fidelity boundary. It is not assigned a numeric confidence score.
-
-The generated profile retains applicable approximations so the renderer can
-produce honest completeness metadata or diagnostics.
+The canonical profile retains approximations so every render can disclose them
+directly. Approximation fields are included in the canonical hash.
 
 ## Validation
 
-The compiler rejects:
+Compilation rejects:
 
-- an upstream checkout that does not match the global commit;
-- a profile that does not exist upstream;
-- a resolved upstream hash mismatch;
-- unknown TOML fields;
-- invalid types or units;
-- non-positive DPI, dimensions, or character counts;
-- a default international character set without implemented semantics;
-- a barcode system listed under a `GS k` function that has no command number
-  for that system;
-- geometry inconsistent with the selected color or surface model;
-- references to conformance cases that do not exist;
-- approximation paths that do not identify canonical fields; and
-- a canonical profile that violates renderer invariants.
+- an unsupported enrichment schema version;
+- unknown enrichment fields;
+- an unknown upstream profile;
+- a stale resolved-profile hash;
+- zero geometry, motion, or font dimensions;
+- a baseline outside its font cell;
+- a default code-page slot absent from the upstream profile;
+- a default international set the renderer does not implement;
+- a barcode system without a command number in the selected Function A/B
+  framing; and
+- invalid canonical JSON or a canonical hash mismatch.
 
-Unknown fields are errors rather than ignored forward compatibility. A newer
-schema version must be selected explicitly when new syntax is needed.
+Validation grows with implemented behavior. The schema does not reserve fields
+for future commands.
 
-Validation rules should be added as actual implemented behavior requires them.
-Speculative restrictions must not block legitimate printer variants.
+## Canonical profile pack
 
-## Generated canonical profile
-
-Compilation produces deterministic JSON suitable for embedding in Rust. A
-generated profile contains:
+Compilation produces deterministic JSON containing:
 
 ```text
-profile identity
-resolved geometry and defaults
-font metrics and code-page mappings
-capabilities and quirks
-known approximations
-upstream Git commit
-resolved upstream profile SHA-256
-enrichment SHA-256
-canonical profile SHA-256
+schema version
+profile id
+runtime geometry, motion, defaults, and fonts
+implemented capabilities
+code-page mappings
+approximations
+resolved upstream-profile SHA-256
+canonical-profile SHA-256
 ```
 
-The enrichment and canonical hashes are generated automatically. Developers
-maintain only the upstream lock, expected resolved-profile hash, enrichment
-values, and source references.
+The canonical hash covers every field that can affect rendering or its fidelity
+disclosure, except the hash field itself. It is the exact profile identity used
+in render metadata and cache keys.
 
-The canonical hash covers the schema version, profile identity, geometry,
-motion units, defaults, fonts, capabilities, code-page mappings, and diagnostic
-approximations. It deliberately excludes evidence labels and source repository
-provenance. Clarifying a source note therefore does not create a new rendering
-identity, while any runtime behavior change does.
+The generated pack is committed because Python wheels embed it directly. Tests
+regenerate the reviewed profile and require it to equal the committed pack.
 
-The generated JSON contains the provenance beside those runtime fields. The
-loader rejects unknown fields, invalid runtime values, unsupported schema
-versions, and content whose recomputed canonical hash does not match the
-stored hash. Metadata that would make identical builds differ, such as build
-timestamps or absolute paths, is prohibited.
+Regenerate it with:
 
-## Versioning
+```bash
+docker compose run --rm test cargo run --quiet \
+  -p escpos2png-profiles --bin compile-profile-pack -- \
+  profiles/upstream/escpos-printer-db/dist/capabilities.json \
+  profiles/enrichments profiles/generated/profiles.json
+```
 
-`schema_version` identifies how to interpret the enrichment and canonical
-documents. It changes only when their structure or interpretation changes.
+## Updating an upstream profile
 
-Profiles do not carry a manually maintained revision. The canonical profile
-hash is their exact rendering identity, while the enrichment and upstream
-hashes identify their inputs. This avoids a redundant counter that can become
-stale without weakening reproducibility or cache invalidation.
+1. Update the upstream submodule deliberately.
+2. Run profile compilation.
+3. If the resolved-profile hash changed, inspect the effective upstream
+   profile and inherited ancestors.
+4. Update corrections or capabilities when the reviewed behavior changed.
+5. Replace `upstream_profile_sha256` with the accepted resolved hash.
+6. Regenerate the canonical pack.
+7. Review its canonical hash and run the full test suite.
 
-## Deferred complexity
-
-Version 1 deliberately does not include:
-
-- a generic JSON Patch or dotted-path mutation language;
-- explicit `add`, `confirm`, or `replace` operations;
-- separate evidence documents;
-- per-field evidence objects;
-- numeric confidence scores;
-- arbitrary runtime mutation of built-in profiles;
-- complex firmware-variant inheritance; or
-- a custom binary profile-pack format.
-
-These features should be introduced only in response to demonstrated profile
-maintenance needs.
+There is no manual profile revision, enrichment hash, automatic
+added/confirmed/corrected report, or duplicate upstream lock in v1.

@@ -10,7 +10,8 @@ use encoding_rs::{
     WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
 };
 use escpos2png_profiles::{
-    Approximation, BarcodeSystem, CarriageReturnMode, Font as ProfileFont, PrinterProfile,
+    Approximation, BarcodeSystem, CarriageReturnMode, FeedBehavior, Font as ProfileFont,
+    PrinterProfile,
 };
 use fontdue::{Font, FontSettings};
 use oem_cp::{
@@ -502,7 +503,7 @@ fn execute_esc_command(
                     offset,
                 });
             };
-            state.print_and_feed_motion_units(distance)?;
+            state.execute_esc_j(distance)?;
             Ok(3)
         }
         0x4d => {
@@ -1618,6 +1619,9 @@ struct PrinterState {
     default_vertical_motion_units_per_inch: u32,
     vertical_motion_units_per_inch: u32,
     esc_star_8_dot_vertical_pitch: u32,
+    esc_j_behavior: FeedBehavior,
+    gs_v_function_b_full_behavior: FeedBehavior,
+    gs_v_function_b_partial_behavior: FeedBehavior,
     font_a: ProfileFont,
     font_b: ProfileFont,
     active_font: ProfileFont,
@@ -1691,6 +1695,9 @@ impl PrinterState {
             default_vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
             vertical_motion_units_per_inch: profile.motion.vertical_units_per_inch,
             esc_star_8_dot_vertical_pitch: profile.column_bit_image.eight_dot_vertical_pitch_dots,
+            esc_j_behavior: profile.commands.esc_j,
+            gs_v_function_b_full_behavior: profile.commands.gs_v_function_b_full,
+            gs_v_function_b_partial_behavior: profile.commands.gs_v_function_b_partial,
             active_font: font_a.clone(),
             font_a,
             font_b,
@@ -1950,6 +1957,13 @@ impl PrinterState {
         self.feed_lines(1)?;
         self.line_spacing = line_spacing;
         Ok(())
+    }
+
+    fn execute_esc_j(&mut self, motion_units: u8) -> Result<(), RenderError> {
+        match self.esc_j_behavior {
+            FeedBehavior::Feed => self.print_and_feed_motion_units(motion_units),
+            FeedBehavior::Ignored => Ok(()),
+        }
     }
 
     fn set_emphasis(&mut self, emphasized: bool) {
@@ -2533,6 +2547,15 @@ impl PrinterState {
         offset: usize,
     ) -> Result<(), RenderError> {
         if !self.at_beginning_of_line {
+            return Ok(());
+        }
+
+        let behavior = if mode == 65 {
+            self.gs_v_function_b_full_behavior
+        } else {
+            self.gs_v_function_b_partial_behavior
+        };
+        if behavior == FeedBehavior::Ignored {
             return Ok(());
         }
 

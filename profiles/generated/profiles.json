@@ -16,6 +16,11 @@
       "column_bit_image": {
         "eight_dot_vertical_pitch_dots": 1
       },
+      "commands": {
+        "esc_j": "ignored",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "ignored"
+      },
       "defaults": {
         "line_spacing_dots": 30,
         "code_page": 0,
@@ -150,7 +155,7 @@
         }
       ],
       "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-      "canonical_profile_sha256": "f1a1a984beadafc1fa237010ba45e2b1e0808bfd6d14b59686424ef0fc5d9514"
+      "canonical_profile_sha256": "3a7459577213318b7b55b3758dc3cd94669c70f46decb9752b99460e03824334"
     }
   }
 }

@@ -1,4 +1,4 @@
 schema_version = 1
 name = "NT-5890K v1 hardware conformance receipt"
 profile = "NT-5890K"
-input_sha256 = "3025ec6b07744ed707246e4aa4af9ba70f6e3786f8b090d614d1309be64f44f3"
+input_sha256 = "72366422ef0185da2cf13b4088649773f4569e9f7cbc602ca868f31c0dc59537"

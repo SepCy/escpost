@@ -1,5 +1,5 @@
 use escpos2png::render;
-use escpos2png_profiles::{CarriageReturnMode, compile_profile};
+use escpos2png_profiles::{CarriageReturnMode, FeedBehavior, compile_profile};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
@@ -79,9 +79,10 @@ fn esc_d_feeds_n_current_lines_without_changing_line_spacing() {
 }
 
 #[test]
-fn esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+fn epson_esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
+    profile.commands.esc_j = FeedBehavior::Feed;
     let input = [
         ESC,
         b'*',
@@ -109,6 +110,21 @@ fn esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
     assert_eq!((surface.width(), surface.height()), (384, 40));
     assert!(surface.is_printed(0, 0));
     assert!(surface.is_printed(0, 10));
+}
+
+#[test]
+fn nt_5890k_consumes_esc_j_without_feeding() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    let raster = [GS, b'v', b'0', 0, 1, 0, 1, 0, 0b1000_0000];
+    let input = [raster.as_slice(), &[ESC, b'J', 10], raster.as_slice()].concat();
+
+    let rendered = render(&input, &profile).expect("ignored ESC J should still be consumed");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!((surface.width(), surface.height()), (384, 2));
+    assert!(surface.is_printed(0, 0));
+    assert!(surface.is_printed(0, 1));
 }
 
 #[test]

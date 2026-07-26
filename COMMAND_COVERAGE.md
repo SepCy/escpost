@@ -48,7 +48,7 @@ Version 1 reports them as unsupported rather than guessing their behavior.
 | `ESC 3` | Set line spacing | Implemented | Implemented | Pending |
 | `ESC D` | Set horizontal tab positions | Implemented | Implemented | Pending |
 | `ESC E` | Select emphasized printing | Implemented | Implemented | Pending |
-| `ESC J` | Print and feed by vertical motion units | Implemented | Implemented | Pending |
+| `ESC J` | Print and feed by vertical motion units, or consume without feeding when the profile specifies | Implemented | Implemented | Connected NT-5890K ignores it |
 | `ESC M` | Select Font A/B | Implemented | Implemented | Pending |
 | `ESC R` | Select international character substitutions | Implemented | Implemented | Pending |
 | `ESC a` | Select line justification | Implemented | Implemented | Pending |
@@ -162,14 +162,16 @@ every logical module with a digitized physical print.
 | Command | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
 | `GS V` Function A | Full or partial cut at the current position | Implemented | Implemented | Pending |
-| `GS V` Function B | Feed by `n` units without cutting on a no-autocutter profile | Partial | Implemented | Pending |
+| `GS V` Function B | Apply the profile's full/partial feed behavior on a no-autocutter profile | Partial | Implemented | NT-5890K feeds for mode 65 and ignores mode 66 |
 | `ESC p` | Generate a cash-drawer pulse without printing | Implemented | Implemented | Pending |
 
-On a printer without an autocutter, Function B performs its documented
-`n × vertical motion unit` feed and creates no sheet boundary. Cutter-equipped
-Function B remains partial because its preview also needs the model-specific
-distance between the print position and blade; profiles do not yet carry that
-geometry.
+Epson's no-autocutter baseline performs the documented
+`n × vertical motion unit` feed and creates no sheet boundary for both
+Function B modes. Profiles can mark either form ignored when compatible
+firmware deviates. The connected NT-5890K feeds for full-cut mode 65 and
+consumes partial-cut mode 66 without feeding. Cutter-equipped Function B
+remains partial because its preview also needs the model-specific distance
+between the print position and blade; profiles do not yet carry that geometry.
 
 ## Post-v1 protocol families
 

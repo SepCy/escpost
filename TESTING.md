@@ -128,6 +128,12 @@ showing that the printer does not recognize these values as length-prefixed
 successful native-symbol case, and these four capabilities remain absent from
 the NT-5890K enrichment.
 
+Physical motion probes also established three model-specific feed behaviors:
+`ESC J` is consumed without feeding, `GS V 65 n` feeds by the requested
+amount, and `GS V 66 n` is consumed without feeding. These affect layout and
+therefore live in the typed profile rather than being treated as incidental
+print artifacts.
+
 ## Conformance case format
 
 Each behavior is represented by a self-contained case directory:

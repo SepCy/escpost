@@ -11,7 +11,7 @@ streams rather than introducing different test data for hardware:
 4. All four `GS v 0` raster scaling modes.
 5. EAN-13 through both `GS k` framings and a Model 2 QR symbol.
 6. Full/partial `GS V` Function B forms on a printer without an autocutter,
-   exposed with solid raster markers.
+   exposed with horizontally staggered raster markers.
 
 Each section starts from `ESC @`, but initialization does not retract or erase
 paper already rendered. No cut or drawer-pulse command is included. Final
@@ -26,7 +26,7 @@ font. Compare:
 - the four column-graphics and four raster-graphics scales;
 - barcode width, height, HRI placement, and centering;
 - QR dimensions and placement; and
-- the equal Function B marker gaps.
+- the first Function B marker gap and the vertically adjacent final markers.
 
 The exact PNG is served at <http://localhost:8765/tools/preview/> with integer
 nearest-neighbor zoom.
@@ -42,18 +42,24 @@ after Function A. The revised stream therefore sends `GS H`, `GS h`, and
 `GS w` again before Function B. This isolates command framing from that
 firmware state-reset quirk.
 
+A second isolated feed probe established that this firmware ignores `ESC J`
+and `GS V 66 n`, while `GS V 65 n` performs the requested feed. The profile
+models all three behaviors. The final two no-cut markers therefore occupy
+adjacent vertical rows. Their different horizontal insets keep the command
+boundaries visible instead of forming one double-height block.
+
 ## Physical run
 
 ```text
 date: 2026-07-26
-input SHA-256: 3025ec6b07744ed707246e4aa4af9ba70f6e3786f8b090d614d1309be64f44f3
-renderer commit: a82adc7
+input SHA-256: 72366422ef0185da2cf13b4088649773f4569e9f7cbc602ca868f31c0dc59537
+renderer commit: pending
 printer profile: NT-5890K
-canonical profile SHA-256: f1a1a984beadafc1fa237010ba45e2b1e0808bfd6d14b59686424ef0fc5d9514
+canonical profile SHA-256: 3a7459577213318b7b55b3758dc3cd94669c70f46decb9752b99460e03824334
 printer USB identity: 0416:5011
 serial: B120300001
 connection: USB interface 0, OUT endpoint 0x01
-transport result: all 920 hash-verified bytes sent without a USB error
+transport result: all 1208 hash-verified bytes sent without a USB error
 visual comparison: pending
 ```
 

@@ -1,24 +1,25 @@
 # GS V Function B feed without an autocutter
 
-This case draws three solid 32 × 8-dot raster markers. Their top edges should be
-at printer-dot rows 0, 50, and 100.
+This case sends three 128 × 8-dot raster images. Each contains one solid
+32 × 8-dot marker at a different horizontal inset: 0, 48, or 96 dots. On the
+calibrated NT-5890K profile their top edges are at rows 0, 28, and 36.
 
-1. `GS v 0` prints the first marker and advances eight dots; `ESC J 22`
-   completes the 30-dot baseline advance.
-2. `GS P 203 101` makes each vertical motion unit approximately two dots.
-3. `GS V 65 10` requests a full cut after ten units. The NT-5890K has no
-   autocutter, so Epson specifies a 20-dot feed without a cut.
-4. The second marker prints at row 50; `ESC J 11` advances its remaining
-   22-dot baseline distance under the selected motion units.
-5. `GS V 66 10` exercises the equivalent partial-cut form. It feeds another
-   20 dots without a cut, placing the third marker at row 100.
-6. Another `ESC J 11` completes the final baseline before `ESC d 3` provides
-   blank paper for physical review.
+1. `GS v 0` prints the first marker and advances eight dots.
+2. The connected firmware consumes `ESC J 22` without feeding.
+3. `GS P 203 101` makes each vertical motion unit approximately two dots.
+4. `GS V 65 10` requests a full cut after ten units. The NT-5890K has no
+   autocutter; its profile records the observed 20-dot feed without a cut.
+5. The second marker therefore prints at row 28.
+6. This firmware ignores both `ESC J 11` and partial-cut form `GS V 66 10`.
+   The right marker starts immediately below the center marker at row 36.
+7. The final `ESC J 11` is also ignored before `ESC d 3` supplies the manual
+   tear margin.
 
-The solid raster markers avoid printer-font shapes and the connected
-NT-5890K's trailing `ESC *` line artifact. A physical run should produce one
-uncut receipt with two equal extra gaps. Measure marker-to-marker distances
-rather than the trailing manual-tear margin.
+The horizontal staggering keeps all three command boundaries visible even
+when two markers have no vertical gap. Raster graphics also avoid
+printer-font shapes and the connected NT-5890K's trailing `ESC *` line
+artifact. The expected physical result is one uncut receipt with three
+distinct blocks; the center and right blocks have vertically adjacent rows.
 
 References: Epson `GS V — Select cut mode and cut paper`, Function B; `GS P —
 Set horizontal and vertical motion units`.
@@ -27,7 +28,7 @@ Set horizontal and vertical motion units`.
 
 ```text
 date: pending
-input SHA-256: c02c4b6860f475b94a094dbc2da6d6f329d0b0b5425017f85e1d5e174c0965f8
+input SHA-256: bde163feaf4685fd4d01cceccbf26c1beb57e3cb8683e1bb5c1f95c0fd0e07e8
 printer profile: NT-5890K
 printer USB identity: 0416:5011
 serial: B120300001
@@ -36,5 +37,6 @@ transport result: pending for the revised raster-marker stream
 visual comparison: pending
 ```
 
-The expected paper result is one uncut strip with three markers and equal
-marker-to-marker gaps. The USB result alone cannot establish that geometry.
+The behavior was reproduced in both the consolidated receipt and a separate
+402-byte motion-unit probe: `ESC J` was ignored, mode 65 fed, and mode 66 was
+ignored.

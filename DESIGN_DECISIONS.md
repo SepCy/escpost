@@ -510,7 +510,8 @@ decision can be revisited if the difference later matters.
   engineering every firmware revision.
 - Material geometry differences remain eligible for typed corrections. For
   example, the calibrated NT-5890K paints `ESC *` 8-dot rows adjacently instead
-  of using Epson's three-dot vertical pitch.
+  of using Epson's three-dot vertical pitch, ignores `ESC J`, and feeds only
+  the full-cut form of `GS V` Function B.
 - A preview may not reproduce every dot or native-symbol implementation choice
   even when its positions and overall layout are correct.
 - A previously neglected quirk can become modeled after reproducible evidence

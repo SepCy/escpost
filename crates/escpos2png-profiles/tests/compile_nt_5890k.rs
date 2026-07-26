@@ -1,6 +1,6 @@
 use escpos2png_profiles::{
-    BarcodeSystem, CanonicalProfileError, CarriageReturnMode, CompileProfileError, compile_profile,
-    from_canonical_json, from_canonical_profile_pack_json, to_canonical_json,
+    BarcodeSystem, CanonicalProfileError, CarriageReturnMode, CompileProfileError, FeedBehavior,
+    compile_profile, from_canonical_json, from_canonical_profile_pack_json, to_canonical_json,
     to_canonical_profile_pack_json,
 };
 use serde_json::Value;
@@ -43,6 +43,18 @@ fn nt_5890k_compiles_to_rendering_geometry() {
     assert_eq!(
         profile.column_bit_image.eight_dot_vertical_pitch_dots, 1,
         "the connected NT-5890K paints 8-dot ESC * rows adjacently"
+    );
+    assert_eq!(
+        (
+            profile.commands.esc_j,
+            profile.commands.gs_v_function_b_full,
+            profile.commands.gs_v_function_b_partial,
+        ),
+        (
+            FeedBehavior::Ignored,
+            FeedBehavior::Feed,
+            FeedBehavior::Ignored,
+        )
     );
     assert_eq!(
         (

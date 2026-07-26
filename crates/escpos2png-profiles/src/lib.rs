@@ -38,6 +38,7 @@ pub struct PrinterProfile {
     pub geometry: Geometry,
     pub motion: MotionUnits,
     pub column_bit_image: ColumnBitImage,
+    pub commands: CommandBehavior,
     pub defaults: PrinterDefaults,
     pub fonts: Fonts,
     pub features: Features,
@@ -85,6 +86,21 @@ pub struct MotionUnits {
 pub struct ColumnBitImage {
     /// Physical row distance between adjacent source bits in ESC * modes 0/1.
     pub eight_dot_vertical_pitch_dots: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CommandBehavior {
+    pub esc_j: FeedBehavior,
+    pub gs_v_function_b_full: FeedBehavior,
+    pub gs_v_function_b_partial: FeedBehavior,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FeedBehavior {
+    Feed,
+    Ignored,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -287,6 +303,7 @@ struct Enrichment {
     geometry: Geometry,
     motion: MotionUnits,
     column_bit_image: ColumnBitImage,
+    commands: CommandBehavior,
     defaults: PrinterDefaults,
     fonts: Fonts,
     #[serde(default)]
@@ -340,6 +357,7 @@ struct CanonicalProfileContent<'a> {
     geometry: &'a Geometry,
     motion: &'a MotionUnits,
     column_bit_image: &'a ColumnBitImage,
+    commands: &'a CommandBehavior,
     defaults: &'a PrinterDefaults,
     fonts: &'a Fonts,
     features: &'a Features,
@@ -379,6 +397,7 @@ pub fn compile_profile(
         geometry: enrichment.geometry,
         motion: enrichment.motion,
         column_bit_image: enrichment.column_bit_image,
+        commands: enrichment.commands,
         defaults: enrichment.defaults,
         fonts: enrichment.fonts,
         features,
@@ -674,6 +693,7 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
         geometry: &profile.geometry,
         motion: &profile.motion,
         column_bit_image: &profile.column_bit_image,
+        commands: &profile.commands,
         defaults: &profile.defaults,
         fonts: &profile.fonts,
         features: &profile.features,

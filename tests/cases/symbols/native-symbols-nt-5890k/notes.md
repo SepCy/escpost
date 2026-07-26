@@ -38,3 +38,33 @@ representative HRI glyphs or QR mask are pixel-identical to this firmware.
 The stream contains no cut or drawer command. Symbols are centered so their
 surrounding paper supplies a quiet zone; ESC/POS does not add one to the
 logical symbol dimensions.
+
+## Unsupported GS1 DataBar probe
+
+Four additional streams probed the newer Function B systems independently:
+
+| System | Probe file | Bytes | SHA-256 |
+|---|---|---:|---|
+| `m=75` Omnidirectional | `databar-m75-unsupported-probe.hex` | 64 | `59042fe18f63a400383ca0939ca904904191030b44e10425f1bd4fe58ecc91ab` |
+| `m=76` Truncated | `databar-m76-unsupported-probe.hex` | 69 | `baa2b256f93674a2b494df14dd4cdbe551701757da1f7bf4b869be0414ac3aeb` |
+| `m=77` Limited | `databar-m77-unsupported-probe.hex` | 67 | `ee82ba2a300fcaf19631a39b04f87b19b24fbdb26adc8d07150bebb4c4c97e1e` |
+| `m=78` Expanded | `databar-m78-unsupported-probe.hex` | 62 | `fe8f9f4edc240027b8650362665c41d0f56a18a5d7ceceeb6b226c4a58ace62d` |
+
+Each stream resets the printer, prints an identifying text line, selects HRI
+below, an 80-dot height, and a two-dot module width, then sends one DataBar
+command followed by an `AFTER Mxx` text line and feed. None contains a cut or
+drawer command.
+
+```text
+date: 2026-07-26
+printer USB identity: 0416:5011
+serial: B120300001
+result: no DataBar bars or HRI were printed for m=75, 76, 77, or 78
+observed fallback: payload bytes such as 0001234567890 and 1501234567890
+                   were printed as ordinary text
+```
+
+The visible payload proves that this firmware does not recognize these values
+as length-prefixed `GS k` systems. It ignores the unsupported command prefix
+and resumes ordinary processing before the payload. The NT-5890K enrichment
+must therefore continue to omit all four GS1 DataBar capabilities.

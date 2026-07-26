@@ -122,6 +122,13 @@ such as GS1-128 and automatic Code 128 remain absent until they are separately
 verified on this printer. The exact stream and observation are retained in
 `tests/cases/symbols/native-symbols-nt-5890k`.
 
+Separate raw probes for GS1 DataBar systems `m=75` through `m=78` printed no
+bars or HRI on this firmware. Their payload bytes appeared as ordinary text,
+showing that the printer does not recognize these values as length-prefixed
+`GS k` commands. The exact probe streams and hashes are retained beside the
+successful native-symbol case, and these four capabilities remain absent from
+the NT-5890K enrichment.
+
 ## Conformance case format
 
 Each behavior is represented by a self-contained case directory:

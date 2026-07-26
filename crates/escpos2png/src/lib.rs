@@ -593,17 +593,17 @@ fn execute_esc_command(
                     offset,
                 });
             };
-            let encoding = state
-                .code_page_encoding(code_page)
-                .unwrap_or("<not present in printer profile>");
-            if !is_supported_code_page_encoding(encoding) {
+            if state.code_page_encoding(code_page).is_none() {
                 return Err(RenderError::UnsupportedCodePage {
                     code_page,
-                    encoding: encoding.to_owned(),
+                    encoding: "<not present in printer profile>".to_owned(),
                     offset,
                 });
             }
 
+            // Every ESC/POS character table shares printable ASCII. Remember a
+            // known table even when its extended or multibyte range is outside
+            // v1 so later ASCII can still be rendered faithfully.
             state.select_code_page(code_page);
             Ok(3)
         }
@@ -2034,18 +2034,24 @@ impl PrinterState {
         let encoding = self
             .code_page_encoding(self.active_code_page)
             .unwrap_or("<not present in printer profile>");
-        if !is_supported_code_page_encoding(encoding) {
+
+        // ESC R replaces a small set of ASCII positions independently of the
+        // active ESC t table. Printable ASCII is common to every table,
+        // including multibyte tables whose extended ranges remain post-v1.
+        let character = international::substitution(self.active_international_character_set, byte)
+            .or_else(|| byte.is_ascii().then(|| char::from(byte)))
+            .or_else(|| {
+                is_supported_code_page_encoding(encoding)
+                    .then(|| decode_printable_byte(byte, encoding))
+                    .flatten()
+            });
+        if character.is_none() && !is_supported_code_page_encoding(encoding) {
             return Err(RenderError::UnsupportedCodePage {
                 code_page: self.active_code_page,
                 encoding: encoding.to_owned(),
                 offset,
             });
         }
-
-        // ESC R replaces a small set of ASCII positions independently of the
-        // active ESC t table. Other bytes continue through normal decoding.
-        let character = international::substitution(self.active_international_character_set, byte)
-            .or_else(|| decode_printable_byte(byte, encoding));
         let Some(character) = character else {
             return Err(RenderError::UndefinedCodePageByte {
                 byte,

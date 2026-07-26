@@ -1,0 +1,4 @@
+schema_version = 1
+name = "Receiptful html2escpos compatibility"
+profile = "NT-5890K"
+input_sha256 = "afb8ebbfadb2c3506bdd3000b4699e66cde297472f1154fb06fad2f9af4752d9"

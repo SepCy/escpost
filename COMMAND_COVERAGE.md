@@ -68,6 +68,13 @@ scripts. The NT-5890K currently assumes that auto line feed is disabled, so
 its ignored-`CR` behavior remains an explicit profile approximation until a
 physical probe confirms it.
 
+`ESC t` decodes the profile's supported single-byte tables. Printable ASCII
+`20h`–`7Eh` remains available after selecting a known post-v1 multibyte table;
+this is required by Receiptful's NT-5890K output, which selects CP932 before
+ordinary ASCII. Extended CP932 input still returns a clear error that names
+the unsupported code page. Multibyte decoding and its additional glyph assets
+remain post-v1.
+
 ## Positioning and print area
 
 | Command | Behavior | Implementation | Automated coverage | Hardware |

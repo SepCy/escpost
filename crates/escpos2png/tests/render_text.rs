@@ -281,20 +281,33 @@ fn characters_missing_from_the_bundled_font_return_an_error() {
 }
 
 #[test]
-fn rendering_reports_an_unsupported_default_code_page_without_panicking() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+fn ascii_remains_printable_after_selecting_a_post_v1_multibyte_code_page() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
-    profile.defaults.code_page = 1;
 
-    let error = render(b"A", &profile)
-        .expect_err("CP932 needs a multi-byte decoder and is not supported yet");
+    // Receiptful's html2escpos emitter selects CP932 for ordinary ASCII on the
+    // NT-5890K. ASCII 20h–7Eh is shared by ESC/POS character tables, so the
+    // renderer does not need a Japanese decoder to preserve those positions.
+    let cp437 = render(&[ESC, b't', 0, b'A', LF], &profile).expect("CP437 ASCII should render");
+    let cp932 = render(&[ESC, b't', 1, b'A', LF], &profile).expect("CP932 ASCII should render");
+
+    assert_eq!(cp437.sheets[0].surface, cp932.sheets[0].surface);
+}
+
+#[test]
+fn extended_bytes_in_post_v1_multibyte_code_pages_still_report_unsupported() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+
+    let error = render(&[ESC, b't', 1, 0x82], &profile)
+        .expect_err("CP932 multibyte decoding remains outside the v1 boundary");
 
     assert!(matches!(
         error,
         RenderError::UnsupportedCodePage {
             code_page: 1,
             ref encoding,
-            offset: 0,
+            offset: 3,
         } if encoding == "CP932"
     ));
 }

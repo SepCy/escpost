@@ -1,4 +1,4 @@
-use escpos2png::render;
+use escpos2png::{RenderError, render};
 use escpos2png_profiles::compile_profile;
 
 const CAPABILITIES_JSON: &[u8] =
@@ -118,6 +118,64 @@ fn gs_w_clips_column_format_graphics_at_the_print_area_edge() {
     // first eight printer-dot columns.
     assert_eq!(count_printed_dots(surface, 0, 8, 3), 8 * 3);
     assert_eq!(count_printed_dots(surface, 8, 376, 3), 0);
+}
+
+#[test]
+fn barcodes_use_the_configured_print_area_and_reject_oversized_symbols() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.barcode_b = true;
+    let barcode = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
+        b'2', b'3', b'4', b'5',
+    ];
+    let mut input = vec![GS, b'L', 24, 0, GS, b'W', 200, 0, ESC, b'a', 2];
+    input.extend_from_slice(&barcode);
+
+    let rendered = render(&input, &profile).expect("the barcode should fit the print area");
+    let surface = &rendered.sheets[0].surface;
+
+    // A 190-dot EAN-13 right-aligned in the 200-dot area starts at
+    // 24 + (200 - 190) = physical x=34.
+    assert!(surface.is_printed(34, 0));
+    assert!(surface.is_printed(223, 0));
+    assert_eq!(count_printed_dots(surface, 0, 34, 1), 0);
+    assert_eq!(count_printed_dots(surface, 224, 160, 1), 0);
+
+    let mut oversized = vec![GS, b'W', 189, 0];
+    oversized.extend_from_slice(&barcode);
+    let error = render(&oversized, &profile).expect_err("barcodes are not clipped");
+    assert!(matches!(error, RenderError::InvalidBarcodeData { .. }));
+}
+
+#[test]
+fn qr_symbols_use_the_configured_print_area_and_reject_oversized_symbols() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.qr_code = true;
+    let qr = [
+        GS, b'(', b'k', 3, 0, 49, 67, 2, GS, b'(', b'k', 4, 0, 49, 80, 48, b'A', GS, b'(', b'k', 3,
+        0, 49, 81, 48,
+    ];
+    let mut input = vec![GS, b'L', 24, 0, GS, b'W', 60, 0, ESC, b'a', 1];
+    input.extend_from_slice(&qr);
+
+    let rendered = render(&input, &profile).expect("the QR symbol should fit the print area");
+    let surface = &rendered.sheets[0].surface;
+
+    // A 42-dot symbol centered in the 60-dot area starts at
+    // 24 + floor((60 - 42) / 2) = physical x=33.
+    assert!(surface.is_printed(33, 0));
+    assert!(surface.is_printed(74, 0));
+    assert_eq!(count_printed_dots(surface, 0, 33, 42), 0);
+    assert_eq!(count_printed_dots(surface, 75, 309, 42), 0);
+
+    let mut oversized = vec![GS, b'W', 41, 0];
+    oversized.extend_from_slice(&qr);
+    let error = render(&oversized, &profile).expect_err("QR symbols are not clipped");
+    assert!(matches!(error, RenderError::InvalidQrData { .. }));
 }
 
 fn count_printed_dots(

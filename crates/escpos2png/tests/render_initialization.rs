@@ -129,6 +129,46 @@ fn esc_at_restores_default_code_page_and_tab_stops() {
     assert!(surface.is_printed(96, 2));
 }
 
+#[test]
+fn esc_at_restores_barcode_defaults() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'H', 2, GS, b'f', 1, ESC, b'@', GS, b'k', 67, 12, b'5',
+        b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("ESC @ should restore barcode defaults");
+    let surface = &rendered.sheets[0].surface;
+
+    // Reset removes HRI and restores the common 162-dot height and three-dot
+    // module width. The first EAN-13 guard module is therefore three dots.
+    assert_eq!(surface.height(), 162);
+    assert!((0..3).all(|x| surface.is_printed(x, 0)));
+    assert!(!surface.is_printed(3, 0));
+}
+
+#[test]
+fn esc_at_clears_qr_data_and_restores_qr_defaults() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.qr_code = true;
+    let input = [
+        GS, b'(', b'k', 3, 0, 49, 67, 2, GS, b'(', b'k', 3, 0, 49, 69, 51, GS, b'(', b'k', 4, 0,
+        49, 80, 48, b'X', ESC, b'@',
+        // A new store is required because reset discarded X. Defaults make
+        // this single-byte symbol 21 modules at three dots per module.
+        GS, b'(', b'k', 4, 0, 49, 80, 48, b'A', GS, b'(', b'k', 3, 0, 49, 81, 48,
+    ];
+
+    let rendered = render(&input, &profile).expect("ESC @ should restore QR defaults");
+
+    assert_eq!(rendered.sheets[0].surface.height(), 63);
+}
+
 fn count_printed_dots(
     surface: &escpos2png::MonoSurface,
     left: u32,

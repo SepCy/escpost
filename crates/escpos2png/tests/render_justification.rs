@@ -75,6 +75,111 @@ fn esc_a_centers_a_raster_image_inside_the_active_print_area() {
 }
 
 #[test]
+fn esc_a_places_one_dimensional_barcodes_inside_the_active_print_area() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.barcode_b = true;
+
+    for (justification, expected_left) in [(0, 0), (1, 97), (2, 194)] {
+        let input = [
+            ESC,
+            b'a',
+            justification,
+            GS,
+            b'h',
+            1,
+            GS,
+            b'w',
+            2,
+            GS,
+            b'k',
+            67,
+            12,
+            b'5',
+            b'9',
+            b'0',
+            b'1',
+            b'2',
+            b'3',
+            b'4',
+            b'1',
+            b'2',
+            b'3',
+            b'4',
+            b'5',
+        ];
+
+        let rendered = render(&input, &profile).expect("ESC a should place the barcode");
+        let surface = &rendered.sheets[0].surface;
+
+        // EAN-13 is 95 modules, or 190 dots at width two. Its guard bars make
+        // both outer edges directly observable.
+        assert!(surface.is_printed(expected_left, 0));
+        assert!(surface.is_printed(expected_left + 189, 0));
+        assert_eq!(count_printed_dots(surface, 0, expected_left, 1), 0);
+        assert_eq!(
+            count_printed_dots(surface, expected_left + 190, 384 - expected_left - 190, 1),
+            0
+        );
+    }
+}
+
+#[test]
+fn esc_a_places_qr_symbols_inside_the_active_print_area() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile;
+    profile.features.qr_code = true;
+
+    for (justification, expected_left) in [(0, 0), (1, 171), (2, 342)] {
+        let input = [
+            ESC,
+            b'a',
+            justification,
+            GS,
+            b'(',
+            b'k',
+            3,
+            0,
+            49,
+            67,
+            2,
+            GS,
+            b'(',
+            b'k',
+            4,
+            0,
+            49,
+            80,
+            48,
+            b'A',
+            GS,
+            b'(',
+            b'k',
+            3,
+            0,
+            49,
+            81,
+            48,
+        ];
+
+        let rendered = render(&input, &profile).expect("ESC a should place the QR symbol");
+        let surface = &rendered.sheets[0].surface;
+
+        // A Version 1 symbol is 21 modules, or 42 dots at width two. The
+        // top-left and top-right finder borders touch both symbol edges.
+        assert!(surface.is_printed(expected_left, 0));
+        assert!(surface.is_printed(expected_left + 41, 0));
+        assert_eq!(count_printed_dots(surface, 0, expected_left, 42), 0);
+        assert_eq!(
+            count_printed_dots(surface, expected_left + 42, 384 - expected_left - 42, 42),
+            0
+        );
+    }
+}
+
+#[test]
 fn justification_uses_the_farthest_composed_dot_after_moving_backwards() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile")

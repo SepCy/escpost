@@ -1,0 +1,745 @@
+use escpos2png::{RenderError, render};
+use escpos2png_profiles::compile_profile;
+
+const CAPABILITIES_JSON: &[u8] =
+    include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
+const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
+const GS: u8 = 0x1d;
+
+#[test]
+fn prints_ean13_with_the_generated_check_digit_and_default_dimensions() {
+    let mut profile = test_profile();
+    // The Netum test profile does not advertise native barcodes. Enabling the
+    // capability here isolates the command semantics from that hardware fact.
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS k should render an EAN-13 barcode");
+    let surface = &rendered.sheets[0].surface;
+    let modules = ean13_modules("5901234123457");
+
+    // Epson's common reset defaults are a three-dot module and a 162-dot
+    // barcode height. GS k advances by the symbol height without requiring LF.
+    assert_eq!((surface.width(), surface.height()), (384, 162));
+    for y in 0..surface.height() {
+        for x in 0..surface.width() {
+            let module = (x / 3) as usize;
+            let expected = module < modules.len() && modules[module];
+            assert_eq!(
+                surface.is_printed(x, y),
+                expected,
+                "unexpected barcode dot at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn gs_h_sets_barcode_height_and_independent_paper_advance() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 7, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3',
+        b'4', b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS h should configure the next barcode");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!(surface.height(), 7);
+    assert!((0..7).all(|y| surface.is_printed(0, y)));
+}
+
+#[test]
+fn gs_w_sets_the_multilevel_barcode_module_width() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'w', 2, GS, b'h', 1, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
+        b'2', b'3', b'4', b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS w should configure the next barcode");
+    let surface = &rendered.sheets[0].surface;
+    let modules = ean13_modules("5901234123457");
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < modules.len() && modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected module-width dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn prints_upca_with_the_generated_check_digit() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 65, 11, b'0', b'3', b'6', b'0', b'0', b'0', b'2', b'9',
+        b'1', b'4', b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS k should render a UPC-A barcode");
+    let surface = &rendered.sheets[0].surface;
+    // UPC-A is the EAN-13 number-system-zero representation on the wire.
+    let modules = ean13_modules("0036000291452");
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < modules.len() && modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected UPC-A dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn prints_ean8_with_the_generated_check_digit() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 68, 7, b'5', b'5', b'1', b'2', b'3', b'4', b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS k should render an EAN-8 barcode");
+    let surface = &rendered.sheets[0].surface;
+    let modules = ean8_modules("55123457");
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < modules.len() && modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected EAN-8 dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn prints_upce_using_the_number_system_and_check_digit_parity() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    // This is the compressed representation of UPC-A 042100005264:
+    // number system 0, data 425261, and caller-supplied check digit 4.
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 66, 8, b'0', b'4', b'2', b'5', b'2', b'6', b'1', b'4',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS k should render a UPC-E barcode");
+    let surface = &rendered.sheets[0].surface;
+    let modules = upce_modules("04252614");
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < modules.len() && modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected UPC-E dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn upce_compresses_the_documented_eleven_digit_upca_form() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    // UPC-A 04210000526 plus its generated check digit compresses to
+    // number system 0, data 425261, and check digit 4.
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 66, 11, b'0', b'4', b'2', b'1', b'0', b'0', b'0', b'0',
+        b'5', b'2', b'6',
+    ];
+
+    let rendered = render(&input, &profile).expect("UPC-E should accept the UPC-A form");
+    let surface = &rendered.sheets[0].surface;
+    let modules = upce_modules("04252614");
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < modules.len() && modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected compressed UPC-E dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn function_a_and_function_b_produce_the_same_ean13_pattern() {
+    let mut profile = test_profile();
+    profile.features.barcode_a = true;
+    profile.features.barcode_b = true;
+    let function_a = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 2, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
+        b'2', b'3', b'4', b'5', 0,
+    ];
+    let function_b = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
+        b'2', b'3', b'4', b'5',
+    ];
+
+    let rendered_a = render(&function_a, &profile).expect("GS k Function A should render");
+    let rendered_b = render(&function_b, &profile).expect("GS k Function B should render");
+
+    for y in 0..rendered_a.sheets[0].surface.height() {
+        for x in 0..rendered_a.sheets[0].surface.width() {
+            assert_eq!(
+                rendered_a.sheets[0].surface.is_printed(x, y),
+                rendered_b.sheets[0].surface.is_printed(x, y),
+                "Function A and B differ at ({x}, {y})"
+            );
+        }
+    }
+}
+
+#[test]
+fn function_a_itf_ignores_the_final_digit_when_the_count_is_odd() {
+    let mut profile = test_profile();
+    profile.features.barcode_a = true;
+    profile.features.barcode_b = true;
+    let function_a = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 5, b'1', b'2', b'3', 0];
+    let function_b = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 70, 2, b'1', b'2'];
+
+    let rendered_a = render(&function_a, &profile).expect("Function A should ignore digit 3");
+    let rendered_b = render(&function_b, &profile).expect("the even ITF reference should render");
+
+    assert_eq!(rendered_a.sheets[0].surface, rendered_b.sheets[0].surface);
+}
+
+#[test]
+fn prints_code39_with_printer_specific_narrow_and_wide_elements() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 69, 1, b'A'];
+
+    let rendered = render(&input, &profile).expect("GS k should render a Code 39 barcode");
+    let surface = &rendered.sheets[0].surface;
+    let expected = code39_dots("A", 2, 5);
+
+    for x in 0..surface.width() {
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected.get(x as usize).copied().unwrap_or(false),
+            "unexpected Code 39 dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn code39_stops_at_an_asterisk_and_returns_later_bytes_to_text_processing() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let terminated_early = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 69, 3, b'A', b'*', b'B', 0x0a,
+    ];
+    let explicit_stream = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 69, 2, b'A', b'*', b'B', 0x0a,
+    ];
+
+    let actual = render(&terminated_early, &profile)
+        .expect("bytes after the Code 39 stop should remain in the stream");
+    let expected = render(&explicit_stream, &profile).expect("the explicit stream should render");
+
+    assert_eq!(actual.sheets[0].surface, expected.sheets[0].surface);
+}
+
+#[test]
+fn prints_itf_by_interleaving_each_pair_of_digit_patterns() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 70, 2, b'1', b'2'];
+
+    let rendered = render(&input, &profile).expect("GS k should render an ITF barcode");
+    let surface = &rendered.sheets[0].surface;
+    let expected = itf_dots("12", 2, 5);
+
+    for x in 0..surface.width() {
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected.get(x as usize).copied().unwrap_or(false),
+            "unexpected ITF dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn prints_codabar_with_transmitted_start_and_stop_characters() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 71, 3, b'A', b'0', b'B'];
+
+    let rendered = render(&input, &profile).expect("GS k should render a Codabar barcode");
+    let surface = &rendered.sheets[0].surface;
+    let expected = codabar_dots("A0B", 2, 5);
+
+    for x in 0..surface.width() {
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected.get(x as usize).copied().unwrap_or(false),
+            "unexpected Codabar dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn prints_code93_with_c_and_k_checksums_and_the_termination_bar() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 6, b'C', b'O', b'D', b'E', b'9', b'3',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS k should render a Code 93 barcode");
+    let surface = &rendered.sheets[0].surface;
+    // The ISO worked example produces check values P (25) and V (31).
+    let expected_modules = code93_modules(&[47, 12, 24, 13, 14, 9, 3, 25, 31, 47]);
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < expected_modules.len() && expected_modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected Code 93 dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn code93_maps_the_complete_ascii_range_through_shift_characters() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [GS, b'h', 1, GS, b'w', 2, GS, b'k', 72, 3, 0x00, b'a', 0x7f];
+
+    let rendered = render(&input, &profile).expect("Code 93 should encode full ASCII data");
+    let surface = &rendered.sheets[0].surface;
+    // NUL => %U, a => +A, DEL => %T, followed by C=40 and K=1.
+    let expected_modules = code93_modules(&[47, 44, 30, 46, 10, 44, 29, 40, 1, 47]);
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < expected_modules.len() && expected_modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected full-ASCII Code 93 dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn prints_code128_from_the_explicit_escpos_code_set() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 4, b'{', b'B', b'H', b'i',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS k should render a Code 128 barcode");
+    let surface = &rendered.sheets[0].surface;
+    // Start B=104, H=40, i=73, checksum=(104 + 40 + 2×73) mod 103=84.
+    let expected_modules = code128_modules(&[104, 40, 73, 84, 106]);
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < expected_modules.len() && expected_modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected Code 128 dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn gs_h_prints_hri_below_the_bars_and_includes_it_in_paper_advance() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'H', 2, GS, b'h', 3, GS, b'w', 2, GS, b'k', 68, 7, b'5', b'5', b'1', b'2', b'3', b'4',
+        b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS H should add HRI below the barcode");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!(surface.height(), 3 + profile.fonts.a.cell_height_dots);
+    assert!((0..3).all(|y| surface.is_printed(0, y)));
+    assert!(
+        (3..surface.height()).any(|y| (0..surface.width()).any(|x| surface.is_printed(x, y))),
+        "the HRI region should contain representative glyph dots"
+    );
+}
+
+#[test]
+fn gs_f_selects_the_hri_font_without_changing_normal_text_state() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'H', 2, GS, b'f', 1, GS, b'h', 3, GS, b'w', 2, GS, b'k', 68, 7, b'5', b'5', b'1',
+        b'2', b'3', b'4', b'5',
+    ];
+
+    let rendered = render(&input, &profile).expect("GS f should select HRI Font B");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!(surface.height(), 3 + profile.fonts.b.cell_height_dots);
+}
+
+#[test]
+fn code128_switches_code_sets_using_escpos_control_sequences() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 8, b'{', b'B', b'A', b'B', b'{', b'C', b'1', b'2',
+    ];
+
+    let rendered = render(&input, &profile).expect("Code 128 should switch from B to C");
+    let surface = &rendered.sheets[0].surface;
+    // Start B, A, B, Code C, 12, checksum 35, stop.
+    let expected_modules = code128_modules(&[104, 33, 34, 99, 12, 35, 106]);
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < expected_modules.len() && expected_modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected switched Code 128 dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn code128_shift_uses_the_other_code_set_for_one_character() {
+    let mut profile = test_profile();
+    profile.features.barcode_b = true;
+    let input = [
+        GS, b'h', 1, GS, b'w', 2, GS, b'k', 73, 7, b'{', b'B', b'A', b'{', b'S', 0x01, b'B',
+    ];
+
+    let rendered = render(&input, &profile).expect("Code 128 SHIFT should render");
+    let surface = &rendered.sheets[0].surface;
+    // Start B, A, SHIFT, SOH encoded through Code A, B, checksum 46, stop.
+    let expected_modules = code128_modules(&[104, 33, 98, 65, 34, 46, 106]);
+
+    for x in 0..surface.width() {
+        let module = (x / 2) as usize;
+        let expected = module < expected_modules.len() && expected_modules[module];
+        assert_eq!(
+            surface.is_printed(x, 0),
+            expected,
+            "unexpected shifted Code 128 dot at ({x}, 0)"
+        );
+    }
+}
+
+#[test]
+fn rejects_native_barcodes_when_the_profile_does_not_support_them() {
+    let profile = test_profile();
+    let input = [
+        GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
+    ];
+
+    let error = render(&input, &profile).expect_err("the Netum profile disables native barcodes");
+
+    assert!(matches!(
+        error,
+        RenderError::CommandUnsupportedByProfile {
+            command: "GS k Function B barcode",
+            ..
+        }
+    ));
+}
+
+fn test_profile() -> escpos2png_profiles::PrinterProfile {
+    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile")
+        .profile
+}
+
+fn ean13_modules(digits: &str) -> Vec<bool> {
+    const LEFT_ODD: [&str; 10] = [
+        "0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011",
+        "0110111", "0001011",
+    ];
+    const LEFT_EVEN: [&str; 10] = [
+        "0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001",
+        "0001001", "0010111",
+    ];
+    const RIGHT: [&str; 10] = [
+        "1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100",
+        "1001000", "1110100",
+    ];
+    const PARITY: [&str; 10] = [
+        "LLLLLL", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL",
+        "LGGLGL",
+    ];
+
+    let digits = digits
+        .bytes()
+        .map(|digit| usize::from(digit - b'0'))
+        .collect::<Vec<_>>();
+    let mut encoded = String::from("101");
+    for (digit, parity) in digits[1..7].iter().zip(PARITY[digits[0]].bytes()) {
+        encoded.push_str(if parity == b'L' {
+            LEFT_ODD[*digit]
+        } else {
+            LEFT_EVEN[*digit]
+        });
+    }
+    encoded.push_str("01010");
+    for digit in &digits[7..] {
+        encoded.push_str(RIGHT[*digit]);
+    }
+    encoded.push_str("101");
+
+    encoded.bytes().map(|module| module == b'1').collect()
+}
+
+fn ean8_modules(digits: &str) -> Vec<bool> {
+    const LEFT: [&str; 10] = [
+        "0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011",
+        "0110111", "0001011",
+    ];
+    const RIGHT: [&str; 10] = [
+        "1110010", "1100110", "1101100", "1000010", "1011100", "1001110", "1010000", "1000100",
+        "1001000", "1110100",
+    ];
+
+    let digits = digits
+        .bytes()
+        .map(|digit| usize::from(digit - b'0'))
+        .collect::<Vec<_>>();
+    let mut encoded = String::from("101");
+    for digit in &digits[..4] {
+        encoded.push_str(LEFT[*digit]);
+    }
+    encoded.push_str("01010");
+    for digit in &digits[4..] {
+        encoded.push_str(RIGHT[*digit]);
+    }
+    encoded.push_str("101");
+
+    encoded.bytes().map(|module| module == b'1').collect()
+}
+
+fn upce_modules(digits: &str) -> Vec<bool> {
+    const LEFT_ODD: [&str; 10] = [
+        "0001101", "0011001", "0010011", "0111101", "0100011", "0110001", "0101111", "0111011",
+        "0110111", "0001011",
+    ];
+    const LEFT_EVEN: [&str; 10] = [
+        "0100111", "0110011", "0011011", "0100001", "0011101", "0111001", "0000101", "0010001",
+        "0001001", "0010111",
+    ];
+    const NUMBER_SYSTEM_ZERO_PARITY: [&str; 10] = [
+        "GGGLLL", "GGLGLL", "GGLLGL", "GGLLLG", "GLGGLL", "GLLGGL", "GLLLGG", "GLGLGL", "GLGLLG",
+        "GLLGLG",
+    ];
+    const NUMBER_SYSTEM_ONE_PARITY: [&str; 10] = [
+        "LLLGGG", "LLGLGG", "LLGGLG", "LLGGGL", "LGLLGG", "LGGLLG", "LGGGLL", "LGLGLG", "LGLGGL",
+        "LGGLGL",
+    ];
+
+    let digits = digits
+        .bytes()
+        .map(|digit| usize::from(digit - b'0'))
+        .collect::<Vec<_>>();
+    let parity = if digits[0] == 0 {
+        NUMBER_SYSTEM_ZERO_PARITY[digits[7]]
+    } else {
+        NUMBER_SYSTEM_ONE_PARITY[digits[7]]
+    };
+    let mut encoded = String::from("101");
+    for (digit, parity) in digits[1..7].iter().zip(parity.bytes()) {
+        encoded.push_str(if parity == b'L' {
+            LEFT_ODD[*digit]
+        } else {
+            LEFT_EVEN[*digit]
+        });
+    }
+    encoded.push_str("010101");
+
+    encoded.bytes().map(|module| module == b'1').collect()
+}
+
+fn code39_dots(data: &str, narrow: usize, wide: usize) -> Vec<bool> {
+    fn pattern(character: char) -> &'static str {
+        match character {
+            '*' => "nwnnwnwnn",
+            'A' => "wnnnnwnnw",
+            _ => panic!("the test helper only needs '*' and 'A'"),
+        }
+    }
+
+    let characters = ['*']
+        .into_iter()
+        .chain(data.chars())
+        .chain(['*'])
+        .collect::<Vec<_>>();
+    let mut dots = Vec::new();
+    for (character_index, character) in characters.iter().enumerate() {
+        for (element_index, element) in pattern(*character).bytes().enumerate() {
+            let width = if element == b'w' { wide } else { narrow };
+            dots.extend(std::iter::repeat_n(element_index % 2 == 0, width));
+        }
+        if character_index + 1 < characters.len() {
+            dots.extend(std::iter::repeat_n(false, narrow));
+        }
+    }
+    dots
+}
+
+fn itf_dots(data: &str, narrow: usize, wide: usize) -> Vec<bool> {
+    fn pattern(digit: u8) -> &'static str {
+        match digit {
+            b'1' => "wnnnw",
+            b'2' => "nwnnw",
+            _ => panic!("the test helper only needs digits 1 and 2"),
+        }
+    }
+
+    let mut elements = vec![
+        (true, narrow),
+        (false, narrow),
+        (true, narrow),
+        (false, narrow),
+    ];
+    for pair in data.as_bytes().chunks_exact(2) {
+        for (bar, space) in pattern(pair[0]).bytes().zip(pattern(pair[1]).bytes()) {
+            elements.push((true, if bar == b'w' { wide } else { narrow }));
+            elements.push((false, if space == b'w' { wide } else { narrow }));
+        }
+    }
+    elements.extend([(true, wide), (false, narrow), (true, narrow)]);
+
+    let mut dots = Vec::new();
+    for (dark, width) in elements {
+        dots.extend(std::iter::repeat_n(dark, width));
+    }
+    dots
+}
+
+fn codabar_dots(data: &str, narrow: usize, wide: usize) -> Vec<bool> {
+    fn pattern(character: char) -> &'static str {
+        match character {
+            'A' => "nnwwnwn",
+            '0' => "nnnnnww",
+            'B' => "nnnwnww",
+            _ => panic!("the test helper only needs A, 0, and B"),
+        }
+    }
+
+    let mut dots = Vec::new();
+    for (character_index, character) in data.chars().enumerate() {
+        for (element_index, element) in pattern(character).bytes().enumerate() {
+            let width = if element == b'w' { wide } else { narrow };
+            dots.extend(std::iter::repeat_n(element_index % 2 == 0, width));
+        }
+        if character_index + 1 < data.len() {
+            dots.extend(std::iter::repeat_n(false, narrow));
+        }
+    }
+    dots
+}
+
+fn code93_modules(values: &[usize]) -> Vec<bool> {
+    const PATTERNS: [u16; 48] = [
+        0b100010100,
+        0b101001000,
+        0b101000100,
+        0b101000010,
+        0b100101000,
+        0b100100100,
+        0b100100010,
+        0b101010000,
+        0b100010010,
+        0b100001010,
+        0b110101000,
+        0b110100100,
+        0b110100010,
+        0b110010100,
+        0b110010010,
+        0b110001010,
+        0b101101000,
+        0b101100100,
+        0b101100010,
+        0b100110100,
+        0b100011010,
+        0b101011000,
+        0b101001100,
+        0b101000110,
+        0b100101100,
+        0b100010110,
+        0b110110100,
+        0b110110010,
+        0b110101100,
+        0b110100110,
+        0b110010110,
+        0b110011010,
+        0b101101100,
+        0b101100110,
+        0b100110110,
+        0b100111010,
+        0b100101110,
+        0b111010100,
+        0b111010010,
+        0b111001010,
+        0b101101110,
+        0b101110110,
+        0b110101110,
+        0b100100110,
+        0b111011010,
+        0b111010110,
+        0b100110010,
+        0b101011110,
+    ];
+
+    let mut modules = Vec::new();
+    for value in values {
+        modules.extend((0..9).rev().map(|bit| PATTERNS[*value] & (1 << bit) != 0));
+    }
+    modules.push(true);
+    modules
+}
+
+fn code128_modules(values: &[usize]) -> Vec<bool> {
+    fn widths(value: usize) -> &'static [usize] {
+        match value {
+            12 => &[1, 1, 2, 2, 3, 2],
+            33 => &[1, 1, 1, 3, 2, 3],
+            34 => &[1, 3, 1, 1, 2, 3],
+            35 => &[1, 3, 1, 3, 2, 1],
+            40 => &[2, 3, 1, 1, 1, 3],
+            46 => &[1, 1, 3, 3, 2, 1],
+            65 => &[1, 2, 1, 1, 2, 4],
+            73 => &[1, 4, 2, 1, 1, 2],
+            84 => &[1, 2, 4, 1, 1, 2],
+            98 => &[4, 1, 1, 3, 1, 1],
+            99 => &[1, 1, 3, 1, 4, 1],
+            104 => &[2, 1, 1, 2, 1, 4],
+            106 => &[2, 3, 3, 1, 1, 1, 2],
+            _ => panic!("the test helper has no pattern for Code 128 value {value}"),
+        }
+    }
+
+    let mut modules = Vec::new();
+    for value in values {
+        for (index, width) in widths(*value).iter().enumerate() {
+            modules.extend(std::iter::repeat_n(index % 2 == 0, *width));
+        }
+    }
+    modules
+}

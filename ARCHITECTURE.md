@@ -274,6 +274,24 @@ because they would make output platform-dependent.
 Profiles may later provide model-specific glyph atlases without changing the
 layout engine.
 
+### Native symbol generation
+
+The command interpreter owns all printer-visible symbol behavior: ESC/POS
+framing, persistent settings, profile capability checks, active print-area
+placement, justification, module scaling, HRI placement, paper advance, and
+reset behavior.
+
+One-dimensional barcode encoders live inside the Rust core and return logical
+bar/space elements. They do not know about printer dots or surfaces. QR
+generation uses a small internal adapter around the pure-Rust `qrcode` crate.
+The adapter accepts raw bytes and an error-correction level and returns only an
+unscaled Boolean module matrix. It does not render an image or choose receipt
+layout.
+
+This boundary keeps the standards-heavy QR error-correction and masking
+implementation replaceable. A future hardware finding can replace or fork the
+adapter without changing ESC/POS parsing or the public rendering API.
+
 ## 10. Dot surfaces and color models
 
 The canonical rendered representation is one or more dynamically sized sheet

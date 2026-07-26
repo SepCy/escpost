@@ -11,6 +11,7 @@ escpos2png-profiles = { path = "../escpos2png-profiles" }
 fontdue.workspace = true
 oem_cp.workspace = true
 png.workspace = true
+qrcode.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

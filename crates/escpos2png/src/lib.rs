@@ -1,5 +1,8 @@
 //! Dot-accurate ESC/POS rendering.
 
+mod barcode;
+mod qr;
+
 use encoding_rs::{
     Encoding, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255,
     WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
@@ -17,6 +20,10 @@ use thiserror::Error;
 const DEFAULT_FONT_BYTES: &[u8] =
     include_bytes!("../../../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
 const GLYPH_ALPHA_THRESHOLD: u8 = 128;
+const DEFAULT_BARCODE_HEIGHT_DOTS: u32 = 162;
+const DEFAULT_BARCODE_MODULE_WIDTH_DOTS: u32 = 3;
+const DEFAULT_QR_MODULE_SIZE_DOTS: u32 = 3;
+const MAX_QR_STORE_PARAMETER_BYTES: usize = 7092;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RenderOptions {
@@ -61,6 +68,15 @@ enum Justification {
     Left,
     Center,
     Right,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum HriPosition {
+    #[default]
+    None,
+    Above,
+    Below,
+    AboveAndBelow,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,6 +230,39 @@ pub enum RenderError {
 
     #[error("unsupported graphics function {function} at byte offset {offset}")]
     UnsupportedGraphicsFunction { function: u8, offset: usize },
+
+    #[error("invalid {system} barcode data at byte offset {offset}: {reason}")]
+    InvalidBarcodeData {
+        system: &'static str,
+        offset: usize,
+        reason: &'static str,
+    },
+
+    #[error("invalid barcode parameter {parameter}={value} at byte offset {offset}")]
+    InvalidBarcodeParameter {
+        parameter: &'static str,
+        value: u8,
+        offset: usize,
+    },
+
+    #[error("unsupported QR function {function} at byte offset {offset}")]
+    UnsupportedQrFunction { function: u8, offset: usize },
+
+    #[error("unsupported QR model {model} at byte offset {offset}")]
+    UnsupportedQrModel { model: u8, offset: usize },
+
+    #[error("invalid QR parameter {parameter}={value} at byte offset {offset}")]
+    InvalidQrParameter {
+        parameter: &'static str,
+        value: u8,
+        offset: usize,
+    },
+
+    #[error("invalid QR data at byte offset {offset}: {reason}")]
+    InvalidQrData { offset: usize, reason: &'static str },
+
+    #[error("QR data storage is empty at byte offset {offset}")]
+    QrDataEmpty { offset: usize },
 
     #[error("invalid graphics parameter {parameter}={value} at byte offset {offset}")]
     InvalidGraphicsParameter {
@@ -700,7 +749,18 @@ fn execute_gs_command(
             state.set_character_size(size);
             Ok(3)
         }
-        0x28 => execute_gs_parenthesized_l(data, offset, state),
+        0x28 => match data.get(2) {
+            Some(b'L') => execute_gs_parenthesized_l(data, offset, state),
+            Some(b'k') => execute_gs_parenthesized_k(data, offset, state),
+            Some(_) => Err(RenderError::UnsupportedGsCommand {
+                command: 0x28,
+                offset,
+            }),
+            None => Err(RenderError::TruncatedCommand {
+                command: "GS (",
+                offset,
+            }),
+        },
         0x38 => execute_gs_8_l(data, offset, state),
         0x42 => {
             let Some(reverse) = data.get(2).copied() else {
@@ -710,6 +770,29 @@ fn execute_gs_command(
                 });
             };
             state.set_reverse(reverse & 0x01 != 0);
+            Ok(3)
+        }
+        0x48 => {
+            let Some(position) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS H",
+                    offset,
+                });
+            };
+            let position = match position {
+                0 | 48 => HriPosition::None,
+                1 | 49 => HriPosition::Above,
+                2 | 50 => HriPosition::Below,
+                3 | 51 => HriPosition::AboveAndBelow,
+                value => {
+                    return Err(RenderError::InvalidBarcodeParameter {
+                        parameter: "hri_position",
+                        value,
+                        offset,
+                    });
+                }
+            };
+            state.set_hri_position(position);
             Ok(3)
         }
         0x4c => {
@@ -742,10 +825,256 @@ fn execute_gs_command(
             state.set_print_area_width(u16::from_le_bytes([low, high]));
             Ok(4)
         }
+        0x66 => {
+            let Some(font) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS f",
+                    offset,
+                });
+            };
+            match font {
+                0 | 48 => state.select_hri_font_a(),
+                1 | 49 => state.select_hri_font_b(),
+                value => {
+                    return Err(RenderError::InvalidBarcodeParameter {
+                        parameter: "hri_font",
+                        value,
+                        offset,
+                    });
+                }
+            }
+            Ok(3)
+        }
+        0x68 => {
+            let Some(height) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS h",
+                    offset,
+                });
+            };
+            if height == 0 {
+                return Err(RenderError::InvalidBarcodeParameter {
+                    parameter: "height",
+                    value: height,
+                    offset,
+                });
+            }
+            state.set_barcode_height(height);
+            Ok(3)
+        }
+        0x6b => execute_gs_k(data, offset, state),
         0x56 => execute_gs_v(data, offset, state),
         0x76 => execute_gs_v0(data, offset, state),
+        0x77 => {
+            let Some(width) = data.get(2).copied() else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS w",
+                    offset,
+                });
+            };
+            if !(2..=6).contains(&width) {
+                return Err(RenderError::InvalidBarcodeParameter {
+                    parameter: "module_width",
+                    value: width,
+                    offset,
+                });
+            }
+            state.set_barcode_module_width(width);
+            Ok(3)
+        }
         command => Err(RenderError::UnsupportedGsCommand { command, offset }),
     }
+}
+
+fn execute_gs_k(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    let Some(system) = data.get(2).copied() else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS k",
+            offset,
+        });
+    };
+
+    let (system, payload, mut command_length, is_function_a) = match system {
+        function_a @ 0..=6 => {
+            state.require_barcode_a(offset)?;
+            let remaining = data.get(3..).ok_or(RenderError::TruncatedCommand {
+                command: "GS k",
+                offset,
+            })?;
+            let payload_length = remaining.iter().position(|byte| *byte == 0).ok_or(
+                RenderError::TruncatedCommand {
+                    command: "GS k",
+                    offset,
+                },
+            )?;
+            state.validate_command_payload_size(payload_length)?;
+            (
+                function_a + 65,
+                &remaining[..payload_length],
+                4usize.saturating_add(payload_length),
+                true,
+            )
+        }
+        function_b @ 65..=79 => {
+            state.require_barcode_b(offset)?;
+            let payload_length =
+                usize::from(*data.get(3).ok_or(RenderError::TruncatedCommand {
+                    command: "GS k",
+                    offset,
+                })?);
+            state.validate_command_payload_size(payload_length)?;
+            let command_length = 4usize.saturating_add(payload_length);
+            let payload = data
+                .get(4..command_length)
+                .ok_or(RenderError::TruncatedCommand {
+                    command: "GS k",
+                    offset,
+                })?;
+            (function_b, payload, command_length, false)
+        }
+        _ => {
+            return Err(RenderError::InvalidBarcodeData {
+                system: "unknown",
+                offset,
+                reason: "barcode system is not supported",
+            });
+        }
+    };
+
+    // Function A predates the explicit byte count. Epson documents that its
+    // ITF mode drops the final digit when the NUL-terminated count is odd.
+    let payload = if is_function_a && system == 70 && !payload.len().is_multiple_of(2) {
+        &payload[..payload.len() - 1]
+    } else {
+        payload
+    };
+    let payload = if !is_function_a && system == 69 {
+        let first_possible_stop = usize::from(payload.first() == Some(&b'*'));
+        let stop = payload[first_possible_stop..]
+            .iter()
+            .position(|character| *character == b'*')
+            .map(|position| first_possible_stop + position);
+        if let Some(stop) = stop.filter(|stop| stop + 1 < payload.len()) {
+            // In Function B the declared byte count does not swallow bytes
+            // after a Code 39 stop. The parser must return them to the main
+            // ESC/POS stream as ordinary input.
+            command_length = 4 + stop + 1;
+            &payload[..=stop]
+        } else {
+            payload
+        }
+    } else {
+        payload
+    };
+
+    let barcode = match system {
+        65 => barcode::encode_upca(payload).map_err(|error| RenderError::InvalidBarcodeData {
+            system: "UPC-A",
+            offset,
+            reason: match error {
+                barcode::BarcodeError::Length => "expected 11 or 12 digits",
+                barcode::BarcodeError::Character => "expected decimal digits only",
+                barcode::BarcodeError::Format => "invalid UPC-A data format",
+            },
+        })?,
+        66 => barcode::encode_upce(payload).map_err(|error| RenderError::InvalidBarcodeData {
+            system: "UPC-E",
+            offset,
+            reason: match error {
+                barcode::BarcodeError::Length => "expected 6, 7, 8, 11, or 12 digits",
+                barcode::BarcodeError::Character => "expected decimal digits only",
+                barcode::BarcodeError::Format => {
+                    "expected number system 0 and a compressible UPC-A value"
+                }
+            },
+        })?,
+        67 => barcode::encode_ean13(payload).map_err(|error| RenderError::InvalidBarcodeData {
+            system: "EAN-13",
+            offset,
+            reason: match error {
+                barcode::BarcodeError::Length => "expected 12 or 13 digits",
+                barcode::BarcodeError::Character => "expected decimal digits only",
+                barcode::BarcodeError::Format => "invalid EAN-13 data format",
+            },
+        })?,
+        68 => barcode::encode_ean8(payload).map_err(|error| RenderError::InvalidBarcodeData {
+            system: "EAN-8",
+            offset,
+            reason: match error {
+                barcode::BarcodeError::Length => "expected 7 or 8 digits",
+                barcode::BarcodeError::Character => "expected decimal digits only",
+                barcode::BarcodeError::Format => "invalid EAN-8 data format",
+            },
+        })?,
+        69 => barcode::encode_code39(payload).map_err(|error| RenderError::InvalidBarcodeData {
+            system: "Code 39",
+            offset,
+            reason: match error {
+                barcode::BarcodeError::Length => "expected at least one character",
+                barcode::BarcodeError::Character => "contains an unsupported character",
+                barcode::BarcodeError::Format => "the stop character may appear only at the end",
+            },
+        })?,
+        70 => barcode::encode_itf(payload).map_err(|error| RenderError::InvalidBarcodeData {
+            system: "ITF",
+            offset,
+            reason: match error {
+                barcode::BarcodeError::Length => "expected an even number of at least two digits",
+                barcode::BarcodeError::Character => "expected decimal digits only",
+                barcode::BarcodeError::Format => "invalid ITF data format",
+            },
+        })?,
+        71 => {
+            barcode::encode_codabar(payload).map_err(|error| RenderError::InvalidBarcodeData {
+                system: "Codabar",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => "expected start and stop characters",
+                    barcode::BarcodeError::Character => "contains an unsupported character",
+                    barcode::BarcodeError::Format => {
+                        "expected A through D start and stop characters"
+                    }
+                },
+            })?
+        }
+        72 => barcode::encode_code93(payload).map_err(|error| RenderError::InvalidBarcodeData {
+            system: "Code 93",
+            offset,
+            reason: match error {
+                barcode::BarcodeError::Length => "expected at least one character",
+                barcode::BarcodeError::Character => "expected bytes 00h through 7Fh",
+                barcode::BarcodeError::Format => "invalid Code 93 data format",
+            },
+        })?,
+        73 => {
+            barcode::encode_code128(payload).map_err(|error| RenderError::InvalidBarcodeData {
+                system: "Code 128",
+                offset,
+                reason: match error {
+                    barcode::BarcodeError::Length => {
+                        "expected an explicit {A, {B, or {C start sequence"
+                    }
+                    barcode::BarcodeError::Character => {
+                        "character is not valid in the selected code set"
+                    }
+                    barcode::BarcodeError::Format => "invalid Code 128 code-set data",
+                },
+            })?
+        }
+        _ => {
+            return Err(RenderError::InvalidBarcodeData {
+                system: "unknown",
+                offset,
+                reason: "barcode system is not implemented yet",
+            });
+        }
+    };
+    state.print_barcode(&barcode, offset)?;
+    Ok(command_length)
 }
 
 fn execute_gs_parenthesized_l(
@@ -771,6 +1100,157 @@ fn execute_gs_parenthesized_l(
     };
     execute_graphics_function(parameters, false, offset, state)?;
     Ok(command_length)
+}
+
+fn execute_gs_parenthesized_k(
+    data: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<usize, RenderError> {
+    if data.len() < 5 || data[2] != b'k' {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS ( k",
+            offset,
+        });
+    }
+
+    let parameter_length = usize::from(u16::from_le_bytes([data[3], data[4]]));
+    state.validate_command_payload_size(parameter_length)?;
+    let command_length = 5usize.saturating_add(parameter_length);
+    let Some(parameters) = data.get(5..command_length) else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS ( k",
+            offset,
+        });
+    };
+    execute_qr_function(parameters, offset, state)?;
+    Ok(command_length)
+}
+
+fn execute_qr_function(
+    parameters: &[u8],
+    offset: usize,
+    state: &mut PrinterState,
+) -> Result<(), RenderError> {
+    let Some((&code_type, &function)) = parameters.first().zip(parameters.get(1)) else {
+        return Err(RenderError::TruncatedCommand {
+            command: "GS ( k",
+            offset,
+        });
+    };
+    if code_type != 49 {
+        return Err(RenderError::InvalidQrParameter {
+            parameter: "cn",
+            value: code_type,
+            offset,
+        });
+    }
+
+    match function {
+        65 => {
+            let Some((&model, &reserved)) = parameters.get(2).zip(parameters.get(3)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS ( k Function 165",
+                    offset,
+                });
+            };
+            if parameters.len() != 4 || reserved != 0 {
+                return Err(RenderError::InvalidQrParameter {
+                    parameter: "n2",
+                    value: reserved,
+                    offset,
+                });
+            }
+            if model != 50 {
+                return Err(RenderError::UnsupportedQrModel { model, offset });
+            }
+            state.select_qr_model_2(offset)
+        }
+        67 => {
+            let Some(&module_size) = parameters.get(2) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS ( k Function 167",
+                    offset,
+                });
+            };
+            if parameters.len() != 3 || !(1..=16).contains(&module_size) {
+                return Err(RenderError::InvalidQrParameter {
+                    parameter: "module_size",
+                    value: module_size,
+                    offset,
+                });
+            }
+            state.set_qr_module_size(module_size, offset)
+        }
+        69 => {
+            let Some(&level) = parameters.get(2) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS ( k Function 169",
+                    offset,
+                });
+            };
+            if parameters.len() != 3 {
+                return Err(RenderError::InvalidQrParameter {
+                    parameter: "error_correction",
+                    value: level,
+                    offset,
+                });
+            }
+            let level = match level {
+                48 => qr::ErrorCorrection::Low,
+                49 => qr::ErrorCorrection::Medium,
+                50 => qr::ErrorCorrection::Quartile,
+                51 => qr::ErrorCorrection::High,
+                value => {
+                    return Err(RenderError::InvalidQrParameter {
+                        parameter: "error_correction",
+                        value,
+                        offset,
+                    });
+                }
+            };
+            state.set_qr_error_correction(level, offset)
+        }
+        80 => {
+            if parameters.len() > MAX_QR_STORE_PARAMETER_BYTES {
+                return Err(RenderError::InvalidQrData {
+                    offset,
+                    reason: "store command exceeds the 7092-byte parameter limit",
+                });
+            }
+            let Some((&mode, data)) = parameters.get(2).zip(parameters.get(3..)) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS ( k Function 180",
+                    offset,
+                });
+            };
+            if mode != 48 {
+                return Err(RenderError::InvalidQrParameter {
+                    parameter: "m",
+                    value: mode,
+                    offset,
+                });
+            }
+            state.store_qr_data(data, offset)
+        }
+        81 => {
+            let Some(&mode) = parameters.get(2) else {
+                return Err(RenderError::TruncatedCommand {
+                    command: "GS ( k Function 181",
+                    offset,
+                });
+            };
+            if parameters.len() != 3 || mode != 48 {
+                return Err(RenderError::InvalidQrParameter {
+                    parameter: "m",
+                    value: mode,
+                    offset,
+                });
+            }
+            state.print_qr(offset)
+        }
+        function => Err(RenderError::UnsupportedQrFunction { function, offset }),
+    }
 }
 
 fn execute_gs_8_l(
@@ -1065,6 +1545,16 @@ struct PrinterState {
     justification: Justification,
     line_height: u32,
     buffered_graphics: Option<BufferedGraphics>,
+    stored_qr_data: Option<Vec<u8>>,
+    qr_module_size: u32,
+    qr_error_correction: qr::ErrorCorrection,
+    barcode_height: u32,
+    barcode_module_width: u32,
+    hri_position: HriPosition,
+    hri_font: ProfileFont,
+    supports_barcode_a: bool,
+    supports_barcode_b: bool,
+    supports_qr: bool,
     supports_column_bit_image: bool,
     supports_raster_bit_image: bool,
     supports_graphics: bool,
@@ -1079,6 +1569,7 @@ impl PrinterState {
         let default_line_spacing = profile.defaults.line_spacing_dots;
         let font_a = profile.fonts.a.clone();
         let font_b = profile.fonts.b.clone();
+        let hri_font = font_a.clone();
         // ESC/POS defaults to columns 8, 16, ... 248 measured with the
         // power-on font and size.
         let default_tab_positions = (1..=31)
@@ -1123,6 +1614,16 @@ impl PrinterState {
             justification: Justification::Left,
             line_height: 0,
             buffered_graphics: None,
+            stored_qr_data: None,
+            qr_module_size: DEFAULT_QR_MODULE_SIZE_DOTS,
+            qr_error_correction: qr::ErrorCorrection::Low,
+            barcode_height: DEFAULT_BARCODE_HEIGHT_DOTS,
+            barcode_module_width: DEFAULT_BARCODE_MODULE_WIDTH_DOTS,
+            hri_position: HriPosition::None,
+            hri_font,
+            supports_barcode_a: profile.features.barcode_a,
+            supports_barcode_b: profile.features.barcode_b,
+            supports_qr: profile.features.qr_code,
             supports_column_bit_image: profile.features.bit_image_column,
             supports_raster_bit_image: profile.features.bit_image_raster,
             supports_graphics: profile.features.graphics,
@@ -1156,6 +1657,13 @@ impl PrinterState {
         self.justification = Justification::Left;
         self.line_height = 0;
         self.buffered_graphics = None;
+        self.stored_qr_data = None;
+        self.qr_module_size = DEFAULT_QR_MODULE_SIZE_DOTS;
+        self.qr_error_correction = qr::ErrorCorrection::Low;
+        self.barcode_height = DEFAULT_BARCODE_HEIGHT_DOTS;
+        self.barcode_module_width = DEFAULT_BARCODE_MODULE_WIDTH_DOTS;
+        self.hri_position = HriPosition::None;
+        self.hri_font = self.font_a.clone();
     }
 
     fn set_print_mode(&mut self, mode: u8) {
@@ -1175,6 +1683,26 @@ impl PrinterState {
         // bits 4–6. Bits 3 and 7 are reserved and do not affect either value.
         self.character_height_multiplier = u32::from(size & 0x07) + 1;
         self.character_width_multiplier = u32::from((size >> 4) & 0x07) + 1;
+    }
+
+    fn set_barcode_height(&mut self, height: u8) {
+        self.barcode_height = u32::from(height);
+    }
+
+    fn set_barcode_module_width(&mut self, width: u8) {
+        self.barcode_module_width = u32::from(width);
+    }
+
+    fn set_hri_position(&mut self, position: HriPosition) {
+        self.hri_position = position;
+    }
+
+    fn select_hri_font_a(&mut self) {
+        self.hri_font = self.font_a.clone();
+    }
+
+    fn select_hri_font_b(&mut self) {
+        self.hri_font = self.font_b.clone();
     }
 
     fn set_absolute_print_position(&mut self, motion_units: u16) {
@@ -1620,6 +2148,225 @@ impl PrinterState {
         Ok(())
     }
 
+    fn print_barcode(
+        &mut self,
+        barcode: &barcode::EncodedBarcode,
+        offset: usize,
+    ) -> Result<(), RenderError> {
+        if !self.at_beginning_of_line {
+            return Err(RenderError::CommandRequiresBeginningOfLine {
+                command: "GS k",
+                offset,
+            });
+        }
+
+        let barcode_width = barcode
+            .bars
+            .iter()
+            .map(|bar| self.bar_element_width(bar.width))
+            .fold(0_u32, u32::saturating_add);
+        if barcode_width > self.print_area_width {
+            return Err(RenderError::InvalidBarcodeData {
+                system: "one-dimensional",
+                offset,
+                reason: "symbol is wider than the active print area",
+            });
+        }
+        let hri = (self.hri_position != HriPosition::None)
+            .then(|| render_hri(&barcode.hri, &self.hri_font));
+        let content_width = hri
+            .as_ref()
+            .map_or(barcode_width, |surface| barcode_width.max(surface.width));
+        let remaining_width = self.print_area_width.saturating_sub(content_width);
+        let content_left = match self.justification {
+            Justification::Left => 0,
+            Justification::Center => remaining_width / 2,
+            Justification::Right => remaining_width,
+        };
+        let physical_content_left = self.print_area_left.saturating_add(content_left);
+        let physical_barcode_left =
+            physical_content_left.saturating_add(content_width.saturating_sub(barcode_width) / 2);
+        let hri_height = hri.as_ref().map_or(0, |surface| surface.height);
+        let hri_rows = u32::from(matches!(
+            self.hri_position,
+            HriPosition::Above | HriPosition::Below
+        )) + 2 * u32::from(self.hri_position == HriPosition::AboveAndBelow);
+        let barcode_top = self.line_top
+            + if matches!(
+                self.hri_position,
+                HriPosition::Above | HriPosition::AboveAndBelow
+            ) {
+                hri_height
+            } else {
+                0
+            };
+        let next_line_top = self
+            .line_top
+            .saturating_add(self.barcode_height)
+            .saturating_add(hri_height.saturating_mul(hri_rows));
+        self.validate_roll_height(next_line_top)?;
+
+        if let Some(hri) = hri.as_ref() {
+            let hri_left =
+                physical_content_left.saturating_add(content_width.saturating_sub(hri.width) / 2);
+            if matches!(
+                self.hri_position,
+                HriPosition::Above | HriPosition::AboveAndBelow
+            ) {
+                self.roll.composite_at(hri, hri_left, self.line_top);
+            }
+            if matches!(
+                self.hri_position,
+                HriPosition::Below | HriPosition::AboveAndBelow
+            ) {
+                self.roll.composite_at(
+                    hri,
+                    hri_left,
+                    barcode_top.saturating_add(self.barcode_height),
+                );
+            }
+        }
+
+        let mut element_left = physical_barcode_left;
+        for bar in &barcode.bars {
+            let width = self.bar_element_width(bar.width);
+            if bar.dark {
+                for x in element_left..element_left + width {
+                    for y in barcode_top..barcode_top + self.barcode_height {
+                        self.roll.print_dot(x, y);
+                    }
+                }
+            }
+            element_left = element_left.saturating_add(width);
+        }
+
+        // GS k prints immediately and feeds exactly enough paper for the
+        // barcode, independently of the selected text line spacing.
+        self.line_top = next_line_top;
+        self.roll.ensure_height(self.line_top);
+        self.print_x = 0;
+        self.line_used_width = 0;
+        self.at_beginning_of_line = true;
+        Ok(())
+    }
+
+    fn bar_element_width(&self, width: barcode::BarWidth) -> u32 {
+        match width {
+            barcode::BarWidth::Modules(modules) => {
+                u32::from(modules).saturating_mul(self.barcode_module_width)
+            }
+            barcode::BarWidth::Narrow => self.barcode_module_width,
+            barcode::BarWidth::Wide => match self.barcode_module_width {
+                2 => 5,
+                3 => 8,
+                4 => 10,
+                5 => 13,
+                6 => 16,
+                _ => unreachable!("GS w accepts only module widths 2 through 6"),
+            },
+        }
+    }
+
+    fn store_qr_data(&mut self, data: &[u8], offset: usize) -> Result<(), RenderError> {
+        self.require_qr(offset)?;
+        if data.is_empty() {
+            return Err(RenderError::InvalidQrData {
+                offset,
+                reason: "expected at least one data byte",
+            });
+        }
+
+        // Epson keeps the stored bytes after printing. Only another store
+        // command or ESC @ replaces them.
+        self.stored_qr_data = Some(data.to_vec());
+        Ok(())
+    }
+
+    fn set_qr_module_size(&mut self, module_size: u8, offset: usize) -> Result<(), RenderError> {
+        self.require_qr(offset)?;
+        self.qr_module_size = u32::from(module_size);
+        Ok(())
+    }
+
+    fn select_qr_model_2(&self, offset: usize) -> Result<(), RenderError> {
+        // The matrix adapter generates ISO/IEC 18004 Model 2 symbols. Keeping
+        // this explicit prevents Model 1 or Micro QR input from looking valid.
+        self.require_qr(offset)
+    }
+
+    fn set_qr_error_correction(
+        &mut self,
+        error_correction: qr::ErrorCorrection,
+        offset: usize,
+    ) -> Result<(), RenderError> {
+        self.require_qr(offset)?;
+        self.qr_error_correction = error_correction;
+        Ok(())
+    }
+
+    fn print_qr(&mut self, offset: usize) -> Result<(), RenderError> {
+        self.require_qr(offset)?;
+        if !self.at_beginning_of_line {
+            return Err(RenderError::CommandRequiresBeginningOfLine {
+                command: "GS ( k Function 181",
+                offset,
+            });
+        }
+
+        let data = self
+            .stored_qr_data
+            .as_deref()
+            .ok_or(RenderError::QrDataEmpty { offset })?;
+        let encoded = qr::encode(data, self.qr_error_correction).map_err(|error| match error {
+            qr::QrError::DataTooLong => RenderError::InvalidQrData {
+                offset,
+                reason: "data does not fit in a QR symbol",
+            },
+        })?;
+        let module_count = encoded.width as u32;
+        let symbol_size = module_count.saturating_mul(self.qr_module_size);
+        if symbol_size > self.print_area_width {
+            return Err(RenderError::InvalidQrData {
+                offset,
+                reason: "symbol is wider than the active print area",
+            });
+        }
+
+        let remaining_width = self.print_area_width.saturating_sub(symbol_size);
+        let symbol_left = match self.justification {
+            Justification::Left => 0,
+            Justification::Center => remaining_width / 2,
+            Justification::Right => remaining_width,
+        };
+        let physical_left = self.print_area_left.saturating_add(symbol_left);
+        let next_line_top = self.line_top.saturating_add(symbol_size);
+        self.validate_roll_height(next_line_top)?;
+
+        for (index, dark) in encoded.modules.into_iter().enumerate() {
+            if !dark {
+                continue;
+            }
+            let module_x = index as u32 % module_count;
+            let module_y = index as u32 / module_count;
+            let left = physical_left + module_x * self.qr_module_size;
+            let top = self.line_top + module_y * self.qr_module_size;
+            for x in left..left + self.qr_module_size {
+                for y in top..top + self.qr_module_size {
+                    self.roll.print_dot(x, y);
+                }
+            }
+        }
+
+        // Function 181 prints immediately and advances by exactly the symbol
+        // height. The stored data remains available for another print command.
+        self.line_top = next_line_top;
+        self.roll.ensure_height(self.line_top);
+        self.print_x = 0;
+        self.line_used_width = 0;
+        self.at_beginning_of_line = true;
+        Ok(())
+    }
+
     fn store_raster_graphics(
         &mut self,
         graphics: BufferedGraphics,
@@ -1725,6 +2472,18 @@ impl PrinterState {
         self.require_profile_feature(self.supports_graphics, "GS ( L graphics", offset)
     }
 
+    fn require_barcode_b(&self, offset: usize) -> Result<(), RenderError> {
+        self.require_profile_feature(self.supports_barcode_b, "GS k Function B barcode", offset)
+    }
+
+    fn require_barcode_a(&self, offset: usize) -> Result<(), RenderError> {
+        self.require_profile_feature(self.supports_barcode_a, "GS k Function A barcode", offset)
+    }
+
+    fn require_qr(&self, offset: usize) -> Result<(), RenderError> {
+        self.require_profile_feature(self.supports_qr, "GS ( k QR code", offset)
+    }
+
     fn require_profile_feature(
         &self,
         supported: bool,
@@ -1827,6 +2586,43 @@ impl PrinterState {
         }
         Ok(self.completed_sheets)
     }
+}
+
+fn render_hri(data: &[u8], font: &ProfileFont) -> MonoSurface {
+    let width = (data.len() as u32).saturating_mul(font.cell_width_dots);
+    let mut surface = MonoSurface::new(width);
+    surface.ensure_height(font.cell_height_dots);
+
+    for (character_index, byte) in data.iter().copied().enumerate() {
+        let character = if (0x20..=0x7e).contains(&byte) {
+            char::from(byte)
+        } else {
+            ' '
+        };
+        let font_size = font.cell_height_dots as f32;
+        let (metrics, bitmap) = default_font().rasterize(character, font_size);
+        let horizontal_crop = metrics.width.saturating_sub(font.cell_width_dots as usize) / 2;
+        let horizontal_padding = (font.cell_width_dots as usize).saturating_sub(metrics.width) / 2;
+        let glyph_top = font.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
+        let cell_left = character_index as u32 * font.cell_width_dots;
+
+        for source_y in 0..metrics.height {
+            let destination_y = glyph_top + source_y as i32;
+            if destination_y < 0 || destination_y >= font.cell_height_dots as i32 {
+                continue;
+            }
+            for source_x in horizontal_crop..metrics.width {
+                let destination_x = horizontal_padding + source_x - horizontal_crop;
+                if destination_x >= font.cell_width_dots as usize {
+                    break;
+                }
+                if bitmap[source_y * metrics.width + source_x] >= GLYPH_ALPHA_THRESHOLD {
+                    surface.print_dot(cell_left + destination_x as u32, destination_y as u32);
+                }
+            }
+        }
+    }
+    surface
 }
 
 fn default_font() -> &'static Font {

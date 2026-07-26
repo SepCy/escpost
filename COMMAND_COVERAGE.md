@@ -58,8 +58,8 @@ rather than guess.
 | `GS !` | Select character width and height multipliers | Implemented | Implemented | Pending |
 | `GS B` | Select white/black reverse text | Implemented | Implemented | Pending |
 
-`ESC a` is partial until text and each v1 graphics or symbol family is covered
-for left, center, and right placement. See
+`ESC a` is covered for text and every currently implemented version 1
+graphics and symbol family. See
 [`tests/INTERACTIONS.md`](tests/INTERACTIONS.md).
 
 ## Positioning and print area
@@ -68,12 +68,13 @@ for left, center, and right placement. See
 |---|---|---:|---:|---:|
 | `ESC $` | Set absolute horizontal position | Implemented | Implemented | Pending |
 | `ESC \` | Set relative horizontal position | Implemented | Implemented | Pending |
-| `GS L` | Set left margin | Partial | Partial | Pending |
+| `GS L` | Set left margin | Implemented | Implemented | Pending |
 | `GS P` | Set horizontal and vertical motion units | Implemented | Implemented | Pending |
-| `GS W` | Set print-area width | Partial | Partial | Pending |
+| `GS W` | Set print-area width | Implemented | Implemented | Pending |
 
-`GS L` and `GS W` are partial until clipping, oversized data, and all v1
-printable families are covered.
+`GS L` and `GS W` cover origin, width, justification, clipping, and
+oversized-data behavior for every currently implemented version 1 printable
+family.
 
 ## Graphics
 
@@ -94,14 +95,28 @@ planes remain post-v1 as defined above.
 
 | Command family | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
-| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Planned | Planned | Pending |
-| `GS ( k` QR functions | Configure, store, and print QR symbols | Planned | Planned | Pending |
+| `GS H`, `GS h`, `GS f`, `GS w`, `GS k` | Configure and print one-dimensional barcodes | Partial | Implemented | Pending |
+| `GS ( k` QR functions | Configure, store, and print QR symbols | Partial | Implemented | Pending |
 | `GS ( k` PDF417 functions | Configure, store, and print PDF417 symbols | Post-v1 | Planned | Pending |
 | `GS ( k` Data Matrix functions | Configure, store, and print Data Matrix symbols | Post-v1 | Planned | Pending |
 
 Receiptful currently rasterizes barcodes and QR codes before emitting
 ESC/POS. Native symbol support is nevertheless included in v1 so arbitrary
 Standard-mode jobs do not depend on that implementation detail.
+
+Common `GS k` systems UPC-A, UPC-E, EAN-13, EAN-8, Code 39, ITF, Codabar,
+Code 93, and explicit-set Code 128 are implemented for the profile-advertised
+Function A/B forms. The newer GS1-128, GS1 DataBar, and automatic Code 128
+systems remain pending. Returning bytes after an early Code 39 stop is covered
+for Function B; the legacy NUL-terminated Function A edge case remains
+pending. Barcode reset defaults and special HRI glyph representations still
+need profile-level fidelity work.
+
+QR Functions 165, 167, 169, 180, and 181 implement Model 2 selection, module
+size, error correction, raw-byte storage, and printing. Model 1, Micro QR, and
+Function 182's bidirectional size response remain pending. QR matrices are
+valid and deterministic, but their mask choice is not yet claimed to match a
+specific Epson firmware.
 
 ## Paper and device actions
 

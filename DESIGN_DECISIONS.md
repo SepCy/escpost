@@ -433,6 +433,51 @@ later select a canonical bitmap atlas or printer-specific glyphs.
 - Model-specific atlases can improve glyph fidelity without changing layout
   semantics.
 
+## DD-024 — Own printer semantics and isolate standards-heavy symbol generation
+
+**Status:** Accepted
+
+### Context
+
+Native barcode and two-dimensional-code commands combine two different
+problems. ESC/POS defines state, command framing, printer capability, layout,
+paper movement, and HRI behavior. The symbol standards define checksums,
+compaction, error correction, masks, and logical bars or modules.
+
+Implementing every symbol standard locally would give complete source control,
+but source ownership alone does not improve correctness. Mature,
+standards-focused implementations provide useful independent coverage of rules
+that are easy to implement almost correctly.
+
+### Decision
+
+escpos2png owns ESC/POS parsing and every printer-visible symbol behavior,
+including placement and scaling. It also owns the common one-dimensional
+barcode encoders, whose algorithms are small enough to review against the
+printer reference and barcode standards.
+
+Use a replaceable internal adapter around a pure-Rust QR implementation to
+produce an unscaled module matrix from raw bytes. Do not expose the dependency
+through the public API and do not use its image-rendering features. The
+renderer remains responsible for mapping modules to printer dots.
+
+Treat a valid QR matrix as distinct from a firmware-identical QR matrix.
+Segmentation and mask selection may differ between a standards-compliant
+library and a particular printer firmware. Record that difference as an
+approximation until hardware evidence requires a fork or replacement.
+
+### Consequences
+
+- Symbol libraries cannot move, scale, clip, or feed receipt content.
+- The QR dependency can be audited, pinned, fuzzed, forked, or replaced behind
+  one small boundary.
+- One-dimensional behavior remains directly testable without a general image
+  or barcode-rendering dependency.
+- Exact module equality with a selected printer requires hardware fixtures;
+  successful decoding alone is insufficient evidence.
+- New symbol families may use the same dependency rule when outsourcing the
+  standards-heavy portion materially improves correctness.
+
 ## Open questions
 
 The following are intentionally not decided yet:

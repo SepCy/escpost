@@ -28,6 +28,10 @@ This boundary covers the commands emitted by Receiptful's current
 HTML-to-ESC/POS renderer and adds common native graphics and symbol commands
 found in print jobs produced elsewhere.
 
+The virtual `REFERENCE` profile enables every capability in this implemented
+boundary and uses baseline command behavior without physical-printer quirks.
+It does not change commands listed as post-v1 into implemented commands.
+
 Page mode, downloaded or non-volatile resources, macros, bidirectional status
 emulation, multiple-tone graphics, and spot colors remain post-v1 work.
 Version 1 reports them as unsupported rather than guessing their behavior.

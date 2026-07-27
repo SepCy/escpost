@@ -20,6 +20,13 @@ CASE_DIRECTORY = (
     / "graphics"
     / "esc-star-8dot-double-density"
 )
+REFERENCE_CUT_CASE = (
+    REPOSITORY
+    / "tests"
+    / "cases"
+    / "mechanism"
+    / "reference-full-and-partial-cuts"
+)
 CALIBRATION_INPUT = REPOSITORY / "calibration" / "input.hex"
 
 
@@ -106,6 +113,38 @@ class CaseRenderCliTest(unittest.TestCase):
             self.assertEqual(
                 (output_directory / "actual-002.png").read_bytes(),
                 b"second sheet",
+            )
+
+    def test_reference_cut_case_writes_three_preview_sheets(self):
+        with TemporaryDirectory() as output_directory:
+            with redirect_stdout(StringIO()):
+                exit_code = main(
+                    [
+                        "case",
+                        "render",
+                        str(REFERENCE_CUT_CASE),
+                        "--output-dir",
+                        output_directory,
+                    ]
+                )
+
+            output_directory = Path(output_directory)
+            sheet_names = [
+                "actual-001.png",
+                "actual-002.png",
+                "actual-003.png",
+            ]
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                json.loads((output_directory / "manifest.json").read_text()),
+                {"sheets": sheet_names},
+            )
+            self.assertEqual(
+                [
+                    _read_png_header((output_directory / name).read_bytes())[:2]
+                    for name in sheet_names
+                ],
+                [(576, 140), (576, 110), (576, 30)],
             )
 
 

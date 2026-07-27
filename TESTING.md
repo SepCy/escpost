@@ -235,8 +235,8 @@ case.
 
 ## Shared profile calibration
 
-Focused cases isolate one behavior for automated diagnosis. Printer
-calibration instead uses one comprehensive stream for every profile:
+Focused cases isolate one behavior for automated diagnosis. Physical-printer
+calibration instead uses one comprehensive stream for every physical profile:
 
 ```text
 calibration/
@@ -253,8 +253,15 @@ profiles/
 ```
 
 The shared stream exercises the broad supported receipt surface. Do not fork
-it per printer. Each profile's expected PNG captures the layout produced by
-that profile, while smaller cases remain the primary way to locate regressions.
+it per printer. Each physical profile's expected PNG captures the layout
+produced by that profile, while smaller cases remain the primary way to locate
+regressions.
+
+Virtual profiles do not carry `verification.toml` or claim comparison with
+paper. `REFERENCE` instead uses the focused
+`tests/cases/mechanism/reference-full-and-partial-cuts` golden case. Its two
+cuts must produce `actual-001.png`, `actual-002.png`, and `actual-003.png` in
+that exact manifest order.
 
 `verification.toml` contains only:
 

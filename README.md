@@ -31,6 +31,11 @@ misleading replacement glyph.
 The Python binding and developer CLI can render, raw-print, or calibrate the
 same version-controlled byte stream.
 
+The virtual `REFERENCE` profile enables every capability currently represented
+by the renderer without inheriting limitations or quirks from a physical
+printer. It does not imply that post-v1 command families are already
+implemented.
+
 The Rust result includes bounded rendering, device events, profile
 approximations, and reproducible renderer/profile identity. Canonical profile
 JSON verifies its content hash when loaded.
@@ -100,6 +105,15 @@ docker compose up -d preview
 ```
 
 Open <http://localhost:8765/tools/preview/>.
+
+Render the focused REFERENCE cut case to see three ordered PNG sheets produced
+by full and partial cuts:
+
+```bash
+./escpos2png case render \
+  tests/cases/mechanism/reference-full-and-partial-cuts \
+  --output-dir local/preview
+```
 
 For focused physical calibration, first use discovery to populate
 `local/printers.toml`. The `case calibrate` command renders and sends one

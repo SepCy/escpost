@@ -4,6 +4,10 @@
     "NT-5890K": {
       "schema_version": 1,
       "id": "NT-5890K",
+      "source": {
+        "type": "upstream",
+        "profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b"
+      },
       "geometry": {
         "printable_width_dots": 384,
         "dpi_x": 203,
@@ -158,8 +162,132 @@
           "reason": "Connected firmware adds a faint trailing line after 8-dot ESC * images; the renderer omits this incidental artifact"
         }
       ],
-      "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-      "canonical_profile_sha256": "6a9651ea355c9323fa2eb4709b04f2e0c40c2879e2bdda02205eb54774f6445a"
+      "canonical_profile_sha256": "021d5a3063aa611290a4dc5a5a2ee3eff3d644193be493b228ab0f5ee7fe3326"
+    },
+    "REFERENCE": {
+      "schema_version": 1,
+      "id": "REFERENCE",
+      "source": {
+        "type": "reference"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": {
+        "print_head_to_cutter_dots": 80
+      },
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128",
+            "gs1_128",
+            "gs1_databar_omnidirectional",
+            "gs1_databar_truncated",
+            "gs1_databar_limited",
+            "gs1_databar_expanded",
+            "code_128_auto"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": true,
+        "paperPartCut": true,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP720",
+        "2": "CP737",
+        "3": "CP775",
+        "4": "CP850",
+        "5": "CP852",
+        "6": "CP855",
+        "7": "CP857",
+        "8": "CP858",
+        "9": "CP860",
+        "10": "CP861",
+        "11": "CP862",
+        "12": "CP863",
+        "13": "CP864",
+        "14": "CP865",
+        "15": "CP866",
+        "16": "CP869",
+        "17": "CP874",
+        "18": "CP1250",
+        "19": "CP1251",
+        "20": "CP1252",
+        "21": "CP1253",
+        "22": "CP1254",
+        "23": "CP1255",
+        "24": "CP1256",
+        "25": "CP1257",
+        "26": "CP1258"
+      },
+      "approximations": [
+        {
+          "field": "fonts.resident_glyph_shapes",
+          "reason": "Representative bundled glyphs are used because a virtual profile has no printer ROM"
+        },
+        {
+          "field": "geometry",
+          "reason": "ESC/POS does not define paper width or print-head-to-cutter distance; REFERENCE selects deterministic virtual values"
+        }
+      ],
+      "canonical_profile_sha256": "d2b16d5f2481bed8c5329967fe920b864296450496b065fed4940ec910faec28"
     }
   }
 }

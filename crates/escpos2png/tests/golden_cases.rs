@@ -1,5 +1,5 @@
 use escpos2png::render;
-use escpos2png_profiles::compile_profile;
+use escpos2png_profiles::{ProfileSource, compile_profile};
 use serde::Deserialize;
 use std::fs;
 use std::io::{BufReader, Cursor};
@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
 const NT_5890K_ENRICHMENT: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+const REFERENCE_ENRICHMENT: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -160,6 +161,12 @@ fn compare_profile_calibration(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("invalid profile directory {profile_directory:?}"))?;
+    let profile = load_profile(profile_id)?;
+    if profile.source == ProfileSource::Reference {
+        // A virtual profile has deterministic golden cases, not a physical
+        // calibration date or a claim that paper was inspected.
+        return Ok(());
+    }
     load_calibration_verification(profile_directory)?;
     let output_directory = output_root.join(profile_id);
 
@@ -414,6 +421,7 @@ fn find_expected_sheets(case_directory: &Path) -> Result<Vec<PathBuf>, String> {
 fn load_profile(profile: &str) -> Result<escpos2png_profiles::PrinterProfile, String> {
     let enrichment = match profile {
         "NT-5890K" => NT_5890K_ENRICHMENT,
+        "REFERENCE" => REFERENCE_ENRICHMENT,
         profile => return Err(format!("unknown golden-case profile {profile:?}")),
     };
     compile_profile(CAPABILITIES_JSON, enrichment)

@@ -35,6 +35,7 @@ const LEGACY_FUNCTION_B_SYSTEMS: [BarcodeSystem; 9] = [
 pub struct PrinterProfile {
     pub schema_version: u32,
     pub id: String,
+    pub source: ProfileSource,
     pub geometry: Geometry,
     /// Absent on printers that use a manual tear bar.
     pub cutter: Option<CutterGeometry>,
@@ -44,11 +45,17 @@ pub struct PrinterProfile {
     pub defaults: PrinterDefaults,
     pub fonts: Fonts,
     pub features: Features,
-    /// Maps each printer-specific `ESC t n` slot to a named encoding.
+    /// Maps each profile-specific `ESC t n` slot to a named encoding.
     pub code_pages: BTreeMap<u8, String>,
     pub approximations: Vec<Approximation>,
-    pub upstream_profile_sha256: String,
     pub canonical_profile_sha256: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProfileSource {
+    Upstream { profile_sha256: String },
+    Reference,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,7 +86,7 @@ pub struct Geometry {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CutterGeometry {
-    /// Physical paper-feed distance from the print head to the cutter blade.
+    /// Paper-feed distance from the print head to the cutter blade.
     pub print_head_to_cutter_dots: u32,
 }
 
@@ -237,6 +244,12 @@ pub enum CompileProfileError {
     #[error("a profile with a paper-cut capability must define cutter geometry")]
     MissingCutterGeometry,
 
+    #[error("reference profile field {field} is required")]
+    MissingReferenceField { field: &'static str },
+
+    #[error("an upstream profile cannot replace imported code-page mappings")]
+    UpstreamCodePagesOverride,
+
     #[error("{font} baseline {baseline_dots} must be inside its {cell_height_dots}-dot-high cell")]
     InvalidFontBaseline {
         font: &'static str,
@@ -318,7 +331,7 @@ pub enum CanonicalProfileError {
 struct Enrichment {
     schema_version: u32,
     profile: String,
-    upstream_profile_sha256: String,
+    source: ProfileSource,
     /// Authoring evidence is validated as strings but does not enter runtime profiles.
     #[serde(rename = "sources")]
     _sources: Vec<String>,
@@ -331,6 +344,7 @@ struct Enrichment {
     fonts: Fonts,
     #[serde(default)]
     features: FeatureOverrides,
+    code_pages: Option<BTreeMap<u8, String>>,
     approximations: Vec<Approximation>,
 }
 
@@ -377,6 +391,7 @@ struct ImportedFeatures {
 struct CanonicalProfileContent<'a> {
     schema_version: u32,
     id: &'a str,
+    source: &'a ProfileSource,
     geometry: &'a Geometry,
     cutter: &'a Option<CutterGeometry>,
     motion: &'a MotionUnits,
@@ -393,32 +408,20 @@ pub fn compile_profile(
     capabilities_json: &[u8],
     enrichment_toml: &str,
 ) -> Result<PrinterProfile, CompileProfileError> {
-    let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
-        .map_err(CompileProfileError::InvalidCapabilities)?;
     let enrichment: Enrichment =
         toml::from_str(enrichment_toml).map_err(CompileProfileError::InvalidEnrichment)?;
 
     validate_schema_version(enrichment.schema_version)?;
     validate_profile_values(&enrichment)?;
 
-    let upstream_profile = capabilities
-        .profiles
-        .get(&enrichment.profile)
-        .ok_or_else(|| CompileProfileError::UnknownUpstreamProfile {
-            profile: enrichment.profile.clone(),
-        })?;
-    let actual_hash = hash_resolved_profile(upstream_profile)?;
-
-    validate_upstream_hash(&enrichment, &actual_hash)?;
-    let imported = import_upstream_profile(upstream_profile, &enrichment.profile)?;
-    let code_pages = import_code_pages(&imported)?;
+    let (source, code_pages, features) = compile_profile_source(capabilities_json, &enrichment)?;
     validate_default_code_page(enrichment.defaults.code_page, &code_pages)?;
-    let features = apply_feature_overrides(imported.features, &enrichment.features);
     validate_cutter_capabilities(enrichment.cutter.as_ref(), &features)?;
 
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: enrichment.profile,
+        source,
         geometry: enrichment.geometry,
         cutter: enrichment.cutter,
         motion: enrichment.motion,
@@ -429,13 +432,57 @@ pub fn compile_profile(
         features,
         code_pages,
         approximations: enrichment.approximations,
-        upstream_profile_sha256: actual_hash,
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
         hash_canonical_profile(&profile).map_err(CompileProfileError::NormalizeCanonicalProfile)?;
 
     Ok(profile)
+}
+
+fn compile_profile_source(
+    capabilities_json: &[u8],
+    enrichment: &Enrichment,
+) -> Result<(ProfileSource, BTreeMap<u8, String>, Features), CompileProfileError> {
+    match &enrichment.source {
+        ProfileSource::Upstream {
+            profile_sha256: expected_hash,
+        } => {
+            if enrichment.code_pages.is_some() {
+                return Err(CompileProfileError::UpstreamCodePagesOverride);
+            }
+            let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
+                .map_err(CompileProfileError::InvalidCapabilities)?;
+            let upstream_profile =
+                capabilities
+                    .profiles
+                    .get(&enrichment.profile)
+                    .ok_or_else(|| CompileProfileError::UnknownUpstreamProfile {
+                        profile: enrichment.profile.clone(),
+                    })?;
+            let actual_hash = hash_resolved_profile(upstream_profile)?;
+            validate_upstream_hash(&enrichment.profile, expected_hash, &actual_hash)?;
+            let imported = import_upstream_profile(upstream_profile, &enrichment.profile)?;
+            let code_pages = import_code_pages(&imported)?;
+            let features = apply_feature_overrides(imported.features, &enrichment.features);
+            Ok((
+                ProfileSource::Upstream {
+                    profile_sha256: actual_hash,
+                },
+                code_pages,
+                features,
+            ))
+        }
+        ProfileSource::Reference => {
+            let code_pages = enrichment.code_pages.clone().ok_or(
+                CompileProfileError::MissingReferenceField {
+                    field: "code_pages",
+                },
+            )?;
+            let features = compile_reference_features(&enrichment.features)?;
+            Ok((ProfileSource::Reference, code_pages, features))
+        }
+    }
 }
 
 pub fn to_canonical_json(profile: &PrinterProfile) -> Result<Vec<u8>, CanonicalProfileError> {
@@ -548,6 +595,45 @@ fn apply_bool_override(target: &mut bool, replacement: Option<bool>) {
     if let Some(replacement) = replacement {
         *target = replacement;
     }
+}
+
+fn compile_reference_features(
+    features: &FeatureOverrides,
+) -> Result<Features, CompileProfileError> {
+    Ok(Features {
+        barcodes: required_reference_field(&features.barcodes, "features.barcodes")?,
+        bit_image_column: required_reference_field(
+            &features.bit_image_column,
+            "features.bit_image_column",
+        )?,
+        bit_image_raster: required_reference_field(
+            &features.bit_image_raster,
+            "features.bit_image_raster",
+        )?,
+        graphics: required_reference_field(&features.graphics, "features.graphics")?,
+        paper_full_cut: required_reference_field(
+            &features.paper_full_cut,
+            "features.paper_full_cut",
+        )?,
+        paper_part_cut: required_reference_field(
+            &features.paper_part_cut,
+            "features.paper_part_cut",
+        )?,
+        pulse_standard: required_reference_field(
+            &features.pulse_standard,
+            "features.pulse_standard",
+        )?,
+        qr_code: required_reference_field(&features.qr_code, "features.qr_code")?,
+    })
+}
+
+fn required_reference_field<T: Clone>(
+    value: &Option<T>,
+    field: &'static str,
+) -> Result<T, CompileProfileError> {
+    value
+        .clone()
+        .ok_or(CompileProfileError::MissingReferenceField { field })
 }
 
 fn import_code_pages(
@@ -739,6 +825,7 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
     let content = CanonicalProfileContent {
         schema_version: profile.schema_version,
         id: &profile.id,
+        source: &profile.source,
         geometry: &profile.geometry,
         cutter: &profile.cutter,
         motion: &profile.motion,
@@ -781,16 +868,17 @@ fn hash_bytes(bytes: &[u8]) -> String {
 }
 
 fn validate_upstream_hash(
-    enrichment: &Enrichment,
+    profile: &str,
+    expected_hash: &str,
     actual_hash: &str,
 ) -> Result<(), CompileProfileError> {
-    if enrichment.upstream_profile_sha256 == actual_hash {
+    if expected_hash == actual_hash {
         return Ok(());
     }
 
     Err(CompileProfileError::UpstreamProfileHashMismatch {
-        profile: enrichment.profile.clone(),
-        expected: enrichment.upstream_profile_sha256.clone(),
+        profile: profile.to_owned(),
+        expected: expected_hash.to_owned(),
         actual: actual_hash.to_owned(),
     })
 }

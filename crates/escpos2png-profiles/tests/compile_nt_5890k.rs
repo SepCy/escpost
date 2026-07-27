@@ -1,13 +1,14 @@
 use escpos2png_profiles::{
     BarcodeSystem, CanonicalProfileError, CarriageReturnMode, CompileProfileError, FeedBehavior,
-    PositioningBehavior, compile_profile, from_canonical_json, from_canonical_profile_pack_json,
-    to_canonical_json, to_canonical_profile_pack_json,
+    PositioningBehavior, ProfileSource, compile_profile, from_canonical_json,
+    from_canonical_profile_pack_json, to_canonical_json, to_canonical_profile_pack_json,
 };
 use serde_json::Value;
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
 const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+const REFERENCE_TOML: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
 const GENERATED_PROFILE_PACK: &[u8] = include_bytes!("../../../profiles/.generated/profiles.json");
 const RESOLVED_PROFILE_SHA256: &str =
     "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b";
@@ -25,9 +26,14 @@ fn nt_5890k_compiles_to_rendering_geometry() {
             profile.geometry.dpi_y,
             profile.motion.horizontal_units_per_inch,
             profile.motion.vertical_units_per_inch,
-            profile.upstream_profile_sha256.as_str(),
         ),
-        ("NT-5890K", 384, 203, 203, 203, 203, RESOLVED_PROFILE_SHA256,)
+        ("NT-5890K", 384, 203, 203, 203, 203)
+    );
+    assert_eq!(
+        profile.source,
+        ProfileSource::Upstream {
+            profile_sha256: RESOLVED_PROFILE_SHA256.to_owned(),
+        }
     );
     assert_eq!(
         (
@@ -281,11 +287,14 @@ fn canonical_profile_pack_indexes_verified_profiles_by_id() {
 fn generated_profile_pack_matches_the_reviewed_sources() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the pinned NT-5890K profile should compile");
+    let reference = compile_profile(b"", REFERENCE_TOML)
+        .expect("the self-contained REFERENCE profile should compile");
     let pack = from_canonical_profile_pack_json(GENERATED_PROFILE_PACK)
         .expect("the committed profile pack should verify");
 
     assert_eq!(pack.get("NT-5890K"), Some(&profile));
-    assert_eq!(pack.profiles().count(), 1);
+    assert_eq!(pack.get("REFERENCE"), Some(&reference));
+    assert_eq!(pack.profiles().count(), 2);
 }
 
 #[test]

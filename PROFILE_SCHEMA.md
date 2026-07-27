@@ -1,9 +1,13 @@
 # Printer Profiles
 
-escpos2png imports command capabilities and code-page mappings from
-`receipt-print-hq/escpos-printer-db`. A small typed enrichment supplies the
-geometry, defaults, font metrics, corrections, and fidelity disclosures needed
-by the renderer.
+Physical escpos2png profiles import command capabilities and code-page mappings
+from `receipt-print-hq/escpos-printer-db`. A small typed enrichment supplies
+the geometry, defaults, font metrics, corrections, and fidelity disclosures
+needed by the renderer.
+
+The virtual `REFERENCE` profile is self-contained. It supplies every current
+capability and supported code-page mapping directly, without posing as an
+upstream printer.
 
 The renderer consumes generated canonical JSON. It never resolves upstream
 inheritance or parses enrichment TOML while rendering.
@@ -17,8 +21,8 @@ profiles/
 │   └── profiles.json        # canonical runtime pack
 └── <profile-id>/
     ├── profile.toml         # typed renderer enrichment
-    ├── expected-001.png     # shared-receipt calibration output
-    ├── verification.toml    # renderer commit and last-verified date
+    ├── expected-001.png     # physical profiles: calibration output
+    ├── verification.toml    # physical profiles: last paper comparison
     ├── notes.md             # physical evidence and fidelity context
     └── TODO.md              # optional deferred hardware work
 ```
@@ -30,14 +34,12 @@ printer profile.
 ## Data flow
 
 ```text
-Pinned upstream Git submodule
-        │
-        ▼
-Resolved upstream profile ── SHA-256 review guard
-        │
-        ├── typed TOML enrichment
-        ▼
-Validated canonical profile ── canonical SHA-256
+Physical:
+  pinned upstream profile ── SHA-256 review guard ─┐
+  typed TOML enrichment ───────────────────────────┤
+                                                   ▼
+Virtual:                                  validated canonical profile
+  self-contained typed TOML ───────────────────────┘
 ```
 
 ## Upstream pinning and drift detection
@@ -52,8 +54,8 @@ The repository gitlink pins its exact commit. `.gitmodules` records the
 repository URL. A second lock file would duplicate those values, so v1 does not
 have one.
 
-Each enrichment stores the SHA-256 of its fully resolved upstream profile. This
-hash differs by printer and includes inherited values.
+Each upstream source stores the SHA-256 of its fully resolved upstream profile.
+This hash differs by printer and includes inherited values.
 
 For `NT-5890K`, the importer hashes the resolved JSON object from the upstream
 `capabilities.json`. `serde_json` stores object keys deterministically in this
@@ -71,12 +73,15 @@ Each `profiles/<profile-id>/profile.toml` is a typed TOML document:
 ```toml
 schema_version = 1
 profile = "NT-5890K"
-upstream_profile_sha256 = "<resolved-profile-sha256>"
 
 sources = [
     "upstream:escpos-printer-db/NT-5890K",
     "case:tests/cases/text/ascii-fonts-and-styles",
 ]
+
+[source]
+type = "upstream"
+profile_sha256 = "<resolved-profile-sha256>"
 
 [geometry]
 printable_width_dots = 384
@@ -141,9 +146,15 @@ enter a profile.
 `schema_version` describes the TOML structure. This unreleased format remains
 version 1.
 
-`profile` is the shared upstream profile identifier.
+`profile` is the canonical profile identifier. For an upstream source it is
+also the upstream profile identifier.
 
-`upstream_profile_sha256` is the review guard described above.
+`source.type = "upstream"` imports capabilities and code pages from
+escpos-printer-db. Its `profile_sha256` is the review guard described above.
+
+`source.type = "reference"` imports nothing. It requires a complete
+`[features]`, `[features.barcodes]`, and `[code_pages]` definition so compiler
+defaults cannot silently limit the virtual profile.
 
 `sources` contains human-readable evidence references. Sources remain in the
 authoring file and Git history; they are not copied into the runtime profile.
@@ -158,7 +169,8 @@ values.
 
 Feature overrides exist only for implemented command handlers. New upstream
 capabilities are added to the canonical schema with the renderer behavior that
-consumes them.
+consumes them. A reference profile must explicitly fill every current feature
+instead of overriding an imported baseline.
 
 The upstream database represents each `GS k` Function A/B family with one
 boolean. The canonical profile stores exact barcode systems. An upstream true
@@ -186,9 +198,11 @@ Compilation rejects:
 - unknown enrichment fields;
 - an unknown upstream profile;
 - a stale resolved-profile hash;
+- an incomplete self-contained reference profile;
+- local code-page replacements on an upstream source;
 - zero geometry, motion, or font dimensions;
 - a baseline outside its font cell;
-- a default code-page slot absent from the upstream profile;
+- a default code-page slot absent from the selected source;
 - a default international set the renderer does not implement;
 - a barcode system without a command number in the selected Function A/B
   framing; and
@@ -208,7 +222,7 @@ runtime geometry, motion, defaults, and fonts
 implemented capabilities
 code-page mappings
 approximations
-resolved upstream-profile SHA-256
+typed source and upstream SHA-256 when applicable
 canonical-profile SHA-256
 ```
 
@@ -217,7 +231,7 @@ disclosure, except the hash field itself. It is the exact profile identity used
 in render metadata and cache keys.
 
 The generated pack is committed because Python wheels embed it directly. Tests
-regenerate the reviewed profile and require it to equal the committed pack.
+regenerate the reviewed profiles and require them to equal the committed pack.
 
 Regenerate it with:
 
@@ -228,6 +242,23 @@ docker compose run --rm test cargo run --quiet \
   profiles profiles/.generated/profiles.json
 ```
 
+## REFERENCE profile
+
+`profiles/REFERENCE/profile.toml` is a virtual standards baseline for previews,
+automated tests, and integrations that must not inherit a physical printer's
+missing features. It enables every capability represented by the current
+canonical schema.
+
+ESC/POS does not define paper width, DPI, font ROM, or cutter placement, so a
+render still needs explicit geometry. REFERENCE selects deterministic 203 DPI,
+576-dot paper and an 80-dot print-head-to-cutter distance. These are virtual
+parameters, not claims about every compliant printer.
+
+REFERENCE does not bypass parser coverage. Commands identified as post-v1 in
+`COMMAND_COVERAGE.md` remain unsupported until their handlers are implemented.
+When the canonical feature schema grows, REFERENCE must explicitly adopt the
+new capability.
+
 ## Updating an upstream profile
 
 1. Update the upstream submodule deliberately.
@@ -235,7 +266,7 @@ docker compose run --rm test cargo run --quiet \
 3. If the resolved-profile hash changed, inspect the effective upstream
    profile and inherited ancestors.
 4. Update corrections or capabilities when the reviewed behavior changed.
-5. Replace `upstream_profile_sha256` with the accepted resolved hash.
+5. Replace `source.profile_sha256` with the accepted resolved hash.
 6. Regenerate the canonical pack.
 7. Review its canonical hash and run the full test suite.
 

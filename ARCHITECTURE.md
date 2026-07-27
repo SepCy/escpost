@@ -101,24 +101,33 @@ Profiles provide behavior that cannot be derived from ESC/POS bytes:
   `GS v 0`, and `GS V` Function B modes;
 - reset line spacing, code page, international set, and carriage-return mode;
 - Font A/B cell size and baseline;
-- imported code-page slots;
+- imported or self-contained code-page slots;
 - capabilities used by implemented command handlers;
 - exact `GS k` systems supported by Function A and Function B; and
 - explicit fidelity approximations.
 
-The upstream `escpos-printer-db` repository is a Git submodule. Its gitlink pins
-the complete upstream snapshot. Each enrichment also stores the SHA-256 of its
-resolved upstream profile, so a change affecting that printer requires review.
+Physical profiles use the upstream `escpos-printer-db` repository as a Git
+submodule. Its gitlink pins the complete upstream snapshot. Each upstream
+profile source also stores the SHA-256 of its resolved profile, so a change
+affecting that printer requires review.
+
+`REFERENCE` is a separate virtual source. It imports nothing from the printer
+database and explicitly supplies every current capability and code-page slot.
+It represents documented baseline behavior without printer-specific
+restrictions. Its 203 DPI, 576-dot paper and cutter geometry are concrete
+virtual rendering parameters, not universal ESC/POS mechanism dimensions.
 
 Profile authoring and calibration assets are collocated in visible
-`profiles/<profile-id>/` directories. Each contains `profile.toml` and the
-profile-specific expected rendering of `calibration/input.hex`. Hidden
-`.escpos-printer-db/` and `.generated/` directories contain infrastructure,
-not profiles.
+`profiles/<profile-id>/` directories. A physical profile also contains the
+expected rendering and physical verification of `calibration/input.hex`.
+Virtual profiles use focused automated golden cases instead of claiming
+physical evidence. Hidden `.escpos-printer-db/` and `.generated/` directories
+contain infrastructure, not profiles.
 
-The profile compiler combines the upstream capabilities with a typed TOML
-enrichment and generates canonical JSON. The renderer loads only that generated
-profile. It does not read the upstream database or TOML at render time.
+The profile compiler either combines upstream capabilities with a typed TOML
+enrichment or compiles a self-contained virtual source. It generates the same
+canonical JSON shape for both. The renderer loads only that generated profile;
+it does not read the upstream database or TOML at render time.
 
 A profile that advertises full- or partial-cut support must define
 `cutter.print_head_to_cutter_dots`. `GS V` Function B uses that fixed distance
@@ -128,7 +137,8 @@ then applies only its profile-selected explicit feed behavior.
 
 Each canonical profile carries:
 
-- the resolved upstream-profile SHA-256, for drift detection; and
+- a typed source, including the resolved profile SHA-256 for upstream sources;
+  and
 - a canonical-profile SHA-256 covering every runtime field and approximation.
 
 The canonical hash is the profile's rendering identity. Manually maintained

@@ -524,6 +524,45 @@ decision can be revisited if the difference later matters.
 - A previously neglected quirk can become modeled after reproducible evidence
   and a concrete fidelity need justify the added complexity.
 
+## DD-026 — Provide a virtual unrestricted reference profile
+
+**Status:** Accepted
+
+### Context
+
+Physical printer profiles intentionally disable unsupported mechanisms and
+capture firmware quirks. That makes them the wrong fixture for demonstrating
+generic renderer behavior such as multiple cuts, modern graphics, or every
+implemented barcode system.
+
+Calling one physical model the ESC/POS default would also be misleading:
+ESC/POS does not standardize paper width, DPI, resident font ROM, or cutter
+placement.
+
+### Decision
+
+Maintain `REFERENCE` as a self-contained virtual profile. It imports no
+upstream printer and explicitly enables every capability represented by the
+current canonical profile schema. It follows documented baseline command
+behavior without model-specific ignored-command rules.
+
+Give the virtual mechanism concrete, deterministic geometry so it can produce
+PNG pixels. Treat those values as test parameters, not universal ESC/POS
+dimensions. Keep parser and command coverage independent: REFERENCE removes
+profile capability restrictions but does not make unimplemented commands
+available.
+
+### Consequences
+
+- Generic demonstrations and golden cases do not need to falsify a physical
+  printer profile.
+- Adding a canonical capability requires an explicit REFERENCE decision.
+- REFERENCE uses automated golden evidence and never claims physical
+  verification.
+- Integrations may use it for unrestricted previews when no target printer is
+  known, while a real print preview should still select the actual device
+  profile whenever possible.
+
 ## Open questions
 
 The following are intentionally not decided yet:

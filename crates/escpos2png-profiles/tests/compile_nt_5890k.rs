@@ -54,10 +54,12 @@ fn nt_5890k_compiles_to_rendering_geometry() {
     assert_eq!(
         (
             profile.commands.esc_j,
+            profile.commands.gs_v_0_following_lf,
             profile.commands.gs_v_function_b_full,
             profile.commands.gs_v_function_b_partial,
         ),
         (
+            FeedBehavior::Ignored,
             FeedBehavior::Ignored,
             FeedBehavior::Feed,
             FeedBehavior::Ignored,

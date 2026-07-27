@@ -314,7 +314,12 @@ pub fn render_with_options(
     let mut offset = 0;
 
     while offset < data.len() {
-        offset += match data[offset] {
+        let byte = data[offset];
+        if byte != 0x0a {
+            state.clear_pending_gs_v_0_lf();
+        }
+
+        offset += match byte {
             0x09 => {
                 state.horizontal_tab()?;
                 1
@@ -1579,6 +1584,7 @@ fn execute_gs_v0(
         horizontal_scale,
         vertical_scale,
     )?;
+    state.mark_gs_v_0_printed();
     Ok(command_length)
 }
 
@@ -1625,6 +1631,8 @@ struct PrinterState {
     esc_backslash_negative_behavior: PositioningBehavior,
     esc_dollar_after_printable_data_behavior: PositioningBehavior,
     esc_j_behavior: FeedBehavior,
+    gs_v_0_following_lf_behavior: FeedBehavior,
+    pending_gs_v_0_lf: bool,
     gs_v_function_b_full_behavior: FeedBehavior,
     gs_v_function_b_partial_behavior: FeedBehavior,
     font_a: ProfileFont,
@@ -1706,6 +1714,8 @@ impl PrinterState {
                 .commands
                 .esc_dollar_after_printable_data,
             esc_j_behavior: profile.commands.esc_j,
+            gs_v_0_following_lf_behavior: profile.commands.gs_v_0_following_lf,
+            pending_gs_v_0_lf: false,
             gs_v_function_b_full_behavior: profile.commands.gs_v_function_b_full,
             gs_v_function_b_partial_behavior: profile.commands.gs_v_function_b_partial,
             active_font: font_a.clone(),
@@ -1773,6 +1783,7 @@ impl PrinterState {
         self.justification = Justification::Left;
         self.line_height = 0;
         self.buffered_graphics = None;
+        self.pending_gs_v_0_lf = false;
         self.stored_qr_data = None;
         self.qr_module_size = DEFAULT_QR_MODULE_SIZE_DOTS;
         self.qr_error_correction = qr::ErrorCorrection::Low;
@@ -2764,7 +2775,20 @@ impl PrinterState {
         Ok(())
     }
 
+    fn mark_gs_v_0_printed(&mut self) {
+        self.pending_gs_v_0_lf = true;
+    }
+
+    fn clear_pending_gs_v_0_lf(&mut self) {
+        self.pending_gs_v_0_lf = false;
+    }
+
     fn line_feed(&mut self) -> Result<(), RenderError> {
+        if std::mem::take(&mut self.pending_gs_v_0_lf)
+            && self.gs_v_0_following_lf_behavior == FeedBehavior::Ignored
+        {
+            return Ok(());
+        }
         self.feed_lines(1)
     }
 

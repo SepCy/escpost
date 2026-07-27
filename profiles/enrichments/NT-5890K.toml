@@ -9,6 +9,7 @@ sources = [
     "manual:epson-escpos/esc_r#select-international-character-set",
     "manual:epson-escpos/esc_t#select-character-code-table",
     "case:tests/cases/graphics/esc-star-8dot-double-density",
+    "case:tests/cases/graphics/gs-v0-all-scaling-modes",
     "case:tests/cases/motion/gs-v-function-b-feed",
     "case:tests/cases/motion/line-spacing-and-feed",
     "case:tests/cases/motion/positioning-and-print-area",
@@ -37,6 +38,8 @@ esc_dollar_after_printable_data = "ignored"
 # Physical probes show that it also consumes ESC J and GS V 66 n without
 # feeding. GS V 65 n performs the requested feed.
 esc_j = "ignored"
+# After GS v 0, exactly one immediately following LF is consumed without feed.
+gs_v_0_following_lf = "ignored"
 gs_v_function_b_full = "feed"
 gs_v_function_b_partial = "ignored"
 

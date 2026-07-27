@@ -94,6 +94,7 @@ pub struct CommandBehavior {
     pub esc_backslash_negative: PositioningBehavior,
     pub esc_dollar_after_printable_data: PositioningBehavior,
     pub esc_j: FeedBehavior,
+    pub gs_v_0_following_lf: FeedBehavior,
     pub gs_v_function_b_full: FeedBehavior,
     pub gs_v_function_b_partial: FeedBehavior,
 }

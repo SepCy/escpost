@@ -20,6 +20,7 @@
         "esc_backslash_negative": "ignored",
         "esc_dollar_after_printable_data": "ignored",
         "esc_j": "ignored",
+        "gs_v_0_following_lf": "ignored",
         "gs_v_function_b_full": "feed",
         "gs_v_function_b_partial": "ignored"
       },
@@ -157,7 +158,7 @@
         }
       ],
       "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-      "canonical_profile_sha256": "d592eb1b792ca3b0b346bcdfc23a155c9575d457b1d02eb583c26a7054cf4cb4"
+      "canonical_profile_sha256": "ab9486418dfef7c8eaa703fecfa6a8cbfcd13cb7e0e695b0a3a9de0ef2e3c927"
     }
   }
 }

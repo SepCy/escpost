@@ -1,5 +1,5 @@
 use escpos2png::{RenderError, render};
-use escpos2png_profiles::compile_profile;
+use escpos2png_profiles::{FeedBehavior, compile_profile};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
@@ -29,6 +29,43 @@ fn prints_a_normal_raster_image_and_feeds_by_its_height() {
             );
         }
     }
+}
+
+#[test]
+fn nt_5890k_suppresses_exactly_one_lf_after_gs_v0() {
+    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    let raster = [0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0b1000_0000];
+
+    let one_lf = [raster.as_slice(), &[0x0a], raster.as_slice()].concat();
+    let one_lf_rendered = render(&one_lf, &profile).expect("one LF should be consumed");
+    let one_lf_surface = &one_lf_rendered.sheets[0].surface;
+    assert_eq!(one_lf_surface.height(), 2);
+    assert!(one_lf_surface.is_printed(0, 0));
+    assert!(one_lf_surface.is_printed(0, 1));
+
+    let two_lf = [raster.as_slice(), &[0x0a, 0x0a], raster.as_slice()].concat();
+    let two_lf_rendered = render(&two_lf, &profile).expect("the second LF should feed");
+    let two_lf_surface = &two_lf_rendered.sheets[0].surface;
+    assert_eq!(two_lf_surface.height(), 32);
+    assert!(two_lf_surface.is_printed(0, 0));
+    assert!(two_lf_surface.is_printed(0, 31));
+}
+
+#[test]
+fn epson_lf_after_gs_v0_adds_the_selected_line_feed() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    profile.commands.gs_v_0_following_lf = FeedBehavior::Feed;
+    let raster = [0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0b1000_0000];
+    let input = [raster.as_slice(), &[0x0a], raster.as_slice()].concat();
+
+    let rendered = render(&input, &profile).expect("Epson LF should feed after GS v 0");
+    let surface = &rendered.sheets[0].surface;
+
+    assert_eq!(surface.height(), 32);
+    assert!(surface.is_printed(0, 0));
+    assert!(surface.is_printed(0, 31));
 }
 
 #[test]

@@ -179,6 +179,8 @@ The renderer does not initially promise:
   explain non-obvious behavior in plain language.
 - [Command coverage](COMMAND_COVERAGE.md) defines the version 1 boundary and
   tracks implementation, automated coverage, and physical validation.
+- [Developer-tool roadmap](TODO.md) tracks the planned virtual printer,
+  inspector, proxy, Rust CLI, and web workbench.
 - [Design decisions](DESIGN_DECISIONS.md) records why durable choices were
   made, their consequences, and which questions remain open.
 - [Printer profile enrichments](PROFILE_SCHEMA.md) defines how upstream

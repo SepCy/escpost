@@ -32,7 +32,7 @@ a focused checklist, not a request to test every possible command ordering.
 | Beginning-of-line state | Justification, print-area, raster, and cut commands | Commands are accepted, ignored, or treated as data exactly as documented | Covered |
 | `ESC @` initialization | Persistent modes, motion units, tabs, print area, and pending data | Defaults are restored, pending data is cleared, and already-fed paper remains | Covered |
 | Text print modes | Raster and buffered graphics, barcodes, and two-dimensional symbols | Modes that the specification excludes do not alter graphics or symbols | Covered |
-| Cuts | Buffered data, paper position, and sheet boundaries | Documented flush/order behavior and full versus partial sheet results | Partial |
+| Cuts | Buffered data, paper position, and sheet boundaries | Documented beginning-of-line behavior, Function B feed geometry, and full versus partial sheet results | Covered |
 
 ## Test-file ownership
 
@@ -43,6 +43,8 @@ a focused checklist, not a request to test every possible command ordering.
   behavior with `ESC t`.
 - `render_line_spacing.rs` owns profile-selected `CR` behavior in addition to
   explicit feed commands.
+- `render_cut.rs` owns Function A/B feed geometry, capability gating, and sheet
+  boundaries for full and partial cuts.
 - `render_buffering.rs` owns beginning-of-line and command-recognition rules.
 - Command-specific files continue to own framing, valid operands, scaling, and
   malformed-input behavior for that command.

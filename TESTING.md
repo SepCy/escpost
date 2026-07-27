@@ -369,6 +369,20 @@ profile's generated PNG, accept it as `expected-001.png`, record evidence in
 `notes.md`, and write `verification.toml`. This broad calibration complements
 the focused workflow; it does not replace it.
 
+When the printer has an autocutter, add its physical geometry to the profile:
+
+```toml
+[cutter]
+print_head_to_cutter_dots = 80
+```
+
+Use the model manual as the starting value, converting the documented
+print-head-to-blade distance to printer dots. Then compare the Function B
+sections of the shared calibration receipt. Full and partial cuts must put the
+following marker on a new rendered sheet, and the preceding sheet must include
+the fixed cutter distance plus the command's explicit feed. Record a pending
+hardware check instead of guessing when the distance is not known.
+
 ## Comparing PNG and paper
 
 Initial calibration may be visual, but test receipts should make discrepancies

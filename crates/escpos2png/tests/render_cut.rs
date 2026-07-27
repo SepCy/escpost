@@ -1,5 +1,5 @@
 use escpos2png::{RenderError, render};
-use escpos2png_profiles::{FeedBehavior, compile_profile};
+use escpos2png_profiles::{CutterGeometry, FeedBehavior, compile_profile};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -96,6 +96,64 @@ fn epson_gs_v_function_b_feeds_both_modes_without_an_autocutter() {
         ),
         (384, 20)
     );
+}
+
+#[test]
+fn gs_v_function_b_feeds_to_an_autocutter_then_finishes_the_sheet() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    // A synthetic cutter keeps this public rendering test independent of
+    // tomorrow's physical profile. The distances are deliberately distinct:
+    // 12 dots from print head to blade, then 5 units × 2 dots per unit.
+    profile.features.paper_full_cut = true;
+    profile.cutter = Some(CutterGeometry {
+        print_head_to_cutter_dots: 12,
+    });
+    let marker_line = [ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+    let input = [
+        marker_line.as_slice(),
+        &[GS, b'P', 203, 101],
+        &[GS, b'V', 65, 5],
+        marker_line.as_slice(),
+    ]
+    .concat();
+
+    let rendered = render(&input, &profile)
+        .expect("Function B should feed to the cutter and create a sheet boundary");
+
+    assert_eq!(rendered.sheets.len(), 2);
+    assert_eq!(rendered.sheets[0].surface.height(), 52);
+    assert!(rendered.sheets[0].surface.is_printed(0, 0));
+    assert_eq!(rendered.sheets[1].surface.height(), 30);
+    assert!(rendered.sheets[1].surface.is_printed(0, 0));
+}
+
+#[test]
+fn gs_v_function_b_partial_cut_uses_the_same_cutter_geometry() {
+    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
+        .expect("the test profile should compile");
+    profile.features.paper_part_cut = true;
+    profile.commands.gs_v_function_b_partial = FeedBehavior::Feed;
+    profile.cutter = Some(CutterGeometry {
+        print_head_to_cutter_dots: 8,
+    });
+    let marker_line = [ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+    let input = [
+        marker_line.as_slice(),
+        &[GS, b'P', 203, 203],
+        &[GS, b'V', 66, 4],
+        marker_line.as_slice(),
+    ]
+    .concat();
+
+    let rendered =
+        render(&input, &profile).expect("a supported Function B partial cut should split sheets");
+
+    // Partial cuts leave a physical bridge, but output after the blade action
+    // still belongs to a new receipt sheet in a preview.
+    assert_eq!(rendered.sheets.len(), 2);
+    assert_eq!(rendered.sheets[0].surface.height(), 42);
+    assert_eq!(rendered.sheets[1].surface.height(), 30);
 }
 
 #[test]

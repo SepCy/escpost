@@ -166,16 +166,18 @@ every logical module with a digitized physical print.
 | Command | Behavior | Implementation | Automated coverage | Hardware |
 |---|---|---:|---:|---:|
 | `GS V` Function A | Full or partial cut at the current position | Implemented | Implemented | Pending |
-| `GS V` Function B | Apply the profile's full/partial feed behavior on a no-autocutter profile | Partial | Implemented | NT-5890K feeds for mode 65 and ignores mode 66 |
+| `GS V` Function B | Feed to the cutter plus `n` units and cut, or apply the profile's no-autocutter feed behavior | Implemented | Implemented | No-cutter behavior validated on NT-5890K; autocutter pending |
 | `ESC p` | Generate a cash-drawer pulse without printing | Implemented | Implemented | Pending |
 
 Epson's no-autocutter baseline performs the documented
 `n × vertical motion unit` feed and creates no sheet boundary for both
 Function B modes. Profiles can mark either form ignored when compatible
 firmware deviates. The connected NT-5890K feeds for full-cut mode 65 and
-consumes partial-cut mode 66 without feeding. Cutter-equipped Function B
-remains partial because its preview also needs the model-specific distance
-between the print position and blade; profiles do not yet carry that geometry.
+consumes partial-cut mode 66 without feeding. A cutter-equipped profile stores
+the model-specific print-head-to-blade distance in dots. Function B adds that
+distance to its explicit feed and then creates a full- or partial-cut sheet
+boundary. Automated coverage fixes these semantics; physical autocutter
+calibration remains pending.
 
 ## Post-v1 protocol families
 

@@ -247,12 +247,17 @@ does not represent the physical result cleanly.
 ### Decision
 
 The render result is a sequence of sheets. A cut finalizes the active sheet and
-starts the next one when subsequent printable output appears.
+starts the next one when subsequent printable output appears. Cutter-equipped
+profiles store the physical print-head-to-blade distance in dots. `GS V`
+Function B advances by that distance plus its `n × vertical motion unit`
+operand before finalizing the sheet. On a printer without an autocutter,
+Function B performs only the explicit feed selected by that profile.
 
 ### Consequences
 
 - One job may produce multiple PNG files.
 - Feed-to-cutter behavior affects sheet height.
+- Cutter geometry is required whenever a profile advertises a cut capability.
 - Non-cut jobs finalize at the final content/feed position.
 
 ## DD-012 — Fail explicitly and never guess unsafe framing

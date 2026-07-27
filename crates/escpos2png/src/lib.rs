@@ -1635,6 +1635,7 @@ struct PrinterState {
     pending_gs_v_0_lf: bool,
     gs_v_function_b_full_behavior: FeedBehavior,
     gs_v_function_b_partial_behavior: FeedBehavior,
+    print_head_to_cutter_dots: Option<u32>,
     font_a: ProfileFont,
     font_b: ProfileFont,
     active_font: ProfileFont,
@@ -1718,6 +1719,10 @@ impl PrinterState {
             pending_gs_v_0_lf: false,
             gs_v_function_b_full_behavior: profile.commands.gs_v_function_b_full,
             gs_v_function_b_partial_behavior: profile.commands.gs_v_function_b_partial,
+            print_head_to_cutter_dots: profile
+                .cutter
+                .as_ref()
+                .map(|cutter| cutter.print_head_to_cutter_dots),
             active_font: font_a.clone(),
             font_a,
             font_b,
@@ -1988,8 +1993,12 @@ impl PrinterState {
     fn print_and_feed_motion_units(&mut self, motion_units: u8) -> Result<(), RenderError> {
         let feed_dots = (u64::from(motion_units) * u64::from(self.vertical_dpi)
             / u64::from(self.vertical_motion_units_per_inch)) as u32;
-        // ESC J is a one-off feed. Reuse the normal line commit so tall data
-        // cannot overlap, then restore the persistent ESC 2/ESC 3 spacing.
+        self.print_and_feed_dots(feed_dots)
+    }
+
+    fn print_and_feed_dots(&mut self, feed_dots: u32) -> Result<(), RenderError> {
+        // One-off feeds reuse the normal line commit so tall data cannot
+        // overlap, then restore the persistent ESC 2/ESC 3 spacing.
         let line_spacing = self.line_spacing;
         self.line_spacing = feed_dots;
         self.feed_lines(1)?;
@@ -2609,10 +2618,16 @@ impl PrinterState {
             return self.print_and_feed_motion_units(feed);
         }
 
-        // A cutter-equipped profile also needs the model-specific distance
-        // from the print position to the blade. Keep that path explicit until
-        // the profile can supply it.
-        Err(RenderError::UnsupportedCutMode { mode, offset })
+        let Some(print_head_to_cutter_dots) = self.print_head_to_cutter_dots else {
+            // Compiled profiles reject this combination. Keep rendering
+            // defensive because PrinterProfile is also a public Rust value.
+            return Err(RenderError::UnsupportedCutMode { mode, offset });
+        };
+        let explicit_feed_dots = (u64::from(feed) * u64::from(self.vertical_dpi)
+            / u64::from(self.vertical_motion_units_per_inch))
+            as u32;
+        self.print_and_feed_dots(print_head_to_cutter_dots.saturating_add(explicit_feed_dots))?;
+        self.cut(mode == 66, offset)
     }
 
     fn cut(&mut self, partial: bool, offset: usize) -> Result<(), RenderError> {

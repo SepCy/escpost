@@ -45,6 +45,10 @@ fn nt_5890k_compiles_to_rendering_geometry() {
         "the connected NT-5890K paints 8-dot ESC * rows adjacently"
     );
     assert_eq!(
+        profile.cutter, None,
+        "the connected NT-5890K has a manual tear bar, not an autocutter"
+    );
+    assert_eq!(
         (
             profile.commands.esc_backslash_negative,
             profile.commands.esc_dollar_after_printable_data,
@@ -346,6 +350,58 @@ fn profiles_reject_a_zero_vertical_motion_unit_denominator() {
         error,
         CompileProfileError::NonPositiveValue { field }
             if field == "motion.vertical_units_per_inch"
+    ));
+}
+
+#[test]
+fn profiles_require_cutter_geometry_when_a_cut_capability_is_enabled() {
+    let invalid_enrichment =
+        ENRICHMENT_TOML.replace("qr_code = true", "qr_code = true\npaper_full_cut = true");
+
+    let error = compile_profile(CAPABILITIES_JSON, &invalid_enrichment)
+        .expect_err("a cutter profile needs the physical head-to-blade distance");
+
+    assert!(matches!(error, CompileProfileError::MissingCutterGeometry));
+}
+
+#[test]
+fn profiles_compile_a_positive_head_to_cutter_distance() {
+    let cutter_enrichment = ENRICHMENT_TOML
+        .replace(
+            "[motion]",
+            "[cutter]\nprint_head_to_cutter_dots = 80\n\n[motion]",
+        )
+        .replace("qr_code = true", "qr_code = true\npaper_full_cut = true");
+
+    let profile = compile_profile(CAPABILITIES_JSON, &cutter_enrichment)
+        .expect("a cutter capability with physical geometry should compile");
+
+    assert_eq!(
+        profile
+            .cutter
+            .expect("the compiled profile should retain cutter geometry")
+            .print_head_to_cutter_dots,
+        80
+    );
+}
+
+#[test]
+fn profiles_reject_a_zero_head_to_cutter_distance() {
+    let invalid_enrichment = ENRICHMENT_TOML
+        .replace(
+            "[motion]",
+            "[cutter]\nprint_head_to_cutter_dots = 0\n\n[motion]",
+        )
+        .replace("qr_code = true", "qr_code = true\npaper_full_cut = true");
+
+    let error = compile_profile(CAPABILITIES_JSON, &invalid_enrichment)
+        .expect_err("zero dots cannot describe a physical head-to-blade distance");
+
+    assert!(matches!(
+        error,
+        CompileProfileError::NonPositiveValue {
+            field: "cutter.print_head_to_cutter_dots"
+        }
     ));
 }
 

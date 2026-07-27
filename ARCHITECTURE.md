@@ -93,6 +93,7 @@ from outside the job.
 Profiles provide behavior that cannot be derived from ESC/POS bytes:
 
 - printable width and horizontal/vertical DPI;
+- optional cutter geometry as the physical print-head-to-blade distance;
 - horizontal and vertical motion units;
 - `ESC *` 8-dot vertical pitch for model-specific column-image geometry;
 - model-specific positioning behavior for `ESC $` and `ESC \`;
@@ -118,6 +119,12 @@ not profiles.
 The profile compiler combines the upstream capabilities with a typed TOML
 enrichment and generates canonical JSON. The renderer loads only that generated
 profile. It does not read the upstream database or TOML at render time.
+
+A profile that advertises full- or partial-cut support must define
+`cutter.print_head_to_cutter_dots`. `GS V` Function B uses that fixed distance
+plus its command-supplied vertical-motion-unit feed before creating the sheet
+boundary. A profile without an autocutter omits the cutter section; Function B
+then applies only its profile-selected explicit feed behavior.
 
 Each canonical profile carries:
 

@@ -9,6 +9,7 @@
         "dpi_x": 203,
         "dpi_y": 203
       },
+      "cutter": null,
       "motion": {
         "horizontal_units_per_inch": 203,
         "vertical_units_per_inch": 203
@@ -158,7 +159,7 @@
         }
       ],
       "upstream_profile_sha256": "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b",
-      "canonical_profile_sha256": "ab9486418dfef7c8eaa703fecfa6a8cbfcd13cb7e0e695b0a3a9de0ef2e3c927"
+      "canonical_profile_sha256": "6a9651ea355c9323fa2eb4709b04f2e0c40c2879e2bdda02205eb54774f6445a"
     }
   }
 }

@@ -36,6 +36,8 @@ pub struct PrinterProfile {
     pub schema_version: u32,
     pub id: String,
     pub geometry: Geometry,
+    /// Absent on printers that use a manual tear bar.
+    pub cutter: Option<CutterGeometry>,
     pub motion: MotionUnits,
     pub column_bit_image: ColumnBitImage,
     pub commands: CommandBehavior,
@@ -72,6 +74,13 @@ pub struct Geometry {
     pub printable_width_dots: u32,
     pub dpi_x: u32,
     pub dpi_y: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CutterGeometry {
+    /// Physical paper-feed distance from the print head to the cutter blade.
+    pub print_head_to_cutter_dots: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -225,6 +234,9 @@ pub enum CompileProfileError {
     #[error("profile field {field} must be greater than zero")]
     NonPositiveValue { field: &'static str },
 
+    #[error("a profile with a paper-cut capability must define cutter geometry")]
+    MissingCutterGeometry,
+
     #[error("{font} baseline {baseline_dots} must be inside its {cell_height_dots}-dot-high cell")]
     InvalidFontBaseline {
         font: &'static str,
@@ -311,6 +323,7 @@ struct Enrichment {
     #[serde(rename = "sources")]
     _sources: Vec<String>,
     geometry: Geometry,
+    cutter: Option<CutterGeometry>,
     motion: MotionUnits,
     column_bit_image: ColumnBitImage,
     commands: CommandBehavior,
@@ -365,6 +378,7 @@ struct CanonicalProfileContent<'a> {
     schema_version: u32,
     id: &'a str,
     geometry: &'a Geometry,
+    cutter: &'a Option<CutterGeometry>,
     motion: &'a MotionUnits,
     column_bit_image: &'a ColumnBitImage,
     commands: &'a CommandBehavior,
@@ -400,11 +414,13 @@ pub fn compile_profile(
     let code_pages = import_code_pages(&imported)?;
     validate_default_code_page(enrichment.defaults.code_page, &code_pages)?;
     let features = apply_feature_overrides(imported.features, &enrichment.features);
+    validate_cutter_capabilities(enrichment.cutter.as_ref(), &features)?;
 
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: enrichment.profile,
         geometry: enrichment.geometry,
+        cutter: enrichment.cutter,
         motion: enrichment.motion,
         column_bit_image: enrichment.column_bit_image,
         commands: enrichment.commands,
@@ -588,6 +604,12 @@ fn validate_profile_values(enrichment: &Enrichment) -> Result<(), CompileProfile
     if let Some(barcodes) = &enrichment.features.barcodes {
         validate_barcode_capabilities(barcodes)?;
     }
+    if let Some(cutter) = &enrichment.cutter {
+        validate_positive(
+            "cutter.print_head_to_cutter_dots",
+            cutter.print_head_to_cutter_dots,
+        )?;
+    }
     Ok(())
 }
 
@@ -600,7 +622,24 @@ fn validate_runtime_profile(profile: &PrinterProfile) -> Result<(), CompileProfi
         &profile.fonts,
         Some(&profile.code_pages),
     )?;
-    validate_barcode_capabilities(&profile.features.barcodes)
+    validate_barcode_capabilities(&profile.features.barcodes)?;
+    if let Some(cutter) = &profile.cutter {
+        validate_positive(
+            "cutter.print_head_to_cutter_dots",
+            cutter.print_head_to_cutter_dots,
+        )?;
+    }
+    validate_cutter_capabilities(profile.cutter.as_ref(), &profile.features)
+}
+
+fn validate_cutter_capabilities(
+    cutter: Option<&CutterGeometry>,
+    features: &Features,
+) -> Result<(), CompileProfileError> {
+    if (features.paper_full_cut || features.paper_part_cut) && cutter.is_none() {
+        return Err(CompileProfileError::MissingCutterGeometry);
+    }
+    Ok(())
 }
 
 fn validate_barcode_capabilities(
@@ -701,6 +740,7 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
         schema_version: profile.schema_version,
         id: &profile.id,
         geometry: &profile.geometry,
+        cutter: &profile.cutter,
         motion: &profile.motion,
         column_bit_image: &profile.column_bit_image,
         commands: &profile.commands,

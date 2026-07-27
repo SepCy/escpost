@@ -16,6 +16,7 @@ from .printers import (
     load_usb_printer,
     save_usb_printer,
 )
+from .qualification import Qualification
 
 
 LOCAL_CONFIG = Path("local/printers.toml")
@@ -171,17 +172,17 @@ def _render_case(case_directory: Path, output_dir: Path) -> None:
     """Render a conformance case to PNG."""
     case = Case.load(case_directory)
     _announce_case(case)
-    _write_rendered_sheets(case, output_dir)
+    _write_rendered_sheets(case.input_bytes, case.profile, output_dir)
 
 
 @_case_commands.command("print")
 @click.argument("case_directory", type=CASE_PATH)
 @_printer_options
 def _print_case(case_directory: Path, printer: str, config: Path) -> None:
-    """Send a conformance case's verified bytes to a printer."""
+    """Send a conformance case's bytes to a printer."""
     case = Case.load(case_directory)
     _announce_case(case)
-    _send_to_printer(case, config, printer)
+    _send_to_printer(case.input_bytes, case.profile, config, printer)
 
 
 @_case_commands.command("calibrate")
@@ -198,11 +199,76 @@ def _calibrate_case(
     printer: str,
     config: Path,
 ) -> None:
-    """Render and print the same verified conformance-case bytes."""
+    """Render and print the same conformance-case bytes."""
     case = Case.load(case_directory)
     _announce_case(case)
-    _write_rendered_sheets(case, output_dir)
-    _send_to_printer(case, config, printer)
+    _write_rendered_sheets(case.input_bytes, case.profile, output_dir)
+    _send_to_printer(case.input_bytes, case.profile, config, printer)
+
+
+@_cli.group("qualification")
+def _qualification_commands() -> None:
+    """Render and physically test the shared printer qualification receipt."""
+
+
+@_qualification_commands.command("render")
+@click.argument("profile")
+@click.option(
+    "--output-dir",
+    type=DIRECTORY_PATH,
+    required=True,
+)
+def _render_qualification(profile: str, output_dir: Path) -> None:
+    """Render the shared receipt with one printer profile."""
+    qualification = Qualification.load(Path.cwd(), profile)
+    _announce_qualification(qualification)
+    _write_rendered_sheets(
+        qualification.input_bytes,
+        qualification.profile,
+        output_dir,
+    )
+
+
+@_qualification_commands.command("print")
+@_printer_options
+def _print_qualification(printer: str, config: Path) -> None:
+    """Send the shared receipt using the configured printer profile."""
+    qualification = _load_printer_qualification(config, printer)
+    _announce_qualification(qualification)
+    _send_to_printer(
+        qualification.input_bytes,
+        qualification.profile,
+        config,
+        printer,
+    )
+
+
+@_qualification_commands.command("calibrate")
+@click.option(
+    "--output-dir",
+    type=DIRECTORY_PATH,
+    required=True,
+)
+@_printer_options
+def _calibrate_qualification(
+    output_dir: Path,
+    printer: str,
+    config: Path,
+) -> None:
+    """Render and print the shared receipt for one configured printer."""
+    qualification = _load_printer_qualification(config, printer)
+    _announce_qualification(qualification)
+    _write_rendered_sheets(
+        qualification.input_bytes,
+        qualification.profile,
+        output_dir,
+    )
+    _send_to_printer(
+        qualification.input_bytes,
+        qualification.profile,
+        config,
+        printer,
+    )
 
 
 def _matches_discovery_filters(
@@ -248,13 +314,27 @@ def _announce_discovered_printer(
 
 def _announce_case(case: Case) -> None:
     click.echo(f"case: {case.directory}")
-    click.echo(f"input sha256: {case.input_sha256}")
     click.echo(f"profile: {case.profile}")
     click.echo(f"bytes: {len(case.input_bytes)}")
 
 
-def _write_rendered_sheets(case: Case, output_directory: Path) -> None:
-    rendered = render_result(case.input_bytes, profile=case.profile)
+def _announce_qualification(qualification: Qualification) -> None:
+    click.echo(f"qualification input: {qualification.input_path}")
+    click.echo(f"profile: {qualification.profile}")
+    click.echo(f"bytes: {len(qualification.input_bytes)}")
+
+
+def _load_printer_qualification(config: Path, printer: str) -> Qualification:
+    printer_config = load_usb_printer(config, printer)
+    return Qualification.load(Path.cwd(), printer_config.profile)
+
+
+def _write_rendered_sheets(
+    input_bytes: bytes,
+    profile: str,
+    output_directory: Path,
+) -> None:
+    rendered = render_result(input_bytes, profile=profile)
     output_directory.mkdir(parents=True, exist_ok=True)
 
     for sheet_number, png in enumerate(rendered["sheets"], start=1):
@@ -267,11 +347,16 @@ def _write_rendered_sheets(case: Case, output_directory: Path) -> None:
     )
 
 
-def _send_to_printer(case: Case, config: Path, printer: str) -> None:
+def _send_to_printer(
+    input_bytes: bytes,
+    profile: str,
+    config: Path,
+    printer: str,
+) -> None:
     printer_config = load_usb_printer(config, printer)
-    if printer_config.profile != case.profile:
+    if printer_config.profile != profile:
         raise ValueError(
-            f"case profile {case.profile!r} does not match printer profile "
+            f"input profile {profile!r} does not match printer profile "
             f"{printer_config.profile!r}"
         )
 
@@ -285,7 +370,7 @@ def _send_to_printer(case: Case, config: Path, printer: str) -> None:
 
     physical_printer = _open_usb_printer(printer_config)
     try:
-        physical_printer._raw(case.input_bytes)
+        physical_printer._raw(input_bytes)
     finally:
         physical_printer.close()
 

@@ -28,7 +28,6 @@ Set horizontal and vertical motion units`.
 
 ```text
 date: pending
-input SHA-256: bde163feaf4685fd4d01cceccbf26c1beb57e3cb8683e1bb5c1f95c0fd0e07e8
 printer profile: NT-5890K
 printer USB identity: 0416:5011
 serial: B120300001

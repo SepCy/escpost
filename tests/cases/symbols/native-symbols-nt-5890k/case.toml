@@ -1,4 +1,3 @@
 schema_version = 1
 name = "NT-5890K native one-dimensional and QR symbols"
 profile = "NT-5890K"
-input_sha256 = "665cd5dc465f6fa0a3f0994465943d4d97c3446177828b42b8dce24a16b1e3d2"

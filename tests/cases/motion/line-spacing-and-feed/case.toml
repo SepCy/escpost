@@ -1,4 +1,3 @@
 schema_version = 1
 name = "Line spacing and line feed"
 profile = "NT-5890K"
-input_sha256 = "c195d8495a355324ed2ee00b5dd287d0ec241357977fb519835111785efcb1e3"

@@ -60,20 +60,22 @@ two LFs produced exactly one line feed. The profile therefore consumes one LF
 only when it immediately follows `GS v 0`. Other profiles retain the Epson
 baseline in which that LF feeds normally.
 
-## Physical run
+## Physical evidence
 
 ```text
 date: 2026-07-27
-input SHA-256: 72366422ef0185da2cf13b4088649773f4569e9f7cbc602ca868f31c0dc59537
-renderer commit: 6083243
 printer profile: NT-5890K
-canonical profile SHA-256: ab9486418dfef7c8eaa703fecfa6a8cbfcd13cb7e0e695b0a3a9de0ef2e3c927
 printer USB identity: 0416:5011
 serial: B120300001
 connection: USB interface 0, OUT endpoint 0x01
-transport result: all 1208 hash-verified bytes sent without a USB error
+transport result: all 1208 fixture bytes sent without a USB error
 visual comparison: raster/LF behavior confirmed by the isolated probe; final full-receipt review pending
 ```
+
+`verification.toml` records the renderer commit and date associated with the
+reviewed expected PNG. Git versions the shared input, profile, expected PNG,
+and this evidence together, so the qualification record does not duplicate
+fixture or profile hashes.
 
 A successful USB write proves only that the exact fixture reached the device;
 it does not prove what appeared on paper. Record the geometry and symbol

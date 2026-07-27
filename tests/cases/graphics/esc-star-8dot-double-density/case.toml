@@ -1,4 +1,3 @@
 schema_version = 1
 name = "ESC * 8-dot double-density X"
 profile = "NT-5890K"
-input_sha256 = "a3fc12154ab96445d1c896476432fd1e2605467c049bb060d47b1360e8549d6c"

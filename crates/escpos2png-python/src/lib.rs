@@ -9,7 +9,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 use std::sync::OnceLock;
 
-const PROFILE_PACK_JSON: &[u8] = include_bytes!("../../../profiles/generated/profiles.json");
+const PROFILE_PACK_JSON: &[u8] = include_bytes!("../../../profiles/.generated/profiles.json");
 static PROFILE_PACK: OnceLock<ProfilePack> = OnceLock::new();
 
 #[derive(Debug)]

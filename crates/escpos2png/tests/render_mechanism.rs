@@ -2,8 +2,8 @@ use escpos2png::render;
 use escpos2png_profiles::compile_profile;
 
 const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
+    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
 const ESC: u8 = 0x1b;
 const LF: u8 = 0x0a;
 

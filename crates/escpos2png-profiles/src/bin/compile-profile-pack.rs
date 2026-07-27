@@ -9,14 +9,14 @@ use escpos2png_profiles::{compile_profile, to_canonical_profile_pack_json};
 
 struct Paths {
     capabilities: PathBuf,
-    enrichments: PathBuf,
+    profiles: PathBuf,
     output: PathBuf,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let paths = parse_paths()?;
     let capabilities = fs::read(&paths.capabilities)?;
-    let enrichment_paths = find_enrichments(&paths.enrichments)?;
+    let enrichment_paths = find_profile_files(&paths.profiles)?;
     let mut profiles = Vec::with_capacity(enrichment_paths.len());
 
     for enrichment_path in enrichment_paths {
@@ -37,7 +37,7 @@ fn parse_paths() -> Result<Paths, Box<dyn Error>> {
     let mut arguments = env::args_os().skip(1).map(PathBuf::from);
     let paths = Paths {
         capabilities: required_argument(&mut arguments, "capabilities JSON")?,
-        enrichments: required_argument(&mut arguments, "enrichments directory")?,
+        profiles: required_argument(&mut arguments, "profiles directory")?,
         output: required_argument(&mut arguments, "output profile pack")?,
     };
     if arguments.next().is_some() {
@@ -56,17 +56,60 @@ fn required_argument(
 }
 
 fn usage() -> &'static str {
-    "usage: compile-profile-pack <capabilities.json> <enrichments-directory> <output.json>"
+    "usage: compile-profile-pack <capabilities.json> <profiles-directory> <output.json>"
 }
 
-fn find_enrichments(directory: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+fn find_profile_files(directory: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
     let mut paths = fs::read_dir(directory)?
         .map(|entry| entry.map(|entry| entry.path()))
         .collect::<Result<Vec<_>, _>>()?;
+    // Infrastructure directories are hidden for readability, but profile
+    // discovery still requires the explicit profile.toml marker. This avoids
+    // treating naming conventions alone as executable configuration.
     paths.retain(|path| {
-        path.extension()
-            .is_some_and(|extension| extension == "toml")
+        path.is_dir()
+            && !path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with('.'))
+            && path.join("profile.toml").is_file()
     });
+    for path in &mut paths {
+        path.push("profile.toml");
+    }
     paths.sort();
     Ok(paths)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_profile_files;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn discovers_only_visible_directories_with_a_profile_file() {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("the system clock should follow the Unix epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "escpos2png-profile-discovery-{}-{unique}",
+            std::process::id()
+        ));
+        let visible = root.join("VISIBLE");
+        let hidden = root.join(".hidden");
+        let incomplete = root.join("INCOMPLETE");
+        fs::create_dir_all(&visible).expect("the visible profile directory should be created");
+        fs::create_dir_all(&hidden).expect("the hidden infrastructure directory should be created");
+        fs::create_dir_all(&incomplete).expect("the incomplete directory should be created");
+        fs::write(visible.join("profile.toml"), "").expect("the profile marker should be written");
+        fs::write(hidden.join("profile.toml"), "")
+            .expect("the hidden profile marker should be written");
+
+        let profiles = find_profile_files(&root).expect("profile discovery should succeed");
+
+        fs::remove_dir_all(&root).expect("the temporary profile tree should be removable");
+        assert_eq!(profiles, [visible.join("profile.toml")]);
+    }
 }

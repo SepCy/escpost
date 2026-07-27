@@ -22,8 +22,9 @@ The source HTML was:
 Done
 ```
 
-Receiptful generated the 225-byte stream in its API container. Its SHA-256 is
-recorded in `case.toml`. The fixture covers the real emitter's:
+Receiptful generated the 225-byte stream in its API container. Git versions
+the fixture together with its manifest and expected PNG. It covers the real
+emitter's:
 
 - explicit initial text-state reset;
 - `ESC t` code-table selection;

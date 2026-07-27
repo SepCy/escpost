@@ -28,8 +28,8 @@ The bundled representative font currently covers Latin, Greek, and Cyrillic.
 A decoded character outside that asset returns an error rather than a
 misleading replacement glyph.
 
-The Python binding and conformance-case CLI can render, raw-print, or calibrate
-the same verified byte stream.
+The Python binding and developer CLI can render, raw-print, or calibrate the
+same version-controlled byte stream.
 
 The Rust result includes bounded rendering, device events, profile
 approximations, and reproducible renderer/profile identity. Canonical profile
@@ -56,8 +56,8 @@ the pinned upstream source:
 ```bash
 docker compose run --rm test cargo run --quiet \
   -p escpos2png-profiles --bin compile-profile-pack -- \
-  profiles/upstream/escpos-printer-db/dist/capabilities.json \
-  profiles/enrichments profiles/generated/profiles.json
+  profiles/.escpos-printer-db/dist/capabilities.json \
+  profiles profiles/.generated/profiles.json
 ```
 
 `./escpos2png` forwards every argument to the Python CLI in the Compose
@@ -101,9 +101,9 @@ docker compose up -d preview
 
 Open <http://localhost:8765/tools/preview/>.
 
-For physical calibration, first use discovery to populate
+For focused physical calibration, first use discovery to populate
 `local/printers.toml`. The `case calibrate` command renders and sends one
-loaded, hash-verified byte buffer.
+loaded byte buffer.
 
 ```bash
 ./escpos2png case calibrate \
@@ -111,6 +111,20 @@ loaded, hash-verified byte buffer.
   --printer netum-usb \
   --output-dir local/calibration
 ```
+
+To qualify a printer profile comprehensively, render and print the single
+shared receipt. The configured printer supplies the profile, so developers do
+not have to repeat it:
+
+```bash
+./escpos2png qualification calibrate \
+  --printer netum-usb \
+  --output-dir local/qualification
+```
+
+The shared stream lives at `qualification/input.hex`. Its profile-specific
+expected PNG, verification record, notes, and any remaining hardware TODOs
+live together under `profiles/<profile-id>/`.
 
 ## Fidelity contract
 

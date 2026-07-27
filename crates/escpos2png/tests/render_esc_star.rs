@@ -3,8 +3,8 @@ use escpos2png_profiles::compile_profile;
 use std::io::Cursor;
 
 const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
+    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
 const INPUT_HEX: &str =
     include_str!("../../../tests/cases/graphics/esc-star-8dot-double-density/input.hex");
 

@@ -1,14 +1,13 @@
 use escpos2png::render;
 use escpos2png_profiles::compile_profile;
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{BufReader, Cursor};
 use std::path::{Path, PathBuf};
 
 const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
-const NT_5890K_ENRICHMENT: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
+    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+const NT_5890K_ENRICHMENT: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -16,7 +15,13 @@ struct CaseManifest {
     schema_version: u32,
     name: String,
     profile: String,
-    input_sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QualificationVerification {
+    renderer_commit: String,
+    last_verified: String,
 }
 
 #[derive(Debug)]
@@ -62,6 +67,41 @@ fn conformance_cases_match_their_golden_pngs() {
 }
 
 #[test]
+fn profile_qualifications_match_the_shared_stream() {
+    let repository = repository_root();
+    let profiles_root = repository.join("profiles");
+    let output_root = repository.join("local/test-output/qualification");
+    let input = load_input_file(
+        &repository.join("qualification/input.hex"),
+        "shared printer qualification",
+    )
+    .expect("the shared qualification stream should load");
+    let profile_directories = find_profile_directories(&profiles_root)
+        .expect("printer profile directories should be discoverable");
+
+    assert!(
+        !profile_directories.is_empty(),
+        "no printer profiles found under {}",
+        display_path(&profiles_root, &repository)
+    );
+
+    let mut failures = Vec::new();
+    for profile_directory in profile_directories {
+        if let Err(error) =
+            compare_profile_qualification(&profile_directory, &input, &output_root, &repository)
+        {
+            failures.push(error);
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "profile qualification PNG comparison failed:\n\n{}",
+        failures.join("\n\n")
+    );
+}
+
+#[test]
 fn visual_diff_marks_missing_dots_blue_and_unexpected_dots_red() {
     let expected = DecodedPng {
         width: 2,
@@ -94,23 +134,64 @@ fn compare_case(
     repository: &Path,
 ) -> Result<(), String> {
     let manifest = load_manifest(case_directory)?;
-    let input = load_input(case_directory, &manifest)?;
-    let expected_sheets = find_expected_sheets(case_directory)?;
-    let profile = load_profile(&manifest.profile)?;
-    let rendered = render(&input, &profile)
-        .map_err(|error| format!("{}: render failed: {error}", manifest.name))?;
+    let input = load_input_file(&case_directory.join("input.hex"), &manifest.name)?;
     let relative_case = case_directory
         .strip_prefix(cases_root)
         .expect("discovered cases stay under the cases root");
     let output_directory = output_root.join(relative_case);
-    fs::create_dir_all(&output_directory).map_err(|error| {
+
+    compare_receipt(
+        &manifest.name,
+        &manifest.profile,
+        &input,
+        case_directory,
+        &output_directory,
+        repository,
+    )
+}
+
+fn compare_profile_qualification(
+    profile_directory: &Path,
+    input: &[u8],
+    output_root: &Path,
+    repository: &Path,
+) -> Result<(), String> {
+    let profile_id = profile_directory
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("invalid profile directory {profile_directory:?}"))?;
+    load_qualification_verification(profile_directory)?;
+    let output_directory = output_root.join(profile_id);
+
+    compare_receipt(
+        &format!("{profile_id} printer qualification"),
+        profile_id,
+        input,
+        profile_directory,
+        &output_directory,
+        repository,
+    )
+}
+
+fn compare_receipt(
+    name: &str,
+    profile_id: &str,
+    input: &[u8],
+    expected_directory: &Path,
+    output_directory: &Path,
+    repository: &Path,
+) -> Result<(), String> {
+    let expected_sheets = find_expected_sheets(expected_directory)?;
+    let profile = load_profile(profile_id)?;
+    let rendered =
+        render(input, &profile).map_err(|error| format!("{name}: render failed: {error}"))?;
+    fs::create_dir_all(output_directory).map_err(|error| {
         format!(
-            "{}: could not create {}: {error}",
-            manifest.name,
-            display_path(&output_directory, repository)
+            "{name}: could not create {}: {error}",
+            display_path(output_directory, repository)
         )
     })?;
-    clear_generated_artifacts(&output_directory)?;
+    clear_generated_artifacts(output_directory)?;
 
     let mut comparison_rows = Vec::new();
     let mut failures = Vec::new();
@@ -119,8 +200,7 @@ fn compare_case(
         let actual_path = output_directory.join(format!("actual-{sheet_number:03}.png"));
         fs::write(&actual_path, &sheet.png).map_err(|error| {
             format!(
-                "{}: could not write {}: {error}",
-                manifest.name,
+                "{name}: could not write {}: {error}",
                 display_path(&actual_path, repository)
             )
         })?;
@@ -131,14 +211,14 @@ fn compare_case(
             expected_path.map(PathBuf::as_path),
             &actual_path,
             None,
-            &output_directory,
+            output_directory,
             repository,
         ));
 
         let Some(expected_path) = expected_path else {
             failures.push(format!(
                 "{} sheet {sheet_number:03}: unexpected generated sheet\nactual: {}",
-                manifest.name,
+                name,
                 display_path(&actual_path, repository)
             ));
             continue;
@@ -148,7 +228,7 @@ fn compare_case(
             Err(error) => {
                 failures.push(format!(
                     "{} sheet {sheet_number:03}: {error}\nexpected: {}\nactual:   {}",
-                    manifest.name,
+                    name,
                     display_path(expected_path, repository),
                     display_path(&actual_path, repository)
                 ));
@@ -158,7 +238,7 @@ fn compare_case(
         let actual_png = decode_png_bytes(&sheet.png).map_err(|error| {
             format!(
                 "{} sheet {sheet_number:03}: generated PNG is invalid: {error}",
-                manifest.name
+                name
             )
         })?;
 
@@ -166,8 +246,7 @@ fn compare_case(
             let diff_path = output_directory.join(format!("diff-{sheet_number:03}.png"));
             write_diff_png(&expected_png, &actual_png, &diff_path).map_err(|error| {
                 format!(
-                    "{}: could not write {}: {error}",
-                    manifest.name,
+                    "{name}: could not write {}: {error}",
                     display_path(&diff_path, repository)
                 )
             })?;
@@ -176,11 +255,11 @@ fn compare_case(
                 Some(expected_path),
                 &actual_path,
                 Some(&diff_path),
-                &output_directory,
+                output_directory,
                 repository,
             );
             failures.push(format_difference(
-                &manifest.name,
+                name,
                 sheet_number,
                 &difference,
                 expected_path,
@@ -200,7 +279,7 @@ fn compare_case(
             let sheet_number = index + 1;
             failures.push(format!(
                 "{} sheet {sheet_number:03}: expected sheet was not generated\nexpected: {}",
-                manifest.name,
+                name,
                 display_path(expected_path, repository)
             ));
         }
@@ -208,15 +287,14 @@ fn compare_case(
 
     let comparison_path = output_directory.join("comparison.html");
     write_comparison_html(
-        &manifest.name,
+        name,
         failures.is_empty(),
         &comparison_rows,
         &comparison_path,
     )
     .map_err(|error| {
         format!(
-            "{}: could not write {}: {error}",
-            manifest.name,
+            "{name}: could not write {}: {error}",
             display_path(&comparison_path, repository)
         )
     })?;
@@ -247,37 +325,68 @@ fn load_manifest(case_directory: &Path) -> Result<CaseManifest, String> {
     Ok(manifest)
 }
 
-fn load_input(case_directory: &Path, manifest: &CaseManifest) -> Result<Vec<u8>, String> {
-    let path = case_directory.join("input.hex");
-    let source = fs::read_to_string(&path)
-        .map_err(|error| format!("{}: could not read {path:?}: {error}", manifest.name))?;
+fn load_qualification_verification(
+    profile_directory: &Path,
+) -> Result<QualificationVerification, String> {
+    let path = profile_directory.join("verification.toml");
+    let source =
+        fs::read_to_string(&path).map_err(|error| format!("could not read {path:?}: {error}"))?;
+    let verification: QualificationVerification =
+        toml::from_str(&source).map_err(|error| format!("invalid {path:?}: {error}"))?;
+
+    if verification.renderer_commit.len() != 40
+        || !verification
+            .renderer_commit
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(format!(
+            "{}: renderer_commit must be a full 40-character Git commit",
+            path.display()
+        ));
+    }
+    if !looks_like_iso_date(&verification.last_verified) {
+        return Err(format!(
+            "{}: last_verified must use YYYY-MM-DD",
+            path.display()
+        ));
+    }
+    Ok(verification)
+}
+
+fn load_input_file(path: &Path, receipt_name: &str) -> Result<Vec<u8>, String> {
+    let source = fs::read_to_string(path)
+        .map_err(|error| format!("{receipt_name}: could not read {path:?}: {error}"))?;
     let mut input = Vec::new();
     for (index, token) in source.split_whitespace().enumerate() {
         if token.len() != 2 {
             return Err(format!(
                 "{}: invalid hex byte {token:?} at token {}",
-                manifest.name,
+                receipt_name,
                 index + 1
             ));
         }
         let byte = u8::from_str_radix(token, 16).map_err(|_| {
             format!(
                 "{}: invalid hex byte {token:?} at token {}",
-                manifest.name,
+                receipt_name,
                 index + 1
             )
         })?;
         input.push(byte);
     }
 
-    let actual_hash = format!("{:x}", Sha256::digest(&input));
-    if actual_hash != manifest.input_sha256 {
-        return Err(format!(
-            "{}: input SHA-256 mismatch: expected {}, got {actual_hash}",
-            manifest.name, manifest.input_sha256
-        ));
-    }
     Ok(input)
+}
+
+fn looks_like_iso_date(value: &str) -> bool {
+    value.len() == 10
+        && value.as_bytes()[4] == b'-'
+        && value.as_bytes()[7] == b'-'
+        && value
+            .bytes()
+            .enumerate()
+            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
 }
 
 fn find_expected_sheets(case_directory: &Path) -> Result<Vec<PathBuf>, String> {
@@ -527,6 +636,25 @@ fn find_case_directories(root: &Path) -> Vec<PathBuf> {
     let mut cases = Vec::new();
     visit_case_directories(root, &mut cases);
     cases
+}
+
+fn find_profile_directories(root: &Path) -> Result<Vec<PathBuf>, String> {
+    let entries =
+        fs::read_dir(root).map_err(|error| format!("could not inspect {root:?}: {error}"))?;
+    let mut profiles = entries
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("could not inspect {root:?}: {error}"))?;
+    profiles.retain(|path| {
+        path.is_dir()
+            && !path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with('.'))
+            && path.join("profile.toml").is_file()
+    });
+    profiles.sort();
+    Ok(profiles)
 }
 
 fn clear_generated_artifacts(directory: &Path) -> Result<(), String> {

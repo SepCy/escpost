@@ -11,13 +11,15 @@ from escpos2png.cases import Case, CaseError
 from escpos2png.cli import main
 
 
+REPOSITORY = Path(__file__).parents[2]
 CASE_DIRECTORY = (
-    Path(__file__).parents[2]
+    REPOSITORY
     / "tests"
     / "cases"
     / "graphics"
     / "esc-star-8dot-double-density"
 )
+QUALIFICATION_INPUT = REPOSITORY / "qualification" / "input.hex"
 
 
 class RenderBindingTest(unittest.TestCase):
@@ -49,7 +51,7 @@ class RenderBindingTest(unittest.TestCase):
 
 
 class CaseRenderCliTest(unittest.TestCase):
-    def test_case_render_verifies_input_and_writes_png(self):
+    def test_case_render_loads_input_and_writes_png(self):
         stdout = StringIO()
         with TemporaryDirectory() as output_directory:
             with redirect_stdout(stdout):
@@ -66,31 +68,46 @@ class CaseRenderCliTest(unittest.TestCase):
             output = Path(output_directory) / "actual-001.png"
             self.assertEqual(exit_code, 0)
             self.assertEqual(_read_png_header(output.read_bytes()), (384, 30, 1, 0))
-            self.assertIn(
-                "a3fc12154ab96445d1c896476432fd1e2605467c049bb060d47b1360e8549d6c",
-                stdout.getvalue(),
-            )
+            self.assertNotIn("input sha256", stdout.getvalue())
 
 
 class CaseLoaderTest(unittest.TestCase):
-    def test_case_loader_rejects_input_that_no_longer_matches_its_hash(self):
+    def test_case_loader_accepts_a_versioned_fixture_without_a_duplicate_hash(self):
         with TemporaryDirectory() as case_directory:
             case_directory = Path(case_directory)
             (case_directory / "input.hex").write_text("1b 40")
             (case_directory / "case.toml").write_text(
                 """
 schema_version = 1
+name = "Minimal case"
 profile = "NT-5890K"
-input_sha256 = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 """.strip()
             )
 
-            with self.assertRaisesRegex(CaseError, "input SHA-256 mismatch"):
+            case = Case.load(case_directory)
+
+        self.assertEqual(case.profile, "NT-5890K")
+        self.assertEqual(case.input_bytes, b"\x1b@")
+
+    def test_case_loader_rejects_the_retired_input_hash_field(self):
+        with TemporaryDirectory() as case_directory:
+            case_directory = Path(case_directory)
+            (case_directory / "input.hex").write_text("1b 40")
+            (case_directory / "case.toml").write_text(
+                """
+schema_version = 1
+name = "Old case"
+profile = "NT-5890K"
+input_sha256 = "0fcb71d8b3b3b965f4d75d20e8d4bca56c4d13a44de0a9ac2899181d8d9b7abf"
+""".strip()
+            )
+
+            with self.assertRaisesRegex(CaseError, "unknown case field 'input_sha256'"):
                 Case.load(case_directory)
 
 
 class CasePrintCliTest(unittest.TestCase):
-    def test_case_print_sends_the_verified_input_bytes_unchanged(self):
+    def test_case_print_sends_the_input_bytes_unchanged(self):
         printer = FakePrinter()
         stdout = StringIO()
         with TemporaryDirectory() as local_directory:
@@ -179,6 +196,72 @@ in_endpoint = "0x81"
         self.assertEqual(exit_code, 0)
         self.assertEqual(_read_png_header(rendered), (384, 30, 1, 0))
         self.assertEqual(printer.writes, [expected])
+
+
+class QualificationCliTest(unittest.TestCase):
+    def test_qualification_render_uses_the_shared_stream_and_selected_profile(self):
+        with TemporaryDirectory() as output_directory:
+            with redirect_stdout(StringIO()):
+                exit_code = main(
+                    [
+                        "qualification",
+                        "render",
+                        "NT-5890K",
+                        "--output-dir",
+                        output_directory,
+                    ]
+                )
+
+            output = Path(output_directory) / "actual-001.png"
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                _read_png_header(output.read_bytes()),
+                (384, 1632, 1, 0),
+            )
+
+    def test_qualification_calibrate_infers_the_profile_from_the_printer(self):
+        printer = FakePrinter()
+        with TemporaryDirectory() as local_directory:
+            local_directory = Path(local_directory)
+            config = local_directory / "printers.toml"
+            config.write_text(
+                """
+[netum-usb]
+transport = "usb"
+profile = "NT-5890K"
+vendor_id = "0x1234"
+product_id = "0x5678"
+interface_number = 0
+out_endpoint = "0x01"
+in_endpoint = "0x81"
+""".strip()
+            )
+            output_directory = local_directory / "rendered"
+
+            with (
+                patch(
+                    "escpos2png.cli._open_usb_printer",
+                    return_value=printer,
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                exit_code = main(
+                    [
+                        "qualification",
+                        "calibrate",
+                        "--printer",
+                        "netum-usb",
+                        "--config",
+                        str(config),
+                        "--output-dir",
+                        str(output_directory),
+                    ]
+                )
+
+        expected = bytes.fromhex(QUALIFICATION_INPUT.read_text())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(printer.writes, [expected])
+        self.assertTrue(printer.closed)
 
 
 class FakePrinter:

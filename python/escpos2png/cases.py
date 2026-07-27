@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,7 +12,6 @@ class Case:
     directory: Path
     profile: str
     input_bytes: bytes
-    input_sha256: str
 
     @classmethod
     def load(cls, directory: str | Path) -> Case:
@@ -22,19 +20,10 @@ class Case:
         _require_schema_version(manifest)
         _reject_unknown_fields(manifest)
 
-        input_bytes = _decode_hex(directory / "input.hex")
-        expected_hash = _require_string(manifest, "input_sha256")
-        actual_hash = hashlib.sha256(input_bytes).hexdigest()
-        if actual_hash != expected_hash:
-            raise CaseError(
-                f"input SHA-256 mismatch: expected {expected_hash}, got {actual_hash}"
-            )
-
         return cls(
             directory=directory,
             profile=_require_string(manifest, "profile"),
-            input_bytes=input_bytes,
-            input_sha256=actual_hash,
+            input_bytes=load_hex_input(directory / "input.hex"),
         )
 
 
@@ -63,7 +52,6 @@ def _reject_unknown_fields(manifest: dict) -> None:
         "schema_version",
         "name",
         "profile",
-        "input_sha256",
     }
     if unknown:
         raise CaseError(f"unknown case field {sorted(unknown)[0]!r}")
@@ -76,7 +64,8 @@ def _require_string(manifest: dict, field: str) -> str:
     return value
 
 
-def _decode_hex(path: Path) -> bytes:
+def load_hex_input(path: Path) -> bytes:
+    """Load a Git-versioned hexadecimal ESC/POS fixture."""
     try:
         tokens = path.read_text(encoding="ascii").split()
     except (FileNotFoundError, UnicodeDecodeError) as error:

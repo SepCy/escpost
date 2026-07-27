@@ -35,8 +35,9 @@ Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 
 The Python package also contains the developer CLI for conformance cases and
-physical USB printers. Hardware discovery and printing are not part of the
-Rust rendering library.
+physical USB printers. Its qualification commands render and print the one
+shared stream with a selected profile. Hardware discovery and printing are not
+part of the Rust rendering library.
 
 ## Rendering pipeline
 
@@ -107,6 +108,12 @@ Profiles provide behavior that cannot be derived from ESC/POS bytes:
 The upstream `escpos-printer-db` repository is a Git submodule. Its gitlink pins
 the complete upstream snapshot. Each enrichment also stores the SHA-256 of its
 resolved upstream profile, so a change affecting that printer requires review.
+
+Profile authoring and qualification assets are collocated in visible
+`profiles/<profile-id>/` directories. Each contains `profile.toml` and the
+profile-specific expected rendering of `qualification/input.hex`. Hidden
+`.escpos-printer-db/` and `.generated/` directories contain infrastructure,
+not profiles.
 
 The profile compiler combines the upstream capabilities with a typed TOML
 enrichment and generates canonical JSON. The renderer loads only that generated

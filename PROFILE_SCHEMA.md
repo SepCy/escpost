@@ -1,4 +1,4 @@
-# Printer Profile Enrichments
+# Printer Profiles
 
 escpos2png imports command capabilities and code-page mappings from
 `receipt-print-hq/escpos-printer-db`. A small typed enrichment supplies the
@@ -7,6 +7,25 @@ by the renderer.
 
 The renderer consumes generated canonical JSON. It never resolves upstream
 inheritance or parses enrichment TOML while rendering.
+
+## Repository layout
+
+```text
+profiles/
+├── .escpos-printer-db/      # pinned upstream Git submodule
+├── .generated/
+│   └── profiles.json        # canonical runtime pack
+└── <profile-id>/
+    ├── profile.toml         # typed renderer enrichment
+    ├── expected-001.png     # shared-receipt qualification output
+    ├── verification.toml    # renderer commit and last-verified date
+    ├── notes.md             # physical evidence and fidelity context
+    └── TODO.md              # optional deferred hardware work
+```
+
+The compiler discovers visible directories containing `profile.toml`.
+Non-profile infrastructure starts with a dot and is never mistaken for a
+printer profile.
 
 ## Data flow
 
@@ -26,7 +45,7 @@ Validated canonical profile ── canonical SHA-256
 The upstream database is a Git submodule:
 
 ```text
-profiles/upstream/escpos-printer-db
+profiles/.escpos-printer-db
 ```
 
 The repository gitlink pins its exact commit. `.gitmodules` records the
@@ -47,7 +66,7 @@ until the new effective profile is reviewed and its hash is accepted.
 
 ## Enrichment format
 
-Enrichments are typed TOML documents:
+Each `profiles/<profile-id>/profile.toml` is a typed TOML document:
 
 ```toml
 schema_version = 1
@@ -128,8 +147,9 @@ version 1.
 
 `sources` contains human-readable evidence references. Sources remain in the
 authoring file and Git history; they are not copied into the runtime profile.
-Detailed manual citations and physical observations belong in the applicable
-case's `notes.md`.
+Detailed profile-wide physical observations belong in that profile's
+`notes.md`; focused command observations may remain in a conformance case's
+`notes.md`.
 
 Geometry, motion, defaults, and fonts are complete for the runtime fields
 currently needed by the renderer. Font column counts are derived from printable
@@ -204,8 +224,8 @@ Regenerate it with:
 ```bash
 docker compose run --rm test cargo run --quiet \
   -p escpos2png-profiles --bin compile-profile-pack -- \
-  profiles/upstream/escpos-printer-db/dist/capabilities.json \
-  profiles/enrichments profiles/generated/profiles.json
+  profiles/.escpos-printer-db/dist/capabilities.json \
+  profiles profiles/.generated/profiles.json
 ```
 
 ## Updating an upstream profile

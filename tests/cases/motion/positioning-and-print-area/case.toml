@@ -1,4 +1,3 @@
 schema_version = 1
 name = "Positioning and print area"
 profile = "NT-5890K"
-input_sha256 = "103ccb16ce82568277a74808d825536130d9a7738c1d48f6863a369fe74dfa81"

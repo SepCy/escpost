@@ -31,7 +31,13 @@ manifest-path = "crates/escpos2png-python/Cargo.toml"
 python-source = "python"
 module-name = "escpos2png._native"
 include = [
-    { path = "profiles/generated/profiles.json", format = "sdist" },
-    { path = "profiles/upstream/escpos-printer-db/LICENSE.md", format = "sdist" },
-    { path = "profiles/upstream/escpos-printer-db/LICENSE.md", format = "wheel" },
+    { path = "qualification/*", format = "sdist" },
+    { path = "profiles/*/profile.toml", format = "sdist" },
+    { path = "profiles/*/expected-*.png", format = "sdist" },
+    { path = "profiles/*/verification.toml", format = "sdist" },
+    { path = "profiles/*/notes.md", format = "sdist" },
+    { path = "profiles/*/TODO.md", format = "sdist" },
+    { path = "profiles/.generated/profiles.json", format = "sdist" },
+    { path = "profiles/.escpos-printer-db/LICENSE.md", format = "sdist" },
+    { path = "profiles/.escpos-printer-db/LICENSE.md", format = "wheel" },
 ]

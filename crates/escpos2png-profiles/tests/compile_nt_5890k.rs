@@ -6,9 +6,9 @@ use escpos2png_profiles::{
 use serde_json::Value;
 
 const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/upstream/escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/enrichments/NT-5890K.toml");
-const GENERATED_PROFILE_PACK: &[u8] = include_bytes!("../../../profiles/generated/profiles.json");
+    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+const GENERATED_PROFILE_PACK: &[u8] = include_bytes!("../../../profiles/.generated/profiles.json");
 const RESOLVED_PROFILE_SHA256: &str =
     "2e471a3f255d2dc85988d350754023a107a882d33504dd2df5e9f3c8d4d79b0b";
 

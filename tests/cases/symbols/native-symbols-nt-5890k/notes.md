@@ -20,7 +20,6 @@ about one fifth of the paper width, consistent with this geometry.
 
 ```text
 date: 2026-07-26
-input SHA-256: 665cd5dc465f6fa0a3f0994465943d4d97c3446177828b42b8dce24a16b1e3d2
 renderer commit before profile correction: 7920ee6
 printer profile: NT-5890K
 printer USB identity: 0416:5011
@@ -43,12 +42,12 @@ logical symbol dimensions.
 
 Four additional streams probed the newer Function B systems independently:
 
-| System | Probe file | Bytes | SHA-256 |
-|---|---|---:|---|
-| `m=75` Omnidirectional | `databar-m75-unsupported-probe.hex` | 64 | `59042fe18f63a400383ca0939ca904904191030b44e10425f1bd4fe58ecc91ab` |
-| `m=76` Truncated | `databar-m76-unsupported-probe.hex` | 69 | `baa2b256f93674a2b494df14dd4cdbe551701757da1f7bf4b869be0414ac3aeb` |
-| `m=77` Limited | `databar-m77-unsupported-probe.hex` | 67 | `ee82ba2a300fcaf19631a39b04f87b19b24fbdb26adc8d07150bebb4c4c97e1e` |
-| `m=78` Expanded | `databar-m78-unsupported-probe.hex` | 62 | `fe8f9f4edc240027b8650362665c41d0f56a18a5d7ceceeb6b226c4a58ace62d` |
+| System | Probe file | Bytes |
+|---|---|---:|
+| `m=75` Omnidirectional | `databar-m75-unsupported-probe.hex` | 64 |
+| `m=76` Truncated | `databar-m76-unsupported-probe.hex` | 69 |
+| `m=77` Limited | `databar-m77-unsupported-probe.hex` | 67 |
+| `m=78` Expanded | `databar-m78-unsupported-probe.hex` | 62 |
 
 Each stream resets the printer, prints an identifying text line, selects HRI
 below, an 80-dot height, and a two-dot module width, then sends one DataBar

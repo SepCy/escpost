@@ -19,7 +19,7 @@ struct CaseManifest {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct QualificationVerification {
+struct CalibrationVerification {
     renderer_commit: String,
     last_verified: String,
 }
@@ -67,15 +67,15 @@ fn conformance_cases_match_their_golden_pngs() {
 }
 
 #[test]
-fn profile_qualifications_match_the_shared_stream() {
+fn profile_calibrations_match_the_shared_stream() {
     let repository = repository_root();
     let profiles_root = repository.join("profiles");
-    let output_root = repository.join("local/test-output/qualification");
+    let output_root = repository.join("local/test-output/calibration");
     let input = load_input_file(
-        &repository.join("qualification/input.hex"),
-        "shared printer qualification",
+        &repository.join("calibration/input.hex"),
+        "shared printer calibration",
     )
-    .expect("the shared qualification stream should load");
+    .expect("the shared calibration stream should load");
     let profile_directories = find_profile_directories(&profiles_root)
         .expect("printer profile directories should be discoverable");
 
@@ -88,7 +88,7 @@ fn profile_qualifications_match_the_shared_stream() {
     let mut failures = Vec::new();
     for profile_directory in profile_directories {
         if let Err(error) =
-            compare_profile_qualification(&profile_directory, &input, &output_root, &repository)
+            compare_profile_calibration(&profile_directory, &input, &output_root, &repository)
         {
             failures.push(error);
         }
@@ -96,7 +96,7 @@ fn profile_qualifications_match_the_shared_stream() {
 
     assert!(
         failures.is_empty(),
-        "profile qualification PNG comparison failed:\n\n{}",
+        "profile calibration PNG comparison failed:\n\n{}",
         failures.join("\n\n")
     );
 }
@@ -150,7 +150,7 @@ fn compare_case(
     )
 }
 
-fn compare_profile_qualification(
+fn compare_profile_calibration(
     profile_directory: &Path,
     input: &[u8],
     output_root: &Path,
@@ -160,11 +160,11 @@ fn compare_profile_qualification(
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("invalid profile directory {profile_directory:?}"))?;
-    load_qualification_verification(profile_directory)?;
+    load_calibration_verification(profile_directory)?;
     let output_directory = output_root.join(profile_id);
 
     compare_receipt(
-        &format!("{profile_id} printer qualification"),
+        &format!("{profile_id} printer calibration"),
         profile_id,
         input,
         profile_directory,
@@ -325,13 +325,13 @@ fn load_manifest(case_directory: &Path) -> Result<CaseManifest, String> {
     Ok(manifest)
 }
 
-fn load_qualification_verification(
+fn load_calibration_verification(
     profile_directory: &Path,
-) -> Result<QualificationVerification, String> {
+) -> Result<CalibrationVerification, String> {
     let path = profile_directory.join("verification.toml");
     let source =
         fs::read_to_string(&path).map_err(|error| format!("could not read {path:?}: {error}"))?;
-    let verification: QualificationVerification =
+    let verification: CalibrationVerification =
         toml::from_str(&source).map_err(|error| format!("invalid {path:?}: {error}"))?;
 
     if verification.renderer_commit.len() != 40

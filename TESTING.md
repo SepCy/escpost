@@ -97,7 +97,7 @@ is fixed.
 
 ### Physical-printer calibration
 
-Hardware calibration sends either a focused case or the shared qualification
+Hardware calibration sends either a focused case or the shared calibration
 receipt to a selected printer and renders those same bytes with the matching
 profile.
 
@@ -195,8 +195,8 @@ The output directory mirrors `tests/cases/`, uses the same three-digit sheet
 numbers, and is ignored by Git. This lets developers inspect successful
 renders as well as failures.
 
-Shared qualification outputs use
-`local/test-output/qualification/<profile-id>/actual-001.png`.
+Shared calibration outputs use
+`local/test-output/calibration/<profile-id>/actual-001.png`.
 
 When pixels differ, the test also writes `diff-001.png` and
 `comparison.html`. Matching ink is black, matching paper is white, unexpected
@@ -229,13 +229,13 @@ changes intentionally, regenerate its stream in the producer's own build
 environment and review the PNG difference before updating the compatibility
 case.
 
-## Shared profile qualification
+## Shared profile calibration
 
 Focused cases isolate one behavior for automated diagnosis. Printer
-qualification instead uses one comprehensive stream for every profile:
+calibration instead uses one comprehensive stream for every profile:
 
 ```text
-qualification/
+calibration/
 ├── input.hex
 └── README.md
 
@@ -264,7 +264,7 @@ physical output. The containing repository commit versions `profile.toml`,
 the shared stream, expected PNG, notes, and verification record together.
 Input and profile hashes would duplicate that history.
 
-When a renderer change alters a qualified PNG, review the automated diff and
+When a renderer change alters a calibrated PNG, review the automated diff and
 compare the new output with the physical printer before advancing
 `renderer_commit` and `last_verified`. If the printer is unavailable, record
 the pending checks in that profile's `TODO.md` instead of claiming a new
@@ -280,9 +280,9 @@ escpos2png printers discover --name <local-name> --profile <profile>
 escpos2png case render <case>
 escpos2png case print <case> --printer <local-name>
 escpos2png case calibrate <case> --printer <local-name>
-escpos2png qualification render <profile>
-escpos2png qualification print --printer <local-name>
-escpos2png qualification calibrate --printer <local-name>
+escpos2png calibration render <profile>
+escpos2png calibration print --printer <local-name>
+escpos2png calibration calibrate --printer <local-name>
 ```
 
 `render` invokes the Rust engine through the Python binding and writes the
@@ -332,7 +332,7 @@ Real machine configuration and local captures remain ignored.
 
 Before sending bytes, the CLI shows:
 
-- the selected case or shared qualification input;
+- the selected case or shared calibration input;
 - printer profile;
 - USB identity or other transport destination;
 - byte count.
@@ -364,9 +364,9 @@ This is repeated one vertical slice at a time. Do not write a large suite of
 speculative command tests before exercising the first command end to end.
 
 For a new printer profile, first complete `profile.toml`, then run
-`qualification calibrate`. Compare the one long physical receipt with the
+`calibration calibrate`. Compare the one long physical receipt with the
 profile's generated PNG, accept it as `expected-001.png`, record evidence in
-`notes.md`, and write `verification.toml`. This broad qualification complements
+`notes.md`, and write `verification.toml`. This broad calibration complements
 the focused workflow; it does not replace it.
 
 ## Comparing PNG and paper
@@ -453,7 +453,7 @@ printer can perform it.
 A hardware-validation report includes:
 
 ```text
-case or qualification profile:
+case or calibration profile:
 renderer commit:
 last verified date:
 printer model:

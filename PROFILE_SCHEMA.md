@@ -17,7 +17,7 @@ profiles/
 │   └── profiles.json        # canonical runtime pack
 └── <profile-id>/
     ├── profile.toml         # typed renderer enrichment
-    ├── expected-001.png     # shared-receipt qualification output
+    ├── expected-001.png     # shared-receipt calibration output
     ├── verification.toml    # renderer commit and last-verified date
     ├── notes.md             # physical evidence and fidelity context
     └── TODO.md              # optional deferred hardware work

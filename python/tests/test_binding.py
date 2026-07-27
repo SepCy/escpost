@@ -19,7 +19,7 @@ CASE_DIRECTORY = (
     / "graphics"
     / "esc-star-8dot-double-density"
 )
-QUALIFICATION_INPUT = REPOSITORY / "qualification" / "input.hex"
+CALIBRATION_INPUT = REPOSITORY / "calibration" / "input.hex"
 
 
 class RenderBindingTest(unittest.TestCase):
@@ -198,13 +198,13 @@ in_endpoint = "0x81"
         self.assertEqual(printer.writes, [expected])
 
 
-class QualificationCliTest(unittest.TestCase):
-    def test_qualification_render_uses_the_shared_stream_and_selected_profile(self):
+class CalibrationCliTest(unittest.TestCase):
+    def test_calibration_render_uses_the_shared_stream_and_selected_profile(self):
         with TemporaryDirectory() as output_directory:
             with redirect_stdout(StringIO()):
                 exit_code = main(
                     [
-                        "qualification",
+                        "calibration",
                         "render",
                         "NT-5890K",
                         "--output-dir",
@@ -219,7 +219,7 @@ class QualificationCliTest(unittest.TestCase):
                 (384, 1632, 1, 0),
             )
 
-    def test_qualification_calibrate_infers_the_profile_from_the_printer(self):
+    def test_calibration_calibrate_infers_the_profile_from_the_printer(self):
         printer = FakePrinter()
         with TemporaryDirectory() as local_directory:
             local_directory = Path(local_directory)
@@ -247,7 +247,7 @@ in_endpoint = "0x81"
             ):
                 exit_code = main(
                     [
-                        "qualification",
+                        "calibration",
                         "calibrate",
                         "--printer",
                         "netum-usb",
@@ -258,7 +258,7 @@ in_endpoint = "0x81"
                     ]
                 )
 
-        expected = bytes.fromhex(QUALIFICATION_INPUT.read_text())
+        expected = bytes.fromhex(CALIBRATION_INPUT.read_text())
         self.assertEqual(exit_code, 0)
         self.assertEqual(printer.writes, [expected])
         self.assertTrue(printer.closed)

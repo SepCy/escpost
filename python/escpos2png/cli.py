@@ -16,7 +16,7 @@ from .printers import (
     load_usb_printer,
     save_usb_printer,
 )
-from .qualification import Qualification
+from .calibration import Calibration
 
 
 LOCAL_CONFIG = Path("local/printers.toml")
@@ -206,66 +206,66 @@ def _calibrate_case(
     _send_to_printer(case.input_bytes, case.profile, config, printer)
 
 
-@_cli.group("qualification")
-def _qualification_commands() -> None:
-    """Render and physically test the shared printer qualification receipt."""
+@_cli.group("calibration")
+def _calibration_commands() -> None:
+    """Render and physically test the shared printer calibration receipt."""
 
 
-@_qualification_commands.command("render")
+@_calibration_commands.command("render")
 @click.argument("profile")
 @click.option(
     "--output-dir",
     type=DIRECTORY_PATH,
     required=True,
 )
-def _render_qualification(profile: str, output_dir: Path) -> None:
+def _render_calibration(profile: str, output_dir: Path) -> None:
     """Render the shared receipt with one printer profile."""
-    qualification = Qualification.load(Path.cwd(), profile)
-    _announce_qualification(qualification)
+    calibration = Calibration.load(Path.cwd(), profile)
+    _announce_calibration(calibration)
     _write_rendered_sheets(
-        qualification.input_bytes,
-        qualification.profile,
+        calibration.input_bytes,
+        calibration.profile,
         output_dir,
     )
 
 
-@_qualification_commands.command("print")
+@_calibration_commands.command("print")
 @_printer_options
-def _print_qualification(printer: str, config: Path) -> None:
+def _print_calibration(printer: str, config: Path) -> None:
     """Send the shared receipt using the configured printer profile."""
-    qualification = _load_printer_qualification(config, printer)
-    _announce_qualification(qualification)
+    calibration = _load_printer_calibration(config, printer)
+    _announce_calibration(calibration)
     _send_to_printer(
-        qualification.input_bytes,
-        qualification.profile,
+        calibration.input_bytes,
+        calibration.profile,
         config,
         printer,
     )
 
 
-@_qualification_commands.command("calibrate")
+@_calibration_commands.command("calibrate")
 @click.option(
     "--output-dir",
     type=DIRECTORY_PATH,
     required=True,
 )
 @_printer_options
-def _calibrate_qualification(
+def _calibrate_profile(
     output_dir: Path,
     printer: str,
     config: Path,
 ) -> None:
     """Render and print the shared receipt for one configured printer."""
-    qualification = _load_printer_qualification(config, printer)
-    _announce_qualification(qualification)
+    calibration = _load_printer_calibration(config, printer)
+    _announce_calibration(calibration)
     _write_rendered_sheets(
-        qualification.input_bytes,
-        qualification.profile,
+        calibration.input_bytes,
+        calibration.profile,
         output_dir,
     )
     _send_to_printer(
-        qualification.input_bytes,
-        qualification.profile,
+        calibration.input_bytes,
+        calibration.profile,
         config,
         printer,
     )
@@ -318,15 +318,15 @@ def _announce_case(case: Case) -> None:
     click.echo(f"bytes: {len(case.input_bytes)}")
 
 
-def _announce_qualification(qualification: Qualification) -> None:
-    click.echo(f"qualification input: {qualification.input_path}")
-    click.echo(f"profile: {qualification.profile}")
-    click.echo(f"bytes: {len(qualification.input_bytes)}")
+def _announce_calibration(calibration: Calibration) -> None:
+    click.echo(f"calibration input: {calibration.input_path}")
+    click.echo(f"profile: {calibration.profile}")
+    click.echo(f"bytes: {len(calibration.input_bytes)}")
 
 
-def _load_printer_qualification(config: Path, printer: str) -> Qualification:
+def _load_printer_calibration(config: Path, printer: str) -> Calibration:
     printer_config = load_usb_printer(config, printer)
-    return Qualification.load(Path.cwd(), printer_config.profile)
+    return Calibration.load(Path.cwd(), printer_config.profile)
 
 
 def _write_rendered_sheets(

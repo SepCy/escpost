@@ -74,7 +74,7 @@ visual comparison: raster/LF behavior confirmed by the isolated probe; final ful
 
 `verification.toml` records the renderer commit and date associated with the
 reviewed expected PNG. Git versions the shared input, profile, expected PNG,
-and this evidence together, so the qualification record does not duplicate
+and this evidence together, so the calibration record does not duplicate
 fixture or profile hashes.
 
 A successful USB write proves only that the exact fixture reached the device;

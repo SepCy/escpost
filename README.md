@@ -112,17 +112,17 @@ loaded byte buffer.
   --output-dir local/calibration
 ```
 
-To qualify a printer profile comprehensively, render and print the single
+To calibrate a printer profile comprehensively, render and print the single
 shared receipt. The configured printer supplies the profile, so developers do
 not have to repeat it:
 
 ```bash
-./escpos2png qualification calibrate \
+./escpos2png calibration calibrate \
   --printer netum-usb \
-  --output-dir local/qualification
+  --output-dir local/calibration
 ```
 
-The shared stream lives at `qualification/input.hex`. Its profile-specific
+The shared stream lives at `calibration/input.hex`. Its profile-specific
 expected PNG, verification record, notes, and any remaining hardware TODOs
 live together under `profiles/<profile-id>/`.
 

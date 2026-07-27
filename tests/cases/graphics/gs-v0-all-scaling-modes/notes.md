@@ -13,9 +13,12 @@ while its vertical size fields count dots. Each command advances the print
 position vertically by its scaled image height, independently of the current
 line spacing, and returns to the beginning of the line.
 
-An LF after each of the first three images adds the profile's 30-dot line feed,
-making the specimens visually distinct. The expected total surface height is
-138 dots: `(8 + 30) + (8 + 30) + (16 + 30) + 16`.
+Epson behavior applies an LF after the raster image has advanced by its own
+height. The connected NT-5890K instead consumes exactly one immediately
+following LF without another feed. A second consecutive LF feeds normally.
+The case uses the NT profile, so its four images are adjacent and the expected
+total surface height is 48 dots: `8 + 8 + 16 + 16`.
 
-The behavior is derived from Epson's `GS v 0 — Print raster bit image`
-documentation. Physical observations for the NT-5890K remain to be recorded.
+The Epson baseline is derived from `GS v 0 — Print raster bit image`.
+The NT behavior was established with an isolated physical probe containing
+zero, one, and two LFs between staggered one-row raster blocks.

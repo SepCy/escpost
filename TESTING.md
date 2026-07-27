@@ -140,6 +140,12 @@ moving, and consumes `ESC $` without moving after printable data is already
 buffered on the line. These are typed profile behaviors because they change
 the coordinates of later content.
 
+An isolated raster/LF interaction probe established that the printer consumes
+exactly one LF immediately following `GS v 0`. Zero and one LF leave adjacent
+raster blocks, while two consecutive LFs produce one line feed. The renderer
+keeps Epson's ordinary following-LF feed as its baseline and stores the NT
+difference as a typed profile behavior.
+
 ## Conformance case format
 
 Each behavior is represented by a self-contained case directory:

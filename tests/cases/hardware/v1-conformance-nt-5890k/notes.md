@@ -54,19 +54,25 @@ models all three behaviors. The final two no-cut markers therefore occupy
 adjacent vertical rows. Their different horizontal insets keep the command
 boundaries visible instead of forming one double-height block.
 
+An isolated raster/LF interaction probe printed staggered `GS v 0` blocks
+separated by zero, one, and two LFs. Zero and one LF produced adjacent blocks;
+two LFs produced exactly one line feed. The profile therefore consumes one LF
+only when it immediately follows `GS v 0`. Other profiles retain the Epson
+baseline in which that LF feeds normally.
+
 ## Physical run
 
 ```text
-date: 2026-07-26
+date: 2026-07-27
 input SHA-256: 72366422ef0185da2cf13b4088649773f4569e9f7cbc602ca868f31c0dc59537
-renderer commit: 0767b68
+renderer commit: 6083243
 printer profile: NT-5890K
-canonical profile SHA-256: d592eb1b792ca3b0b346bcdfc23a155c9575d457b1d02eb583c26a7054cf4cb4
+canonical profile SHA-256: ab9486418dfef7c8eaa703fecfa6a8cbfcd13cb7e0e695b0a3a9de0ef2e3c927
 printer USB identity: 0416:5011
 serial: B120300001
 connection: USB interface 0, OUT endpoint 0x01
 transport result: all 1208 hash-verified bytes sent without a USB error
-visual comparison: positioning behavior confirmed; final full-receipt review pending
+visual comparison: raster/LF behavior confirmed by the isolated probe; final full-receipt review pending
 ```
 
 A successful USB write proves only that the exact fixture reached the device;

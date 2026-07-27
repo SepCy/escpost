@@ -512,7 +512,8 @@ decision can be revisited if the difference later matters.
   example, the calibrated NT-5890K paints `ESC *` 8-dot rows adjacently instead
   of using Epson's three-dot vertical pitch, ignores negative `ESC \`, ignores
   `ESC $` after printable data, ignores `ESC J`, and feeds only the full-cut
-  form of `GS V` Function B.
+  form of `GS V` Function B. It also consumes one LF immediately following
+  `GS v 0`; this is modeled because it materially changes vertical placement.
 - A preview may not reproduce every dot or native-symbol implementation choice
   even when its positions and overall layout are correct.
 - A previously neglected quirk can become modeled after reproducible evidence

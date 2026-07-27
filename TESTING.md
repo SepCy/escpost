@@ -198,6 +198,10 @@ renders as well as failures.
 Shared calibration outputs use
 `local/test-output/calibration/<profile-id>/actual-001.png`.
 
+CLI render output also includes `manifest.json`, whose `sheets` array lists
+the current `actual-NNN.png` files in receipt order. The preview reads this
+manifest instead of guessing how many sheets exist or displaying stale files.
+
 When pixels differ, the test also writes `diff-001.png` and
 `comparison.html`. Matching ink is black, matching paper is white, unexpected
 ink is red, and missing ink is blue. The assertion reports repository-relative
@@ -296,9 +300,10 @@ bytes to the printer. This prevents accidental divergence between the two
 paths.
 
 Render calibration output to `local/preview` and start the Compose `preview`
-service. The page at <http://localhost:8765/tools/preview/> refreshes the latest
-PNG automatically and scales it only by integer multiples so individual
-printer dots remain inspectable.
+service. The page at <http://localhost:8765/tools/preview/> refreshes all
+current PNG sheets automatically, labels them in order, and uses a wrapping
+layout so sheets remain side by side when space permits. It scales every sheet
+only by integer multiples so individual printer dots remain inspectable.
 
 The printing adapter may use python-escpos's USB transport, but it uses only
 the raw-byte operation. It must not call high-level helpers such as `text`,

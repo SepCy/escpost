@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Sequence
 
@@ -337,10 +338,24 @@ def _write_rendered_sheets(
     rendered = render_result(input_bytes, profile=profile)
     output_directory.mkdir(parents=True, exist_ok=True)
 
+    sheet_names = []
     for sheet_number, png in enumerate(rendered["sheets"], start=1):
-        output = output_directory / f"actual-{sheet_number:03}.png"
+        sheet_name = f"actual-{sheet_number:03}.png"
+        sheet_names.append(sheet_name)
+        output = output_directory / sheet_name
         output.write_bytes(png)
         click.echo(f"wrote: {output}")
+
+    # Write this only after every PNG. The preview can then treat the manifest
+    # as the ordered list of complete sheets and ignore stale files.
+    manifest = output_directory / "manifest.json"
+    pending_manifest = output_directory / ".manifest.json.tmp"
+    pending_manifest.write_text(
+        json.dumps({"sheets": sheet_names}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    pending_manifest.replace(manifest)
+    click.echo(f"wrote: {manifest}")
     click.echo(
         "canonical profile sha256: "
         f"{rendered['metadata']['canonical_profile_sha256']}"

@@ -1,3 +1,4 @@
+import json
 import struct
 import unittest
 from contextlib import redirect_stdout
@@ -68,7 +69,44 @@ class CaseRenderCliTest(unittest.TestCase):
             output = Path(output_directory) / "actual-001.png"
             self.assertEqual(exit_code, 0)
             self.assertEqual(_read_png_header(output.read_bytes()), (384, 30, 1, 0))
+            self.assertEqual(
+                json.loads((Path(output_directory) / "manifest.json").read_text()),
+                {"sheets": ["actual-001.png"]},
+            )
             self.assertNotIn("input sha256", stdout.getvalue())
+
+    def test_case_render_writes_all_sheets_in_preview_order(self):
+        rendered = {
+            "sheets": [b"first sheet", b"second sheet"],
+            "metadata": {"canonical_profile_sha256": "0" * 64},
+        }
+        with TemporaryDirectory() as output_directory:
+            with patch("escpos2png.cli.render_result", return_value=rendered):
+                with redirect_stdout(StringIO()):
+                    exit_code = main(
+                        [
+                            "case",
+                            "render",
+                            str(CASE_DIRECTORY),
+                            "--output-dir",
+                            output_directory,
+                        ]
+                    )
+
+            output_directory = Path(output_directory)
+            self.assertEqual(exit_code, 0)
+            self.assertEqual(
+                json.loads((output_directory / "manifest.json").read_text()),
+                {"sheets": ["actual-001.png", "actual-002.png"]},
+            )
+            self.assertEqual(
+                (output_directory / "actual-001.png").read_bytes(),
+                b"first sheet",
+            )
+            self.assertEqual(
+                (output_directory / "actual-002.png").read_bytes(),
+                b"second sheet",
+            )
 
 
 class CaseLoaderTest(unittest.TestCase):

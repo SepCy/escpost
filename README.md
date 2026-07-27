@@ -92,8 +92,8 @@ Render the first conformance case:
   --output-dir local/rendered
 ```
 
-Serve `local/preview/actual-001.png` with automatic refresh and selectable
-integer zoom:
+Serve every PNG listed in `local/preview/manifest.json` with automatic refresh,
+ordered sheet labels, responsive wrapping, and selectable integer zoom:
 
 ```bash
 docker compose up -d preview

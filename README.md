@@ -36,6 +36,17 @@ by the renderer without inheriting limitations or quirks from a physical
 printer. It does not imply that post-v1 command families are already
 implemented.
 
+Use `REFERENCE` for generic previews and tests when no target printer is known:
+
+```python
+from escpos2png import render
+
+sheets = render(escpos_bytes, profile="REFERENCE")
+```
+
+When the target printer is known, select its physical profile instead so the
+preview includes that device's geometry, capabilities, and calibrated quirks.
+
 The Rust result includes bounded rendering, device events, profile
 approximations, and reproducible renderer/profile identity. Canonical profile
 JSON verifies its content hash when loaded.

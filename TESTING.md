@@ -101,7 +101,7 @@ Hardware calibration sends either a focused case or the shared calibration
 receipt to a selected printer and renders those same bytes with the matching
 profile.
 
-The first physical reference profile is `NT-5890K`, a Netum 58 mm printer.
+The first physically calibrated profile is `NT-5890K`, a Netum 58 mm printer.
 The upstream profile inherits from `POS-5890`, currently describing:
 
 - a 384-dot printable width;

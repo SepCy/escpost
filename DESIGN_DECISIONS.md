@@ -343,7 +343,7 @@ however, describe all geometry and behavior required by an emulator.
 ### Decision
 
 Pin the upstream database as a source repository and import it at build time.
-Maintain escpos2png enrichment files for exact rendering metrics, behavioral
+Maintain ESCPost enrichment files for exact rendering metrics, behavioral
 details, corrections, and explicit approximations. Resolve and validate both
 sources into a canonical profile pack embedded in the Rust library.
 
@@ -353,7 +353,7 @@ runtime profile.
 
 ### Consequences
 
-- python-escpos generators and escpos2png previews can share profile names.
+- python-escpos generators and ESCPost previews can share profile names.
 - Receiptful custom profiles can feed both systems.
 - Upstream updates are deliberate, reviewable dependency changes.
 - The renderer is insulated from upstream schema changes by its importer and
@@ -367,7 +367,7 @@ runtime profile.
 
 ### Context
 
-escpos2png must complete and occasionally correct the shared upstream printer
+ESCPost must complete and occasionally correct the shared upstream printer
 database. A mature per-field evidence and patch protocol would provide strong
 audit detail but would impose substantial authoring and implementation cost
 before the first profile is calibrated.
@@ -449,7 +449,7 @@ that are easy to implement almost correctly.
 
 ### Decision
 
-escpos2png owns ESC/POS parsing and every printer-visible symbol behavior,
+ESCPost owns ESC/POS parsing and every printer-visible symbol behavior,
 including placement and scaling. It also owns the common one-dimensional
 barcode encoders, whose algorithms are small enough to review against the
 printer reference and barcode standards.

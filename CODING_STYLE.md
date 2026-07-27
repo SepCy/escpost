@@ -1,6 +1,6 @@
 # Coding style
 
-`escpos2png` should be easy to change without losing rendering fidelity. Code
+ESCPost should be easy to change without losing rendering fidelity. Code
 and tests are read more often than they are written, so clarity matters more
 than cleverness.
 

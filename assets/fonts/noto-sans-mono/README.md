@@ -1,7 +1,7 @@
 # Noto Sans Mono
 
 `NotoSansMono-Regular.ttf` is the deterministic default glyph source used by
-escpos2png. It is embedded in the Rust library; rendering never searches the
+ESCPost. It is embedded in the Rust library; rendering never searches the
 host system for fonts.
 
 - Family: Noto Sans Mono

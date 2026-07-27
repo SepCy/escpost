@@ -1,6 +1,6 @@
 # ESC/POS command coverage
 
-This document defines the visible command boundary for `escpos2png`. It keeps
+This document defines the visible command boundary for ESCPost. It keeps
 three different claims separate:
 
 - **Implemented** means the command has public-rendering tests.

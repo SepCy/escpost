@@ -1,6 +1,6 @@
 # Printer Profiles
 
-Physical escpos2png profiles import command capabilities and code-page mappings
+Physical ESCPost profiles import command capabilities and code-page mappings
 from `receipt-print-hq/escpos-printer-db`. A small typed enrichment supplies
 the geometry, defaults, font metrics, corrections, and fidelity disclosures
 needed by the renderer.
@@ -237,7 +237,7 @@ Regenerate it with:
 
 ```bash
 docker compose run --rm test cargo run --quiet \
-  -p escpos2png-profiles --bin compile-profile-pack -- \
+  -p escpost-profiles --bin compile-profile-pack -- \
   profiles/.escpos-printer-db/dist/capabilities.json \
   profiles profiles/.generated/profiles.json
 ```

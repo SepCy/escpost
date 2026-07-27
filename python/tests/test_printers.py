@@ -6,8 +6,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from escpos2png.cli import main
-from escpos2png.printers import (
+from escpost.cli import main
+from escpost.printers import (
     DiscoveredUsbPrinter,
     load_usb_printer,
     save_usb_printer,
@@ -34,7 +34,7 @@ class PrinterDiscoveryCliTest(unittest.TestCase):
 
         with (
             patch(
-                "escpos2png.cli.discover_usb_printers",
+                "escpost.cli.discover_usb_printers",
                 return_value=[NETUM_PRINTER],
             ),
             redirect_stdout(stdout),
@@ -53,7 +53,7 @@ class PrinterDiscoveryCliTest(unittest.TestCase):
 
             with (
                 patch(
-                    "escpos2png.cli.discover_usb_printers",
+                    "escpost.cli.discover_usb_printers",
                     return_value=[NETUM_PRINTER],
                 ),
                 redirect_stdout(StringIO()),
@@ -97,7 +97,7 @@ class PrinterDiscoveryCliTest(unittest.TestCase):
 
         with (
             patch(
-                "escpos2png.cli.discover_usb_printers",
+                "escpost.cli.discover_usb_printers",
                 return_value=[NETUM_PRINTER, second_printer],
             ),
             redirect_stdout(StringIO()),

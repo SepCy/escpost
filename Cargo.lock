@@ -89,11 +89,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
-name = "escpos2png"
+name = "escpost"
 version = "0.1.0"
 dependencies = [
  "encoding_rs",
- "escpos2png-profiles",
+ "escpost-profiles",
  "fontdue",
  "oem_cp",
  "png",
@@ -104,7 +104,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "escpos2png-profiles"
+name = "escpost-profiles"
 version = "0.1.0"
 dependencies = [
  "serde",
@@ -115,11 +115,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "escpos2png-python"
+name = "escpost-python"
 version = "0.1.0"
 dependencies = [
- "escpos2png",
- "escpos2png-profiles",
+ "escpost",
+ "escpost-profiles",
  "pyo3",
 ]
 

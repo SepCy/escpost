@@ -14,4 +14,4 @@ export PIP_QUIET=1
 
 maturin develop --quiet --locked --extras=printer
 
-exec escpos2png "$@"
+exec escpost "$@"

@@ -2,7 +2,7 @@
 
 `REFERENCE` is not a physical printer and is not imported from
 escpos-printer-db. It enables every capability represented by the current
-escpos2png profile schema and uses the documented baseline behavior instead of
+ESCPost profile schema and uses the documented baseline behavior instead of
 firmware quirks.
 
 The profile gives commands concrete 203 DPI, 80 mm geometry because raster

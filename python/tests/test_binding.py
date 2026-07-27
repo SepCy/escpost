@@ -7,9 +7,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-from escpos2png import render, render_result
-from escpos2png.cases import Case, CaseError
-from escpos2png.cli import main
+from escpost import render, render_result
+from escpost.cases import Case, CaseError
+from escpost.cli import main
 
 
 REPOSITORY = Path(__file__).parents[2]
@@ -88,7 +88,7 @@ class CaseRenderCliTest(unittest.TestCase):
             "metadata": {"canonical_profile_sha256": "0" * 64},
         }
         with TemporaryDirectory() as output_directory:
-            with patch("escpos2png.cli.render_result", return_value=rendered):
+            with patch("escpost.cli.render_result", return_value=rendered):
                 with redirect_stdout(StringIO()):
                     exit_code = main(
                         [
@@ -204,7 +204,7 @@ in_endpoint = "0x81"
 
             with (
                 patch(
-                    "escpos2png.cli._open_usb_printer",
+                    "escpost.cli._open_usb_printer",
                     return_value=printer,
                 ),
                 redirect_stdout(stdout),
@@ -248,7 +248,7 @@ in_endpoint = "0x81"
 
             with (
                 patch(
-                    "escpos2png.cli._open_usb_printer",
+                    "escpost.cli._open_usb_printer",
                     return_value=printer,
                 ),
                 redirect_stdout(StringIO()),
@@ -317,7 +317,7 @@ in_endpoint = "0x81"
 
             with (
                 patch(
-                    "escpos2png.cli._open_usb_printer",
+                    "escpost.cli._open_usb_printer",
                     return_value=printer,
                 ),
                 redirect_stdout(StringIO()),

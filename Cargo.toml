@@ -1,8 +1,8 @@
 [workspace]
 members = [
-    "crates/escpos2png",
-    "crates/escpos2png-python",
-    "crates/escpos2png-profiles",
+    "crates/escpost",
+    "crates/escpost-python",
+    "crates/escpost-profiles",
 ]
 resolver = "3"
 

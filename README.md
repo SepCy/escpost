@@ -1,8 +1,11 @@
-# escpos2png
+# ESCPost
 
-`escpos2png` is a standalone Rust library for rendering ESC/POS byte
-streams as PNG receipt previews. A thin Python package exposes the Rust engine
-to applications such as FastAPI services.
+**The ESC/POS Tools and Workbench**
+
+`escpost` is a standalone ESC/POS developer toolkit built around a
+dot-accurate Rust renderer. It currently renders ESC/POS byte streams as PNG
+receipt previews, provides hardware calibration tools, and exposes the engine
+to applications through a thin Python package.
 
 The project aims to emulate printer layout on a dot-addressed surface. Its
 fidelity target is the placement and sizing of printed elements—not a
@@ -39,7 +42,7 @@ implemented.
 Use `REFERENCE` for generic previews and tests when no target printer is known:
 
 ```python
-from escpos2png import render
+from escpost import render
 
 sheets = render(escpos_bytes, profile="REFERENCE")
 ```
@@ -61,7 +64,7 @@ All build and test commands run in the project container:
 
 ```bash
 docker compose build
-./escpos2png --help
+./escpost --help
 docker compose run --rm test cargo test --workspace
 docker compose run --rm test .venv/bin/python -m unittest discover -s python/tests
 ```
@@ -71,12 +74,12 @@ the pinned upstream source:
 
 ```bash
 docker compose run --rm test cargo run --quiet \
-  -p escpos2png-profiles --bin compile-profile-pack -- \
+  -p escpost-profiles --bin compile-profile-pack -- \
   profiles/.escpos-printer-db/dist/capabilities.json \
   profiles profiles/.generated/profiles.json
 ```
 
-`./escpos2png` forwards every argument to the Python CLI in the Compose
+`./escpost` forwards every argument to the Python CLI in the Compose
 container. The CLI service has USB access for printer discovery and physical
 calibration. Its Python environment lives in a named Docker volume and is
 created or updated automatically.
@@ -84,13 +87,13 @@ created or updated automatically.
 List connected USB printer-class devices:
 
 ```bash
-./escpos2png printers discover
+./escpost printers discover
 ```
 
 Save one selected device to the ignored local configuration:
 
 ```bash
-./escpos2png printers discover \
+./escpost printers discover \
   --serial B120300001 \
   --name netum-usb \
   --profile NT-5890K
@@ -103,7 +106,7 @@ to a different host group.
 Render the first conformance case:
 
 ```bash
-./escpos2png case render \
+./escpost case render \
   tests/cases/graphics/esc-star-8dot-double-density \
   --output-dir local/rendered
 ```
@@ -121,7 +124,7 @@ Render the focused REFERENCE cut case to see three ordered PNG sheets produced
 by full and partial cuts:
 
 ```bash
-./escpos2png case render \
+./escpost case render \
   tests/cases/mechanism/reference-full-and-partial-cuts \
   --output-dir local/preview
 ```
@@ -131,7 +134,7 @@ For focused physical calibration, first use discovery to populate
 loaded byte buffer.
 
 ```bash
-./escpos2png case calibrate \
+./escpost case calibrate \
   tests/cases/graphics/esc-star-8dot-double-density \
   --printer netum-usb \
   --output-dir local/calibration
@@ -142,7 +145,7 @@ shared receipt. The configured printer supplies the profile, so developers do
 not have to repeat it:
 
 ```bash
-./escpos2png calibration calibrate \
+./escpost calibration calibrate \
   --printer netum-usb \
   --output-dir local/calibration
 ```
@@ -200,6 +203,10 @@ Project code and documentation are licensed under the
 retain their own compatible licenses and attribution. Imported printer data
 from `receipt-print-hq/escpos-printer-db` remains under CC BY 4.0 and must be
 distributed with its attribution and license.
+
+ESC/POS is a registered trademark of Seiko Epson Corporation. ESCPost is an
+independent open-source project and is not affiliated with or endorsed by
+Epson.
 
 ## Relationship to Receiptful
 

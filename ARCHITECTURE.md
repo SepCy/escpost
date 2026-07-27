@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`escpos2png` interprets one complete ESC/POS byte stream as an isolated print
+`escpost` interprets one complete ESC/POS byte stream as an isolated print
 job and returns one or more PNG receipt sheets.
 
 The renderer works in printer dots. HTML, CSS, SVG text, host fonts, and browser
@@ -25,11 +25,11 @@ model.
 
 The Rust workspace contains three crates:
 
-- `escpos2png-profiles` imports, enriches, validates, and loads printer
+- `escpost-profiles` imports, enriches, validates, and loads printer
   profiles.
-- `escpos2png` parses ESC/POS, applies printer state, rasterizes content, and
+- `escpost` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
-- `escpos2png-python` exposes coarse-grained rendering functions through PyO3.
+- `escpost-python` exposes coarse-grained rendering functions through PyO3.
 
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.

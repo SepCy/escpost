@@ -1,6 +1,6 @@
-# Testing escpos2png
+# Testing ESCPost
 
-escpos2png uses deterministic automated tests and opt-in physical-printer
+ESCPost uses deterministic automated tests and opt-in physical-printer
 calibration. Both paths consume the same version-controlled ESC/POS byte
 streams without changing their bytes.
 
@@ -57,7 +57,7 @@ Keep isolated command mechanics in a command-specific file. For example,
 a file named after the governing state:
 
 ```text
-crates/escpos2png/tests/
+crates/escpost/tests/
 ├── render_justification.rs
 ├── render_print_area.rs
 ├── render_initialization.rs
@@ -110,7 +110,7 @@ The upstream profile inherits from `POS-5890`, currently describing:
 - 42 columns for Font B.
 
 These values are starting hypotheses. The connected printer and its
-documentation determine whether escpos2png needs profile enrichments or
+documentation determine whether ESCPost needs profile enrichments or
 corrections.
 
 The upstream NT-5890K profile inherits conservative native-symbol flags from
@@ -215,7 +215,7 @@ Run only the golden conformance layer with:
 
 ```bash
 docker compose run --rm test \
-  cargo test -p escpos2png --test golden_cases -- --nocapture
+  cargo test -p escpost --test golden_cases -- --nocapture
 ```
 
 `notes.md` explains the behavior under test, relevant commands, manual
@@ -286,14 +286,14 @@ verification.
 A small Python CLI orchestrates rendering and physical printing:
 
 ```text
-escpos2png printers discover
-escpos2png printers discover --name <local-name> --profile <profile>
-escpos2png case render <case>
-escpos2png case print <case> --printer <local-name>
-escpos2png case calibrate <case> --printer <local-name>
-escpos2png calibration render <profile>
-escpos2png calibration print --printer <local-name>
-escpos2png calibration calibrate --printer <local-name>
+escpost printers discover
+escpost printers discover --name <local-name> --profile <profile>
+escpost case render <case>
+escpost case print <case> --printer <local-name>
+escpost case calibrate <case> --printer <local-name>
+escpost calibration render <profile>
+escpost calibration print --printer <local-name>
+escpost calibration calibrate --printer <local-name>
 ```
 
 `render` invokes the Rust engine through the Python binding and writes the

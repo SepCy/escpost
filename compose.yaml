@@ -1,5 +1,5 @@
 x-development-service: &development-service
-  image: escpos2png-development
+  image: escpost-development
   network_mode: host
   build:
     context: .

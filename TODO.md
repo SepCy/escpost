@@ -2,7 +2,7 @@
 
 ## Product direction
 
-`escpos2png` should become an ESC/POS developer workbench, not only a PNG
+ESCPost should become an ESC/POS developer workbench, not only a PNG
 renderer.
 
 The intended workflow is:
@@ -22,14 +22,14 @@ and the completed item can be removed from this roadmap.
 
 ## Rust CLI location
 
-Reserve `crates/escpos2png-cli/` for the Rust binary crate. Its executable
-should continue to be named `escpos2png`.
+Reserve `crates/escpost-cli/` for the Rust binary crate. Its executable
+should continue to be named `escpost`.
 
 The crate should initially contain command parsing and the modules used only by
 the developer executable:
 
 ```text
-crates/escpos2png-cli/
+crates/escpost-cli/
 └── src/
     ├── main.rs
     ├── commands/
@@ -55,18 +55,18 @@ up front. Add each module with the feature that needs it.
 
 Do not create a separate server or protocol crate merely in anticipation of
 reuse. Extract one when another executable or embedding API genuinely needs
-the same behavior. The `escpos2png` rendering crate must remain independent of
+the same behavior. The `escpost` rendering crate must remain independent of
 CLI, networking, storage, and web concerns.
 
 The existing Python package remains the application binding. Migrate the
 current Click commands incrementally and remove them only after the Rust CLI
-has equivalent behavior. The root `./escpos2png` container wrapper should
+has equivalent behavior. The root `./escpost` container wrapper should
 eventually invoke the Rust executable while keeping the developer-facing
 command name stable.
 
 ## Virtual network printer
 
-- [ ] Add an `escpos2png serve` command.
+- [ ] Add an `escpost serve` command.
 - [ ] Listen for RAW TCP print data on port 9100 by default.
 - [ ] Bind to `127.0.0.1` by default.
 - [ ] Require an explicit option to listen on LAN or public interfaces.
@@ -86,7 +86,7 @@ encryption. See the
 An initial invocation could look like:
 
 ```bash
-escpos2png serve \
+escpost serve \
   --listen 127.0.0.1:9100 \
   --profile REFERENCE \
   --web-listen 127.0.0.1:8765
@@ -143,7 +143,7 @@ local storage directory.
 The inspector should explain how the byte stream changes printer state and
 produces output. It should be useful even when strict rendering fails.
 
-- [ ] Add `escpos2png inspect <input>`.
+- [ ] Add `escpost inspect <input>`.
 - [ ] Show the byte offset and raw bytes for every parsed command.
 - [ ] Show the command's ESC/POS name and decoded parameters.
 - [ ] Show relevant printer state before and after the command.
@@ -158,7 +158,7 @@ produces output. It should be useful even when strict rendering fails.
 Diagnostics must keep these cases separate:
 
 - malformed or truncated ESC/POS;
-- a valid command not yet implemented by `escpos2png`;
+- a valid command not yet implemented by `escpost`;
 - a valid command unavailable on the selected printer profile;
 - a command ignored because of its parameters or the current printer state;
 - clipped or out-of-area output;
@@ -171,7 +171,7 @@ not present speculative parsing as fact.
 
 ## Transparent physical-printer proxy
 
-- [ ] Add an `escpos2png proxy` command.
+- [ ] Add an `escpost proxy` command.
 - [ ] Accept the same RAW TCP input as the virtual printer.
 - [ ] Forward the exact bytes to a configured USB or network printer.
 - [ ] Capture and preview those bytes without delaying them unnecessarily.
@@ -186,7 +186,7 @@ not present speculative parsing as fact.
 An example invocation could be:
 
 ```bash
-escpos2png proxy \
+escpost proxy \
   --listen 127.0.0.1:9100 \
   --to printer:netum-usb
 ```
@@ -228,16 +228,16 @@ The eventual top-level command set should be coherent rather than exposing
 separate Python and Rust tools:
 
 ```text
-escpos2png render       Render a file, hexadecimal input, or stdin
-escpos2png inspect      Decode and explain a stream
-escpos2png serve        Run the virtual printer and web interface
-escpos2png proxy        Capture while forwarding to physical hardware
-escpos2png replay       Resend a captured job
-escpos2png diff         Compare two jobs or renderings
-escpos2png lint         Find portability and profile problems
-escpos2png printers     Discover and configure printers
-escpos2png calibrate    Calibrate a profile against hardware
-escpos2png doctor       Diagnose ports, USB access, configuration, and profiles
+escpost render       Render a file, hexadecimal input, or stdin
+escpost inspect      Decode and explain a stream
+escpost serve        Run the virtual printer and web interface
+escpost proxy        Capture while forwarding to physical hardware
+escpost replay       Resend a captured job
+escpost diff         Compare two jobs or renderings
+escpost lint         Find portability and profile problems
+escpost printers     Discover and configure printers
+escpost calibrate    Calibrate a profile against hardware
+escpost doctor       Diagnose ports, USB access, configuration, and profiles
 ```
 
 - [ ] Accept binary files, hexadecimal text files, standard input, and captured
@@ -285,7 +285,7 @@ artifacts; revisit storage only when real usage proves that inadequate.
 
 ## Portability analysis
 
-- [ ] Add `escpos2png lint`.
+- [ ] Add `escpost lint`.
 - [ ] Run one stream against one or several selected profiles.
 - [ ] Report unsupported commands, code pages, symbols, and mechanisms.
 - [ ] Report content outside the printable area.
@@ -298,7 +298,7 @@ artifacts; revisit storage only when real usage proves that inadequate.
 An example invocation could be:
 
 ```bash
-escpos2png lint receipt.bin \
+escpost lint receipt.bin \
   --profiles REFERENCE,NT-5890K
 ```
 
@@ -337,7 +337,7 @@ escpos2png lint receipt.bin \
 
 ### Phase 1: virtual printer
 
-- [ ] Create `crates/escpos2png-cli` with the Rust `escpos2png` executable.
+- [ ] Create `crates/escpost-cli` with the Rust `escpost` executable.
 - [ ] Port the basic render command needed to exercise the binary.
 - [ ] Add the RAW TCP listener and job framing.
 - [ ] Host the current preview behavior from Rust.

@@ -3,9 +3,9 @@ requires = ["maturin==1.14.1"]
 build-backend = "maturin"
 
 [project]
-name = "escpos2png"
+name = "escpost"
 version = "0.1.0"
-description = "Dot-accurate ESC/POS to PNG renderer"
+description = "ESC/POS tools and dot-accurate receipt renderer"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -18,7 +18,7 @@ classifiers = [
 dependencies = ["click==8.4.2"]
 
 [project.scripts]
-escpos2png = "escpos2png.cli:main"
+escpost = "escpost.cli:main"
 
 [project.optional-dependencies]
 printer = [
@@ -27,9 +27,9 @@ printer = [
 ]
 
 [tool.maturin]
-manifest-path = "crates/escpos2png-python/Cargo.toml"
+manifest-path = "crates/escpost-python/Cargo.toml"
 python-source = "python"
-module-name = "escpos2png._native"
+module-name = "escpost._native"
 include = [
     { path = "calibration/*", format = "sdist" },
     { path = "profiles/*/profile.toml", format = "sdist" },

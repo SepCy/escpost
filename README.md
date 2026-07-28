@@ -34,10 +34,11 @@ misleading replacement glyph.
 The Rust `escpost render` command accepts raw bytes, readable hexadecimal
 input, stdin, or a conformance-case directory. It can write PNGs, stream one
 PNG to stdout, or host an embedded browser workbench. The Rust `print` command
-sends the same source types unchanged to an explicitly addressed USB printer.
-The Python binding remains available to applications, while the existing
-Python hardware commands continue to provide USB discovery and higher-level
-physical calibration during their migration to Rust.
+sends the same source types unchanged to an explicitly addressed USB printer,
+and Rust `printers list` reports attached USB printer-class interfaces. The
+Python binding remains available to applications, while the existing Python
+hardware commands continue to provide legacy configuration writing and
+higher-level physical calibration during their migration to Rust.
 
 The virtual `REFERENCE` profile enables every capability currently represented
 by the renderer without inheriting limitations or quirks from a physical
@@ -84,19 +85,26 @@ docker compose run --rm test cargo run --quiet \
   profiles profiles/.generated/profiles.json
 ```
 
-`./escpost` is the stable development entry point. It runs `render` and
-`print` through the Rust CLI and keeps the existing Python discovery and
-calibration commands reachable during migration. The CLI service has USB
-access for physical workflows; its Python environment lives in a named Docker
-volume and is created or updated only when a legacy command needs it.
+`./escpost` is the stable development entry point. It runs `render`, `print`,
+and `printers list` through the Rust CLI and keeps the existing Python
+configuration and calibration commands reachable during migration. The CLI
+service has USB access for physical workflows; its Python environment lives in
+a named Docker volume and is created or updated only when a legacy command
+needs it.
 
 List connected USB printer-class devices:
 
 ```bash
-./escpost printers discover
+./escpost printers list
 ```
 
-Save one selected device to the ignored local configuration:
+The list is read-only and reports the transport, VID/PID, USB location,
+interface, bulk endpoints, and cached identity strings. It does not claim the
+interface or send data.
+
+The temporary Python command for saving one selected device to the ignored
+local configuration remains available until calibration configuration moves
+to Rust:
 
 ```bash
 ./escpost printers discover \
@@ -122,8 +130,8 @@ Send a raw or hexadecimal ESC/POS stream unchanged to a USB printer:
 
 All four USB values are required. `print` does not read a printer alias,
 infer values from a profile, or discover an interface or endpoint. Use
-`printers discover` to inspect a connected device, then pass the selected
-values explicitly. The invocation itself authorizes the physical write.
+`printers list` to inspect a connected device, then pass the selected values
+explicitly. The invocation itself authorizes the physical write.
 
 Render a raw byte stream to one PNG:
 

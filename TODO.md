@@ -155,8 +155,8 @@ render and does not require a profile.
       (`CLI-P07`)
 - [x] Put only the physical USB boundary behind a test transport and keep
       ordinary automated runs incapable of printing. (`CLI-P08`)
-- [x] Route `./escpost print` to Rust while leaving Python discovery and
-      calibration commands reachable during migration.
+- [x] Route `./escpost print` to Rust while leaving legacy Python
+      configuration and calibration commands reachable during migration.
 - [x] Verify the exact command through Docker against the connected NT-5890K
       using a small, reviewable ESC/POS smoke stream.
 - [x] Update README, architecture, platform, and testing documentation after
@@ -336,16 +336,18 @@ rules are specified in `CLI.md`.
 
 ### Printer discovery and diagnostics
 
-- [ ] Implement the Rust `escpost printers list` command for attached USB
-      printers and retire the temporary Python `printers discover` name.
-      (`CLI-M01`, `CLI-M03`)
-- [ ] Keep `printers list` read-only and make the output model extensible to
-      Bluetooth, network, and operating-system spooler transports.
-      (`CLI-M01`, `CLI-M02`)
+- [x] Implement the Rust `escpost printers list` command for attached USB
+      printer-class interfaces. (`CLI-M01`, `CLI-M03`)
+- [x] Keep USB `printers list` read-only and label every result with its
+      transport. (`CLI-M01`, `CLI-M03`)
+- [ ] Extend `printers list` to Bluetooth, network, and operating-system
+      spooler transports as their backends are implemented. (`CLI-M02`)
 - [ ] Add `--transport` filtering and versioned `--json` output.
       (`CLI-M02`, `CLI-M04`)
 - [ ] Keep the existing Python `local/printers.toml` workflow reachable until
       the calibration commands no longer depend on it.
+- [ ] Retire the temporary Python `printers discover` configuration writer
+      after its remaining calibration use is migrated.
 - [ ] Add `printers scan` only with the first concrete active Bluetooth or
       network discovery backend. (`CLI-M05`, `CLI-M07`)
 - [ ] Add `printers pair` with the first transport that needs explicit
@@ -458,8 +460,8 @@ escpost lint receipt.bin \
 
 ### Phase 4: hardware loop
 
-- [ ] Port passive printer listing to the Rust CLI, then add scanning and
-      pairing only for transports that need them.
+- [x] Port passive USB printer listing to the Rust CLI.
+- [ ] Add scanning and pairing only for transports that need them.
 - [ ] Add replay to USB and RAW network printers.
 - [ ] Add transparent proxy mode with response forwarding.
 - [ ] Port calibration commands and then retire the Click CLI.

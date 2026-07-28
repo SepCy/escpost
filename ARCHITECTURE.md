@@ -30,17 +30,19 @@ The Rust workspace contains four crates:
 - `escpost` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
 - `escpost-cli` provides the native `escpost` executable, PNG destinations,
-  embedded local web viewer, and direct USB output.
+  embedded local web viewer, direct USB output, and passive USB printer
+  inventory.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
 
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 
-The Python package still contains USB discovery and the higher-level
-calibration commands. The root development wrapper routes `render` and
-`print` to the Rust executable and the remaining hardware commands to that
-package, keeping one public command name during migration. Hardware discovery
-and printing are not part of the Rust rendering library.
+The Python package still contains the legacy USB configuration writer and the
+higher-level calibration commands. The root development wrapper routes
+`render`, `print`, and `printers list` to the Rust executable and the remaining
+hardware commands to that package, keeping one public command name during
+migration. Hardware inventory and printing are not part of the Rust rendering
+library.
 
 ## Rust direct USB printing
 
@@ -71,6 +73,14 @@ payload unchanged.
 Automated tests replace only the `UsbTransport` boundary. Source loading,
 target validation, and byte preservation remain real; ordinary tests cannot
 open or write to connected hardware.
+
+`printers list` uses the same `nusb` dependency but remains a separate passive
+inventory path. It first selects USB printer-class devices, opens them only to
+read their cached active configuration descriptors, and reports every
+alternate-setting-zero printer interface with at least one bulk OUT endpoint.
+It never claims an interface, detaches a kernel driver, or sends a USB
+transfer. Descriptor parsing and human output are tested behind the USB
+inventory boundary.
 
 ## Rust render command
 

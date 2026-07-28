@@ -8,9 +8,9 @@ Python and Rust command families.
 
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
-be reviewed. `render` and direct-USB `print` are implemented; the other
-top-level commands remain planned or temporarily available through the Python
-hardware workflow.
+be reviewed. `render`, direct-USB `print`, and USB-backed `printers list` are
+implemented; the other top-level commands remain planned or temporarily
+available through the Python hardware workflow.
 `README.md` describes what works today, while `TODO.md` is the single
 implementation checklist.
 
@@ -408,9 +408,9 @@ platform; otherwise it fails instead of waiting for a prompt. Some BLE
 printers do not use operating-system pairing, so support is defined by the
 transport backend rather than assumed for every Bluetooth device.
 
-The next Rust slice will implement `printers list` for attached USB printers.
-Bluetooth, network, spooler, `scan`, and `pair` support can then be added
-without renaming the inventory command or changing its read-only meaning.
+The current Rust implementation lists attached USB printer-class interfaces.
+Bluetooth, network, spooler, `scan`, and `pair` support can be added without
+renaming the inventory command or changing its read-only meaning.
 
 ## `escpost serve`
 

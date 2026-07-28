@@ -45,6 +45,8 @@ performed on Linux x86-64:
 - the Rust `render` CLI and embedded web viewer pass their CLI and HTTP
   integration suites in Docker and have been checked in a headless Chromium
   browser;
+- Rust `printers list` enumerates the connected NT-5890K printer through
+  `nusb` without claiming its interface;
 - the Python binding and Click CLI pass their automated suites;
 - Docker Compose exposes the Linux host's `/dev/bus/usb` tree to the CLI; and
 - both the Python calibration path and the Rust direct-USB `print` command
@@ -128,10 +130,11 @@ The Rust `print` command uses `nusb` for direct bulk transfers:
 ESCPost Rust CLI → nusb → operating system USB API
 ```
 
-The legacy Python discovery and calibration workflow continues to use
+The legacy Python configuration and calibration workflow continues to use
 python-escpos, PyUSB, and libusb while those higher-level commands are
-migrated. The Rust choice avoids requiring a separately installed libusb
-runtime. It was selected after considering:
+migrated. Passive listing and direct printing use Rust. The Rust choice avoids
+requiring a separately installed libusb runtime. It was selected after
+considering:
 
 - bulk endpoint discovery and transfers;
 - interface claim, detach, and reattach behavior;

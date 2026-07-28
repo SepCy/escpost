@@ -309,9 +309,10 @@ compare the new output with the physical printer before advancing
 the pending checks in that profile's `TODO.md` instead of claiming a new
 verification.
 
-## Python calibration CLI
+## Legacy Python calibration CLI
 
-A small Python CLI orchestrates rendering and physical printing:
+A small Python CLI still orchestrates configured rendering and physical
+printing during migration:
 
 ```text
 escpost printers discover
@@ -348,6 +349,18 @@ bytes.
 python-escpos and its USB dependencies are development or optional hardware
 dependencies. They are not dependencies of the Rust core or ordinary renderer
 installations.
+
+The normal read-only inventory is native Rust:
+
+```bash
+./escpost printers list
+```
+
+Its unit tests substitute the USB inventory boundary, verify the exact
+connection fields shown to developers, and parse synthetic USB configuration
+descriptors to exclude non-printer and non-bulk endpoints. The connected
+printer smoke check verifies the `nusb` enumeration path without claiming an
+interface or printing paper.
 
 ## Rust direct-print smoke tests
 
@@ -393,8 +406,8 @@ in_endpoint = "0x81"
 ```
 
 [`examples/printers.toml`](examples/printers.toml) is the committed template.
-The discovery command writes or updates the selected table while preserving
-comments and other printer entries.
+The temporary Python `printers discover` command writes or updates the
+selected table while preserving comments and other printer entries.
 Real machine configuration and local captures remain ignored.
 
 Before sending bytes, the CLI shows:

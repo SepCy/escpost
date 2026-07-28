@@ -356,10 +356,24 @@ only through an explicit `escpost print` invocation.
 setup:
 
 ```text
-escpost printers list [--transport <TRANSPORT>] [--json]
-escpost printers scan [--transport <TRANSPORT>]
-escpost printers pair <CANDIDATE>
+escpost printers [--config <FILE>] list [--transport <TRANSPORT>] [--json]
+escpost printers [--config <FILE>] scan [--transport <TRANSPORT>]
+escpost printers [--config <FILE>] pair <CANDIDATE>
 ```
+
+Commands in the `printers` family resolve `printers.toml` in this order:
+
+```text
+--config <FILE>
+→ $ESCPOST_CONFIG_DIR/printers.toml
+→ platform user-configuration directory
+```
+
+The platform default comes from the operating system through Rust's
+`directories` crate. Linux uses
+`$XDG_CONFIG_HOME/escpost/printers.toml`, falling back to
+`~/.config/escpost/printers.toml`. A missing implicit file means no configured
+printers. Read-only commands do not create the directory or file.
 
 ### `printers list`
 
@@ -377,8 +391,9 @@ transport:
 The default includes every supported transport. `--transport
 usb|bluetooth|network|spooler` narrows the result without changing its shape.
 The human output identifies the transport and shows the connection fields
-needed by the corresponding print command. `--json` exposes the same snapshot
-for scripts using a versioned schema.
+needed by the corresponding print command. When a connected USB interface
+matches a saved entry, it also shows the developer-assigned name and profile.
+`--json` exposes the same snapshot for scripts using a versioned schema.
 
 Listing is passive: it does not pair devices, change configuration, send
 ESC/POS data, or start a broad Bluetooth or network search. Reading USB
@@ -537,6 +552,8 @@ the completed implementation must satisfy.
 | CLI-M05 | Reserve `printers scan` for active discovery that never pairs, saves, or prints implicitly. |
 | CLI-M06 | Reserve `printers pair` for an explicit state-changing connection workflow which may delegate to the operating system. |
 | CLI-M07 | Never infer a scan or pairing target by display name or choose silently among several candidates. |
+| CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
+| CLI-M09 | Keep passive listing free of configuration writes while showing names that match connected printers. |
 
 ### Web requirements
 

@@ -35,10 +35,11 @@ The Rust `escpost render` command accepts raw bytes, readable hexadecimal
 input, stdin, or a conformance-case directory. It can write PNGs, stream one
 PNG to stdout, or host an embedded browser workbench. The Rust `print` command
 sends the same source types unchanged to an explicitly addressed USB printer,
-and Rust `printers list` reports attached USB printer-class interfaces. The
-Python binding remains available to applications, while the existing Python
-hardware commands continue to provide legacy configuration writing and
-higher-level physical calibration during their migration to Rust.
+and Rust `printers list` reports attached USB printer-class interfaces,
+including matching configured names. The Python binding remains available to
+applications, while the existing Python hardware commands continue to provide
+legacy configuration writing and higher-level physical calibration during
+their migration to Rust.
 
 The virtual `REFERENCE` profile enables every capability currently represented
 by the renderer without inheriting limitations or quirks from a physical
@@ -99,8 +100,18 @@ List connected USB printer-class devices:
 ```
 
 The list is read-only and reports the transport, VID/PID, USB location,
-interface, bulk endpoints, and cached identity strings. It does not claim the
-interface or send data.
+interface, bulk endpoints, cached identity strings, and matching configured
+names. It does not claim the interface, send data, or create configuration.
+
+Native installations keep `printers.toml` in the platform user-configuration
+directory. On Linux this is normally
+`~/.config/escpost/printers.toml`, or
+`$XDG_CONFIG_HOME/escpost/printers.toml` when that variable is set. The
+development wrapper deliberately uses the separate ignored file
+`local/config/printers.toml`. Set `ESCPOST_CONFIG_DIR` to deliberately share
+another directory in a native installation, or pass
+`printers --config <FILE>` for one invocation. With the Docker wrapper, set
+`ESCPOST_CONFIG_HOST_DIR` to deliberately mount another host directory.
 
 The temporary Python command for saving one selected device to the ignored
 local configuration remains available until calibration configuration moves
@@ -180,8 +191,8 @@ The Docker wrapper cannot open a browser on the host, so use `--web` there and
 open the printed URL yourself.
 
 For focused physical calibration, first use discovery to populate
-`local/printers.toml`. The `case calibrate` command renders and sends one
-loaded byte buffer.
+`local/config/printers.toml` through the Docker wrapper. The `case calibrate`
+command renders and sends one loaded byte buffer.
 
 ```bash
 ./escpost case calibrate \

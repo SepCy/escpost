@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import stat
+import sys
 import tempfile
 import tomllib
 from dataclasses import dataclass
@@ -41,6 +42,42 @@ class DiscoveredUsbPrinter:
 
 class PrinterConfigError(ValueError):
     """The local physical-printer configuration is invalid."""
+
+
+def default_printers_config_path() -> Path:
+    """Return the legacy CLI's copy of the native configuration location.
+
+    The Python hardware commands are temporary, but they must read the same
+    file as the Rust CLI while calibration is migrated. Docker always supplies
+    the override, avoiding duplicated platform policy in normal development.
+    """
+    override = os.environ.get("ESCPOST_CONFIG_DIR")
+    if override:
+        return Path(override) / "printers.toml"
+
+    if sys.platform == "darwin":
+        directory = (
+            Path.home()
+            / "Library"
+            / "Application Support"
+            / "io.receiptful.escpost"
+        )
+    elif os.name == "nt":
+        roaming = os.environ.get("APPDATA")
+        directory = (
+            Path(roaming)
+            if roaming
+            else Path.home() / "AppData" / "Roaming"
+        ) / "receiptful" / "escpost" / "config"
+    else:
+        xdg_directory = os.environ.get("XDG_CONFIG_HOME")
+        directory = (
+            Path(xdg_directory)
+            if xdg_directory
+            else Path.home() / ".config"
+        ) / "escpost"
+
+    return directory / "printers.toml"
 
 
 def discover_usb_printers() -> list[DiscoveredUsbPrinter]:

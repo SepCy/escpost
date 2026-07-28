@@ -19,6 +19,16 @@ services:
 
   cli:
     <<: *development-service
+    environment:
+      # Keep configuration used by this checkout separate from any
+      # host-installed ESCPost version.
+      ESCPOST_CONFIG_DIR: /home/developer/.config/escpost
+    volumes:
+      - .:/workspace
+      - ${ESCPOST_CONFIG_HOST_DIR:-./local/config}:/home/developer/.config/escpost
+      - cargo-home:/home/developer/.cargo
+      - cargo-target:/home/developer/target
+      - python-venv:/workspace/.venv
     devices:
       - /dev/bus/usb:/dev/bus/usb
     group_add:

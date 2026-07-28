@@ -30,8 +30,8 @@ The Rust workspace contains four crates:
 - `escpost` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
 - `escpost-cli` provides the native `escpost` executable, PNG destinations,
-  embedded local web viewer, direct USB output, and passive USB printer
-  inventory.
+  embedded local web viewer, direct USB output, passive USB printer inventory,
+  and platform-native machine configuration.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
 
 Python calls into Rust once per job. The binding releases the Python
@@ -79,8 +79,18 @@ inventory path. It first selects USB printer-class devices, opens them only to
 read their cached active configuration descriptors, and reports every
 alternate-setting-zero printer interface with at least one bulk OUT endpoint.
 It never claims an interface, detaches a kernel driver, or sends a USB
-transfer. Descriptor parsing and human output are tested behind the USB
-inventory boundary.
+transfer. It reads `printers.toml` only to identify matching configured names.
+An explicit `--config` file takes precedence over `ESCPOST_CONFIG_DIR`, which
+takes precedence over the platform user-configuration directory resolved by
+Rust's `directories` crate. A missing implicit file is an empty configuration,
+and this read-only path never creates a directory. Descriptor parsing,
+configuration matching, and human output are tested behind the USB inventory
+boundary.
+
+The Docker wrapper creates and mounts `local/config` at the container user's
+normal ESCPost configuration path. This isolates configuration used by a
+checkout from an independently installed binary while keeping Docker-specific
+paths out of the Rust implementation.
 
 ## Rust render command
 

@@ -1,4 +1,5 @@
-# Copy this file to local/printers.toml and replace the USB identifiers.
+# Copy this file to ESCPost's user configuration as printers.toml, or to
+# local/config/printers.toml when using the development wrapper.
 
 [netum-usb]
 transport = "usb"

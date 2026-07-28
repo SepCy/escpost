@@ -1,6 +1,7 @@
 use std::io::{self, Write};
 
 use crate::cli::{PrintersArgs, PrintersCommand};
+use crate::configuration::{self, PrinterConfiguration};
 use crate::error::CliError;
 use nusb::MaybeFuture;
 use nusb::descriptors::{ConfigurationDescriptor, TransferType};
@@ -36,13 +37,18 @@ trait UsbInventory {
 pub(crate) fn run(arguments: PrintersArgs) -> Result<(), CliError> {
     match arguments.command {
         PrintersCommand::List => {
+            let configuration = configuration::load(arguments.config.as_deref())?;
             let mut inventory = NusbInventory;
-            execute(&mut inventory, &mut io::stdout().lock())
+            execute(&mut inventory, &configuration, &mut io::stdout().lock())
         }
     }
 }
 
-fn execute(inventory: &mut impl UsbInventory, output: &mut impl Write) -> Result<(), CliError> {
+fn execute(
+    inventory: &mut impl UsbInventory,
+    configuration: &PrinterConfiguration,
+    output: &mut impl Write,
+) -> Result<(), CliError> {
     let printers = inventory.list()?;
     if printers.is_empty() {
         writeln!(output, "No usable printers found.").map_err(CliError::WriteHumanOutput)?;
@@ -50,7 +56,7 @@ fn execute(inventory: &mut impl UsbInventory, output: &mut impl Write) -> Result
     }
 
     for (index, printer) in printers.iter().enumerate() {
-        write_printer(output, index + 1, printer)?;
+        write_printer(output, index + 1, printer, configuration)?;
     }
     Ok(())
 }
@@ -130,6 +136,7 @@ fn write_printer(
     output: &mut impl Write,
     number: usize,
     printer: &UsbPrinter,
+    configuration: &PrinterConfiguration,
 ) -> Result<(), CliError> {
     let product = printer.product.as_deref().unwrap_or("USB printer");
     let manufacturer = printer
@@ -162,6 +169,23 @@ fn write_printer(
     writeln!(output).map_err(CliError::WriteHumanOutput)?;
     if let Some(serial_number) = &printer.serial_number {
         writeln!(output, "    serial: {serial_number}").map_err(CliError::WriteHumanOutput)?;
+    }
+    for configured in configuration.usb_printers().iter().filter(|configured| {
+        configured.vendor_id == printer.vendor_id
+            && configured.product_id == printer.product_id
+            && configured.interface_number == printer.interface_number
+            && printer.out_endpoints.contains(&configured.out_endpoint)
+            && configured
+                .serial_number
+                .as_ref()
+                .is_none_or(|serial| printer.serial_number.as_ref() == Some(serial))
+    }) {
+        writeln!(
+            output,
+            "    configured as: {}; profile: {}",
+            configured.name, configured.profile
+        )
+        .map_err(CliError::WriteHumanOutput)?;
     }
     Ok(())
 }
@@ -210,6 +234,7 @@ fn printer_interfaces(configuration: ConfigurationDescriptor<'_>) -> Vec<UsbPrin
 #[cfg(test)]
 mod tests {
     use super::{UsbInventory, UsbPrinter, UsbPrinterInterface, execute, printer_interfaces};
+    use crate::configuration::PrinterConfiguration;
     use crate::error::CliError;
 
     #[test]
@@ -230,7 +255,12 @@ mod tests {
         };
         let mut output = Vec::new();
 
-        execute(&mut inventory, &mut output).expect("listing should succeed");
+        execute(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &mut output,
+        )
+        .expect("listing should succeed");
 
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
@@ -251,11 +281,57 @@ mod tests {
         };
         let mut output = Vec::new();
 
-        execute(&mut inventory, &mut output).expect("an empty listing should succeed");
+        execute(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &mut output,
+        )
+        .expect("an empty listing should succeed");
 
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
             "No usable printers found.\n"
+        );
+    }
+
+    #[test]
+    fn list_identifies_a_connected_printer_by_its_configured_name() {
+        let mut inventory = FixedInventory {
+            printers: vec![UsbPrinter {
+                vendor_id: 0x0416,
+                product_id: 0x5011,
+                bus: "3".to_owned(),
+                address: 57,
+                manufacturer: None,
+                product: Some("USB Portable Printer".to_owned()),
+                serial_number: Some("B120300001".to_owned()),
+                interface_number: 0,
+                out_endpoints: vec![0x01],
+                in_endpoints: vec![0x81],
+            }],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+profile = \"NT-5890K\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+in_endpoint = \"0x81\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+
+        assert!(
+            String::from_utf8(output)
+                .expect("the listing should be UTF-8")
+                .contains("configured as: netum-usb; profile: NT-5890K\n")
         );
     }
 

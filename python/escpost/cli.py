@@ -13,6 +13,7 @@ from .cases import Case, CaseError
 from .printers import (
     DiscoveredUsbPrinter,
     UsbPrinter,
+    default_printers_config_path,
     discover_usb_printers,
     load_usb_printer,
     save_usb_printer,
@@ -20,7 +21,7 @@ from .printers import (
 from .calibration import Calibration
 
 
-LOCAL_CONFIG = Path("local/printers.toml")
+LOCAL_CONFIG = default_printers_config_path()
 CASE_PATH = click.Path(path_type=Path, file_okay=False)
 DIRECTORY_PATH = click.Path(path_type=Path, file_okay=False)
 CONFIG_PATH = click.Path(path_type=Path, dir_okay=False)

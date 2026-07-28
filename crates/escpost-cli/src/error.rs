@@ -160,6 +160,18 @@ pub(crate) enum CliError {
     #[error("could not write command output: {0}")]
     WriteHumanOutput(std::io::Error),
 
+    #[error("could not read printer configuration {path}: {source}")]
+    ReadPrinterConfiguration {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("invalid printer configuration {path}: {message}")]
+    InvalidPrinterConfiguration { path: PathBuf, message: String },
+
+    #[error("the operating system did not provide a user configuration directory")]
+    NoUserConfigDirectory,
+
     #[error("could not inspect watched source {path}: {source}")]
     InspectWatchedSource {
         path: PathBuf,

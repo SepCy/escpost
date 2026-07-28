@@ -90,6 +90,28 @@ Configuration, captured jobs, PNG output, and physical evidence remain normal
 runtime files. The Python binding can continue as a separate optional package;
 Homebrew users should not need Python.
 
+## User configuration
+
+The native CLI uses Rust's `directories` crate so an installed executable
+follows each platform's user-configuration convention:
+
+| Platform | Default `printers.toml` location |
+|---|---|
+| Linux | `$XDG_CONFIG_HOME/escpost/printers.toml`, or `~/.config/escpost/printers.toml` |
+| macOS | `~/Library/Application Support/io.receiptful.escpost/printers.toml` |
+| Windows | `%APPDATA%\\receiptful\\escpost\\config\\printers.toml` |
+
+`ESCPOST_CONFIG_DIR` replaces the directory on every platform. An explicit
+`printers --config <FILE>` replaces the complete path and has highest
+precedence. Read-only commands accept a missing implicit file without creating
+anything.
+
+Docker development does not mount the host's installed ESCPost configuration.
+The wrapper creates `<checkout>/local/config` as the host user and Compose
+mounts it at `/home/developer/.config/escpost`. A developer can deliberately
+share another host directory by setting `ESCPOST_CONFIG_HOST_DIR`; the
+container still sees its conventional user path.
+
 ## Transport strategy
 
 ESCPost should keep transports behind one internal interface. Rendering must

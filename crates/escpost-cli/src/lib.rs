@@ -1,6 +1,7 @@
 //! Native ESCPost developer command-line interface.
 
 mod cli;
+mod configuration;
 mod error;
 mod output;
 mod print;

@@ -102,6 +102,10 @@ pub(crate) struct PrintArgs {
 
 #[derive(Debug, Args)]
 pub(crate) struct PrintersArgs {
+    /// Read printer configuration from this exact file.
+    #[arg(long, global = true, value_name = "FILE")]
+    pub(crate) config: Option<PathBuf>,
+
     #[command(subcommand)]
     pub(crate) command: PrintersCommand,
 }

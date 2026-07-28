@@ -360,7 +360,9 @@ Its unit tests substitute the USB inventory boundary, verify the exact
 connection fields shown to developers, and parse synthetic USB configuration
 descriptors to exclude non-printer and non-bulk endpoints. The connected
 printer smoke check verifies the `nusb` enumeration path without claiming an
-interface or printing paper.
+interface or printing paper. Configuration tests verify explicit-path and
+environment precedence, Linux/XDG platform resolution, configured-name
+matching, and the absence of filesystem writes during passive listing.
 
 ## Rust direct-print smoke tests
 
@@ -391,7 +393,8 @@ add an automated test that can match and write to ordinary connected hardware.
 
 ## Local printer configuration
 
-Connection details belong in an ignored `local/printers.toml`:
+When commands run through the development wrapper, connection details belong
+in the ignored `local/config/printers.toml`:
 
 ```toml
 [netum-usb]
@@ -407,8 +410,15 @@ in_endpoint = "0x81"
 
 [`examples/printers.toml`](examples/printers.toml) is the committed template.
 The temporary Python `printers discover` command writes or updates the
-selected table while preserving comments and other printer entries.
-Real machine configuration and local captures remain ignored.
+selected table while preserving comments and other printer entries. It shares
+the native CLI's resolved configuration path. The wrapper creates the local
+directory before Compose mounts it, preventing Docker from creating a
+root-owned bind source. Real machine configuration and local captures remain
+ignored.
+
+An installed native CLI instead uses the platform user-configuration
+directory. Tests and automation can select an isolated directory with
+`ESCPOST_CONFIG_DIR` or an exact file with `printers --config <FILE>`.
 
 Before sending bytes, the CLI shows:
 

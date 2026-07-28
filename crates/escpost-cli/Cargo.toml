@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 axum.workspace = true
 clap.workspace = true
+directories.workspace = true
 escpost = { path = "../escpost" }
 escpost-profiles = { path = "../escpost-profiles" }
 inquire.workspace = true

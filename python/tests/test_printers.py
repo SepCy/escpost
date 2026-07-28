@@ -1,3 +1,5 @@
+import os
+import stat
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
@@ -9,6 +11,7 @@ from unittest.mock import patch
 from escpost.cli import main
 from escpost.printers import (
     DiscoveredUsbPrinter,
+    default_printers_config_path,
     load_usb_printer,
     save_usb_printer,
 )
@@ -120,6 +123,51 @@ class PrinterDiscoveryCliTest(unittest.TestCase):
 
 
 class PrinterConfigTest(unittest.TestCase):
+    def test_config_directory_override_is_shared_with_the_native_cli(self):
+        with (
+            TemporaryDirectory() as config_directory,
+            patch.dict(
+                "os.environ",
+                {"ESCPOST_CONFIG_DIR": config_directory},
+                clear=False,
+            ),
+        ):
+            path = default_printers_config_path()
+
+        self.assertEqual(path, Path(config_directory) / "printers.toml")
+
+    def test_linux_default_respects_xdg_config_home(self):
+        with (
+            TemporaryDirectory() as config_directory,
+            patch("escpost.printers.sys.platform", "linux"),
+            patch("escpost.printers.os.name", "posix"),
+            patch.dict(
+                "os.environ",
+                {
+                    "ESCPOST_CONFIG_DIR": "",
+                    "XDG_CONFIG_HOME": config_directory,
+                },
+                clear=False,
+            ),
+        ):
+            path = default_printers_config_path()
+
+        self.assertEqual(
+            path,
+            Path(config_directory) / "escpost" / "printers.toml",
+        )
+
+    @unittest.skipUnless(os.name == "posix", "Unix file modes apply")
+    def test_first_save_creates_private_configuration(self):
+        with TemporaryDirectory() as local_directory:
+            config = Path(local_directory) / "nested" / "printers.toml"
+
+            save_usb_printer(config, "netum-usb", "NT-5890K", NETUM_PRINTER)
+
+            mode = stat.S_IMODE(config.stat().st_mode)
+
+        self.assertEqual(mode, 0o600)
+
     def test_load_accepts_a_genuinely_unidirectional_printer(self):
         with TemporaryDirectory() as local_directory:
             config = Path(local_directory) / "printers.toml"

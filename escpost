@@ -5,4 +5,9 @@ set -eu
 project_directory=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$project_directory"
 
+# Docker creates a missing bind-mount source as root. Create the selected
+# source as the host user so ESCPost can update it.
+config_directory=${ESCPOST_CONFIG_HOST_DIR:-"$project_directory/local/config"}
+mkdir -p "$config_directory"
+
 exec docker compose run --rm cli "$@"

@@ -29,7 +29,7 @@ escpost proxy        Capture while forwarding to a physical printer
 escpost replay       Resend a captured job
 escpost diff         Compare jobs or renderings
 escpost lint         Find portability and profile problems
-escpost printers     Discover and configure printers
+escpost printers     List available printers and manage discovery or pairing
 escpost calibrate    Compare rendering with physical hardware
 escpost doctor       Diagnose the local ESCPost environment
 ```
@@ -350,6 +350,68 @@ Automated tests substitute only at the physical USB boundary. Ordinary test
 commands must never send bytes to connected printers; hardware output happens
 only through an explicit `escpost print` invocation.
 
+## `escpost printers`
+
+`printers` separates passive inventory from active discovery and connection
+setup:
+
+```text
+escpost printers list [--transport <TRANSPORT>] [--json]
+escpost printers scan [--transport <TRANSPORT>]
+escpost printers pair <CANDIDATE>
+```
+
+### `printers list`
+
+`list` is the normal read-only command. It returns printers that are currently
+usable or already known to the operating system, across every implemented
+transport:
+
+- attached USB printers;
+- paired Bluetooth Classic printers exposed through a supported serial or
+  RFCOMM path;
+- supported, paired Bluetooth Low Energy printers;
+- configured operating-system printer queues; and
+- configured network printers.
+
+The default includes every supported transport. `--transport
+usb|bluetooth|network|spooler` narrows the result without changing its shape.
+The human output identifies the transport and shows the connection fields
+needed by the corresponding print command. `--json` exposes the same snapshot
+for scripts using a versioned schema.
+
+Listing is passive: it does not pair devices, change configuration, send
+ESC/POS data, or start a broad Bluetooth or network search. Reading USB
+descriptors and querying printers already registered with the operating system
+are part of listing.
+
+### `printers scan`
+
+`scan` is reserved for an active search for new or unconfigured devices. It may
+take longer, request operating-system permissions, and find nearby Bluetooth
+or network candidates which are not yet usable. Results are candidates rather
+than silently saved printers. Scanning never pairs a device or sends printable
+ESC/POS probes.
+
+Transport-specific flags and timeouts must be documented when each scanning
+backend is implemented. A broad network scan must remain opt-in.
+
+### `printers pair`
+
+`pair` turns one explicit scan candidate into a connection the operating
+system or ESCPost can use. It is a state-changing operation and may delegate
+to the platform's Bluetooth UI or permission flow. It never infers a candidate
+from a printer name or silently selects one of several matches.
+
+Non-interactive pairing requires every value and authorization needed by the
+platform; otherwise it fails instead of waiting for a prompt. Some BLE
+printers do not use operating-system pairing, so support is defined by the
+transport backend rather than assumed for every Bluetooth device.
+
+The next Rust slice will implement `printers list` for attached USB printers.
+Bluetooth, network, spooler, `scan`, and `pair` support can then be added
+without renaming the inventory command or changing its read-only meaning.
+
 ## `escpost serve`
 
 `serve` listens for future RAW print jobs and displays captured jobs in the
@@ -389,7 +451,7 @@ output, and error conventions where they apply.
 - `diff` compares surfaces, PNGs, traces, or result metadata.
 - `lint` reports portability and profile-specific problems without conflating
   them with invalid input.
-- `printers` discovers and configures transports.
+- `printers` lists usable printers and owns explicit scanning and pairing.
 - `calibrate` renders and physically prints the same version-controlled input.
 - `doctor` reports platform, configuration, transport, and permission
   problems.
@@ -463,6 +525,18 @@ the completed implementation must satisfy.
 | CLI-P06 | Report the selected USB target and transferred byte count without logging receipt contents. |
 | CLI-P07 | Return typed, actionable errors and nonzero status for every failed physical operation. |
 | CLI-P08 | Keep automated tests physically inert by substituting only at the USB boundary. |
+
+### Printer-management requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-M01 | Make `printers list` a passive, transport-neutral inventory of currently usable or known printers. |
+| CLI-M02 | List all supported transports by default and permit an explicit transport filter. |
+| CLI-M03 | Identify each result's transport and expose the connection fields required for printing. |
+| CLI-M04 | Keep machine-readable listing output separate from human output and version its schema. |
+| CLI-M05 | Reserve `printers scan` for active discovery that never pairs, saves, or prints implicitly. |
+| CLI-M06 | Reserve `printers pair` for an explicit state-changing connection workflow which may delegate to the operating system. |
+| CLI-M07 | Never infer a scan or pairing target by display name or choose silently among several candidates. |
 
 ### Web requirements
 

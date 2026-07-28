@@ -336,7 +336,21 @@ rules are specified in `CLI.md`.
 
 ### Printer discovery and diagnostics
 
-- [ ] Preserve existing USB discovery and `local/printers.toml` configuration.
+- [ ] Implement the Rust `escpost printers list` command for attached USB
+      printers and retire the temporary Python `printers discover` name.
+      (`CLI-M01`, `CLI-M03`)
+- [ ] Keep `printers list` read-only and make the output model extensible to
+      Bluetooth, network, and operating-system spooler transports.
+      (`CLI-M01`, `CLI-M02`)
+- [ ] Add `--transport` filtering and versioned `--json` output.
+      (`CLI-M02`, `CLI-M04`)
+- [ ] Keep the existing Python `local/printers.toml` workflow reachable until
+      the calibration commands no longer depend on it.
+- [ ] Add `printers scan` only with the first concrete active Bluetooth or
+      network discovery backend. (`CLI-M05`, `CLI-M07`)
+- [ ] Add `printers pair` with the first transport that needs explicit
+      connection setup, delegating to the operating system where required.
+      (`CLI-M06`, `CLI-M07`)
 - [ ] Add configured RAW network-printer targets.
 - [ ] Add a safe direct host-and-port reachability check.
 - [ ] Add profile-controlled status and identity probes that do not print.
@@ -444,7 +458,8 @@ escpost lint receipt.bin \
 
 ### Phase 4: hardware loop
 
-- [ ] Port printer configuration and discovery to the Rust CLI.
+- [ ] Port passive printer listing to the Rust CLI, then add scanning and
+      pairing only for transports that need them.
 - [ ] Add replay to USB and RAW network printers.
 - [ ] Add transparent proxy mode with response forwarding.
 - [ ] Port calibration commands and then retire the Click CLI.

@@ -204,6 +204,12 @@ error.
 If several sheets exist and no sheet was selected, ESCPost fails and recommends
 `--output-dir`. It never discards later sheets or concatenates PNG files.
 
+An explicit file destination is overwritten without prompting when rendering
+succeeds. This is normal transformation-command behavior and keeps automation
+predictable; `--force` is not required. ESCPost must finish rendering before
+it replaces an existing output, so a render failure leaves the previous file
+untouched.
+
 `-o -` cannot be combined with `--web`, `--browser`, or `--watch`. A web
 process remains alive, so a downstream pipeline would not receive a timely
 end-of-file.
@@ -214,9 +220,10 @@ end-of-file.
 the manifest only after all PNG files are complete. Consumers can therefore
 treat a visible manifest as the ordered list of completed output.
 
-Existing unrelated files must not be deleted. Overwrite and stale-sheet
-handling must be finalized and documented before the Rust command replaces the
-current developer workflow.
+The command creates the directory when necessary and overwrites generated
+files with the same names. It does not delete unrelated files or stale sheets
+left by an earlier render. The manifest is the authoritative list for the
+current result, so consumers ignore any unlisted PNGs.
 
 ### Web output
 
@@ -376,6 +383,7 @@ the completed implementation must satisfy.
 | CLI-R05 | Write the all-sheet manifest only after every referenced PNG is complete. |
 | CLI-R06 | Allow persisted PNG and web destinations in the same invocation. |
 | CLI-R07 | Reject stdout PNG output combined with a long-running web mode. |
+| CLI-R08 | Overwrite explicit and conflicting generated outputs without prompting while preserving unrelated files. |
 
 ### Web requirements
 

@@ -113,8 +113,9 @@ input.
 - [ ] Protect terminal stdout and keep piped PNG bytes exact. (`CLI-R04`)
 - [ ] Write deterministic sheet names and publish the manifest only after all
       PNGs succeed. (`CLI-R05`)
-- [ ] Finalize safe overwrite and stale-sheet behavior, then record it in
-      `CLI.md`.
+- [ ] Overwrite explicit and conflicting generated outputs without prompting,
+      render before replacing an existing file, and preserve unrelated or
+      stale files. (`CLI-R08`)
 
 ### Rust web output
 

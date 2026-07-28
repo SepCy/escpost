@@ -35,6 +35,16 @@ pub(crate) fn load(path: &Path, format: InputFormat) -> Result<LoadedSource, Cli
     })
 }
 
+pub(crate) fn watch_path(path: &Path) -> Result<PathBuf, CliError> {
+    if path == Path::new("-") {
+        return Err(CliError::WatchStdin);
+    }
+    if path.is_dir() {
+        return Ok(path.join("input.hex"));
+    }
+    Ok(path.to_path_buf())
+}
+
 fn load_stdin(format: InputFormat) -> Result<LoadedSource, CliError> {
     let mut bytes = Vec::new();
     io::stdin()

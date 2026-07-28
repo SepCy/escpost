@@ -6,6 +6,8 @@ mod output;
 mod profiles;
 mod render;
 mod source;
+mod watch;
+mod web;
 
 use std::process::ExitCode;
 
@@ -14,9 +16,9 @@ use clap::Parser;
 use crate::cli::{Cli, Command};
 use crate::error::CliError;
 
-pub fn main() -> ExitCode {
+pub async fn main() -> ExitCode {
     let cli = Cli::parse();
-    match run(cli) {
+    match run(cli).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("error: {error}");
@@ -25,8 +27,8 @@ pub fn main() -> ExitCode {
     }
 }
 
-fn run(cli: Cli) -> Result<(), CliError> {
+async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
-        Command::Render(arguments) => render::run(arguments, cli.non_interactive),
+        Command::Render(arguments) => render::run(arguments, cli.non_interactive).await,
     }
 }

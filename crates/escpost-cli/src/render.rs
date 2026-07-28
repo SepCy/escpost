@@ -7,9 +7,14 @@ use crate::cli::RenderArgs;
 use crate::error::CliError;
 use crate::{output, profiles, source};
 
-pub(crate) fn run(arguments: RenderArgs, non_interactive: bool) -> Result<(), CliError> {
-    if arguments.output.is_none() && arguments.output_dir.is_none() {
+pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<(), CliError> {
+    let web_enabled =
+        arguments.web || arguments.browser || arguments.web_listen.is_some() || arguments.watch;
+    if arguments.output.is_none() && arguments.output_dir.is_none() && !web_enabled {
         return Err(CliError::MissingOutput);
+    }
+    if arguments.output.as_deref() == Some(Path::new("-")) && web_enabled {
+        return Err(CliError::StdoutWithWeb);
     }
 
     let input = source::load(&arguments.source, arguments.format)?;
@@ -22,11 +27,29 @@ pub(crate) fn run(arguments: RenderArgs, non_interactive: bool) -> Result<(), Cl
     let rendered =
         render(&input.bytes, profile).map_err(|error| CliError::Render(error.to_string()))?;
 
-    if let Some(output_path) = arguments.output {
-        output::write_single(&rendered, &output_path, arguments.sheet)?;
+    if let Some(output_path) = &arguments.output {
+        output::write_single(&rendered, output_path, arguments.sheet)?;
     }
-    if let Some(output_directory) = arguments.output_dir {
-        output::write_all(&rendered, &output_directory)?;
+    if let Some(output_directory) = &arguments.output_dir {
+        output::write_all(&rendered, output_directory)?;
+    }
+    if web_enabled {
+        let listener = crate::web::bind(arguments.web_listen).await?;
+        let jobs = crate::web::JobStore::with_render(rendered);
+        if arguments.watch {
+            crate::watch::start(
+                crate::watch::WatchConfig {
+                    source: arguments.source,
+                    format: arguments.format,
+                    profile: profile_id,
+                    output: arguments.output,
+                    output_dir: arguments.output_dir,
+                    sheet: arguments.sheet,
+                },
+                jobs.clone(),
+            )?;
+        }
+        crate::web::serve(listener, jobs, arguments.browser).await?;
     }
     Ok(())
 }

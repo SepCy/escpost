@@ -75,4 +75,31 @@ pub(crate) enum CliError {
 
     #[error("refusing to write binary PNG data to an interactive terminal")]
     BinaryOutputToTerminal,
+
+    #[error("PNG stdout cannot be combined with a long-running web viewer")]
+    StdoutWithWeb,
+
+    #[error("could not bind web viewer to {address}: {source}")]
+    BindWeb {
+        address: std::net::SocketAddr,
+        source: std::io::Error,
+    },
+
+    #[error("no loopback web port from 9000 through 9099 is available")]
+    NoAutomaticWebPort,
+
+    #[error("web viewer failed: {0}")]
+    ServeWeb(std::io::Error),
+
+    #[error("could not open the default browser: {0}")]
+    OpenBrowser(String),
+
+    #[error("watch mode requires a filesystem source, not stdin")]
+    WatchStdin,
+
+    #[error("could not inspect watched source {path}: {source}")]
+    InspectWatchedSource {
+        path: PathBuf,
+        source: std::io::Error,
+    },
 }

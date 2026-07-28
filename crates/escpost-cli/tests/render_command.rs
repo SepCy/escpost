@@ -275,6 +275,104 @@ fn explicit_output_is_replaced_only_after_rendering_succeeds() {
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
 }
 
+#[test]
+fn empty_job_writes_an_empty_all_sheet_manifest() {
+    let temporary_directory = temporary_directory("empty-job");
+    let input_path = temporary_directory.join("empty.bin");
+    let output_directory = temporary_directory.join("rendered");
+    fs::write(&input_path, []).expect("the empty fixture should be writable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            input_path.to_str().expect("the input path should be UTF-8"),
+            "--profile",
+            "REFERENCE",
+            "--output-dir",
+            output_directory
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should start");
+
+    assert!(
+        output.status.success(),
+        "render failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(output_directory.join("manifest.json"))
+            .expect("the manifest should exist"),
+        "{\n  \"sheets\": []\n}\n"
+    );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn single_png_destination_rejects_an_unselected_multi_sheet_job() {
+    let temporary_directory = temporary_directory("multi-sheet-error");
+    let output_path = temporary_directory.join("receipt.png");
+    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            case_directory
+                .to_str()
+                .expect("the case path should be UTF-8"),
+            "--output",
+            output_path
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should start");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("single-PNG output requires exactly one sheet")
+    );
+    assert!(!output_path.exists());
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn non_interactive_mode_reports_a_missing_profile_without_prompting() {
+    let temporary_directory = temporary_directory("missing-profile");
+    let input_path = temporary_directory.join("receipt.bin");
+    let output_path = temporary_directory.join("receipt.png");
+    fs::write(&input_path, b"Profile\n").expect("the fixture should be writable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            input_path.to_str().expect("the input path should be UTF-8"),
+            "--output",
+            output_path
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should finish without prompting");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains(
+            "printer profile is required; pass --profile REFERENCE"
+        )
+    );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
 fn render_file(input_path: &Path, output_path: &Path) {
     let output = render_process(input_path, output_path);
 

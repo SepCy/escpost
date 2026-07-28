@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -49,6 +50,22 @@ pub(crate) struct RenderArgs {
     /// Select one one-based sheet for single-PNG output.
     #[arg(long, conflicts_with = "output_dir")]
     pub(crate) sheet: Option<usize>,
+
+    /// Start the local web viewer and keep running.
+    #[arg(long)]
+    pub(crate) web: bool,
+
+    /// Start the web viewer and open it in the default browser.
+    #[arg(long)]
+    pub(crate) browser: bool,
+
+    /// Exact address for the web viewer.
+    #[arg(long)]
+    pub(crate) web_listen: Option<SocketAddr>,
+
+    /// Rerender a filesystem source whenever it changes.
+    #[arg(long)]
+    pub(crate) watch: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]

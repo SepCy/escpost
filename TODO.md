@@ -344,12 +344,16 @@ rules are specified in `CLI.md`.
       the platform-native user configuration directory. (`CLI-M08`)
 - [x] Show configured USB names and profiles in passive inventory without
       creating configuration files. (`CLI-M09`)
+- [x] Merge connected and configured records, retain unavailable printers, and
+      apply the stable status-first display-name order. (`CLI-M10`)
 - [x] Isolate Docker checkout configuration at `local/config/printers.toml`
       instead of mounting a host installation's potentially different data.
 - [ ] Extend `printers list` to Bluetooth, network, and operating-system
       spooler transports as their backends are implemented. (`CLI-M02`)
 - [ ] Add `--transport` filtering and versioned `--json` output.
       (`CLI-M02`, `CLI-M04`)
+- [ ] Add `--status connected|unavailable` filtering when inventories become
+      large enough to need it; keep sorting non-configurable.
 - [x] Keep the existing Python configuration workflow on the same resolved
       `printers.toml` until calibration no longer depends on it.
 - [ ] Retire the temporary Python `printers discover` configuration writer

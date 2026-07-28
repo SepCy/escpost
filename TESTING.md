@@ -362,7 +362,9 @@ descriptors to exclude non-printer and non-bulk endpoints. The connected
 printer smoke check verifies the `nusb` enumeration path without claiming an
 interface or printing paper. Configuration tests verify explicit-path and
 environment precedence, Linux/XDG platform resolution, configured-name
-matching, and the absence of filesystem writes during passive listing.
+matching, unavailable saved printers, connected/configured de-duplication,
+status-first display-name ordering, and the absence of filesystem writes
+during passive listing.
 
 ## Rust direct-print smoke tests
 

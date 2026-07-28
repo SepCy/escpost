@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 
 use crate::cli::{PrintersArgs, PrintersCommand};
-use crate::configuration::{self, PrinterConfiguration};
+use crate::configuration::{self, ConfiguredUsbPrinter, PrinterConfiguration};
 use crate::error::CliError;
 use nusb::MaybeFuture;
 use nusb::descriptors::{ConfigurationDescriptor, TransferType};
@@ -30,6 +30,16 @@ struct UsbPrinterInterface {
     in_endpoints: Vec<u8>,
 }
 
+struct MergedUsbInventory {
+    connected: Vec<ConnectedUsbPrinter>,
+    unavailable_configuration_indexes: Vec<usize>,
+}
+
+struct ConnectedUsbPrinter {
+    printer: UsbPrinter,
+    configuration_index: Option<usize>,
+}
+
 trait UsbInventory {
     fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError>;
 }
@@ -49,16 +59,112 @@ fn execute(
     configuration: &PrinterConfiguration,
     output: &mut impl Write,
 ) -> Result<(), CliError> {
-    let printers = inventory.list()?;
-    if printers.is_empty() {
+    let listing = merge_usb_inventory(inventory.list()?, configuration);
+    if listing.connected.is_empty() && listing.unavailable_configuration_indexes.is_empty() {
         writeln!(output, "No usable printers found.").map_err(CliError::WriteHumanOutput)?;
         return Ok(());
     }
 
-    for (index, printer) in printers.iter().enumerate() {
-        write_printer(output, index + 1, printer, configuration)?;
+    for (index, connected) in listing.connected.iter().enumerate() {
+        let configured = connected
+            .configuration_index
+            .map(|index| &configuration.usb_printers()[index]);
+        write_printer(output, index + 1, &connected.printer, configured)?;
+    }
+    for (offset, configuration_index) in listing
+        .unavailable_configuration_indexes
+        .into_iter()
+        .enumerate()
+    {
+        write_unavailable_printer(
+            output,
+            listing.connected.len() + offset + 1,
+            &configuration.usb_printers()[configuration_index],
+        )?;
     }
     Ok(())
+}
+
+fn merge_usb_inventory(
+    mut printers: Vec<UsbPrinter>,
+    configuration: &PrinterConfiguration,
+) -> MergedUsbInventory {
+    // Assign ambiguous saved identities by stable USB location before sorting
+    // for display. This keeps one saved alias from naming several identical
+    // connected interfaces when the configuration has no serial number.
+    printers.sort_by(|left, right| {
+        (
+            &left.bus,
+            left.address,
+            left.interface_number,
+            left.vendor_id,
+            left.product_id,
+        )
+            .cmp(&(
+                &right.bus,
+                right.address,
+                right.interface_number,
+                right.vendor_id,
+                right.product_id,
+            ))
+    });
+    let mut matched_configurations = vec![false; configuration.usb_printers().len()];
+    let mut connected = Vec::with_capacity(printers.len());
+    for printer in printers {
+        let matching_configurations = configuration
+            .usb_printers()
+            .iter()
+            .enumerate()
+            .filter(|(_, configured)| configuration_matches(&printer, configured))
+            .collect::<Vec<_>>();
+        let primary_configuration = matching_configurations
+            .iter()
+            .filter(|(index, _)| !matched_configurations[*index])
+            .min_by(|(_, left), (_, right)| compare_display_names(&left.name, &right.name))
+            .map(|(index, _)| *index);
+        if primary_configuration.is_some() {
+            for (configuration_index, _) in matching_configurations {
+                matched_configurations[configuration_index] = true;
+            }
+        }
+        connected.push(ConnectedUsbPrinter {
+            printer,
+            configuration_index: primary_configuration,
+        });
+    }
+    connected.sort_by_cached_key(|connected| {
+        let configured = connected
+            .configuration_index
+            .map(|index| &configuration.usb_printers()[index]);
+        let display_name = connected_display_name(&connected.printer, configured);
+        (
+            display_name.to_lowercase(),
+            display_name,
+            connected.printer.bus.clone(),
+            connected.printer.address,
+            connected.printer.interface_number,
+            connected.printer.vendor_id,
+            connected.printer.product_id,
+        )
+    });
+    let mut unavailable_configuration_indexes = configuration
+        .usb_printers()
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !matched_configurations[*index])
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
+    unavailable_configuration_indexes.sort_by(|left, right| {
+        compare_display_names(
+            &configuration.usb_printers()[*left].name,
+            &configuration.usb_printers()[*right].name,
+        )
+    });
+
+    MergedUsbInventory {
+        connected,
+        unavailable_configuration_indexes,
+    }
 }
 
 struct NusbInventory;
@@ -105,22 +211,6 @@ impl UsbInventory for NusbInventory {
             }
         }
 
-        printers.sort_by(|left, right| {
-            (
-                &left.bus,
-                left.address,
-                left.interface_number,
-                left.vendor_id,
-                left.product_id,
-            )
-                .cmp(&(
-                    &right.bus,
-                    right.address,
-                    right.interface_number,
-                    right.vendor_id,
-                    right.product_id,
-                ))
-        });
         Ok(printers)
     }
 }
@@ -136,15 +226,22 @@ fn write_printer(
     output: &mut impl Write,
     number: usize,
     printer: &UsbPrinter,
-    configuration: &PrinterConfiguration,
+    configured: Option<&ConfiguredUsbPrinter>,
 ) -> Result<(), CliError> {
-    let product = printer.product.as_deref().unwrap_or("USB printer");
-    let manufacturer = printer
-        .manufacturer
-        .as_deref()
-        .map_or(String::new(), |value| format!(" ({value})"));
+    let model = usb_printer_label(printer);
 
-    writeln!(output, "[{number}] {product}{manufacturer}").map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "[{number}] {}",
+        configured.map_or(model.as_str(), |printer| &printer.name)
+    )
+    .map_err(CliError::WriteHumanOutput)?;
+    writeln!(output, "    status: connected").map_err(CliError::WriteHumanOutput)?;
+    if let Some(configured) = configured {
+        writeln!(output, "    model: {model}").map_err(CliError::WriteHumanOutput)?;
+        writeln!(output, "    profile: {}", configured.profile)
+            .map_err(CliError::WriteHumanOutput)?;
+    }
     writeln!(output, "    transport: usb").map_err(CliError::WriteHumanOutput)?;
     writeln!(
         output,
@@ -170,24 +267,69 @@ fn write_printer(
     if let Some(serial_number) = &printer.serial_number {
         writeln!(output, "    serial: {serial_number}").map_err(CliError::WriteHumanOutput)?;
     }
-    for configured in configuration.usb_printers().iter().filter(|configured| {
-        configured.vendor_id == printer.vendor_id
-            && configured.product_id == printer.product_id
-            && configured.interface_number == printer.interface_number
-            && printer.out_endpoints.contains(&configured.out_endpoint)
-            && configured
-                .serial_number
-                .as_ref()
-                .is_none_or(|serial| printer.serial_number.as_ref() == Some(serial))
-    }) {
-        writeln!(
-            output,
-            "    configured as: {}; profile: {}",
-            configured.name, configured.profile
-        )
+    Ok(())
+}
+
+fn write_unavailable_printer(
+    output: &mut impl Write,
+    number: usize,
+    printer: &ConfiguredUsbPrinter,
+) -> Result<(), CliError> {
+    writeln!(output, "[{number}] {}", printer.name).map_err(CliError::WriteHumanOutput)?;
+    writeln!(output, "    status: unavailable").map_err(CliError::WriteHumanOutput)?;
+    writeln!(output, "    profile: {}", printer.profile).map_err(CliError::WriteHumanOutput)?;
+    writeln!(output, "    transport: usb").map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "    usb: {:04x}:{:04x}; interface {}",
+        printer.vendor_id, printer.product_id, printer.interface_number
+    )
+    .map_err(CliError::WriteHumanOutput)?;
+    write!(output, "    endpoints: out {:#04x}", printer.out_endpoint)
         .map_err(CliError::WriteHumanOutput)?;
+    if let Some(in_endpoint) = printer.in_endpoint {
+        write!(output, "; in {in_endpoint:#04x}").map_err(CliError::WriteHumanOutput)?;
+    }
+    writeln!(output).map_err(CliError::WriteHumanOutput)?;
+    if let Some(serial_number) = &printer.serial_number {
+        writeln!(output, "    serial: {serial_number}").map_err(CliError::WriteHumanOutput)?;
     }
     Ok(())
+}
+
+fn configuration_matches(printer: &UsbPrinter, configured: &ConfiguredUsbPrinter) -> bool {
+    configured.vendor_id == printer.vendor_id
+        && configured.product_id == printer.product_id
+        && configured.interface_number == printer.interface_number
+        && printer.out_endpoints.contains(&configured.out_endpoint)
+        && configured
+            .serial_number
+            .as_ref()
+            .is_none_or(|serial| printer.serial_number.as_ref() == Some(serial))
+}
+
+fn connected_display_name(
+    printer: &UsbPrinter,
+    configured: Option<&ConfiguredUsbPrinter>,
+) -> String {
+    configured.map_or_else(
+        || usb_printer_label(printer),
+        |printer| printer.name.clone(),
+    )
+}
+
+fn compare_display_names(left: &str, right: &str) -> std::cmp::Ordering {
+    left.to_lowercase()
+        .cmp(&right.to_lowercase())
+        .then_with(|| left.cmp(right))
+}
+
+fn usb_printer_label(printer: &UsbPrinter) -> String {
+    let product = printer.product.as_deref().unwrap_or("USB printer");
+    printer.manufacturer.as_deref().map_or_else(
+        || product.to_owned(),
+        |value| format!("{product} ({value})"),
+    )
 }
 
 fn format_endpoints(endpoints: &[u8]) -> String {
@@ -266,6 +408,7 @@ mod tests {
             String::from_utf8(output).expect("the listing should be UTF-8"),
             "\
 [1] USB Portable Printer (YICHIP3121)
+    status: connected
     transport: usb
     usb: 0416:5011; bus 3 address 57; interface 0
     endpoints: out 0x01; in 0x81
@@ -295,7 +438,44 @@ mod tests {
     }
 
     #[test]
-    fn list_identifies_a_connected_printer_by_its_configured_name() {
+    fn configured_printer_is_listed_when_it_is_unavailable() {
+        let mut inventory = FixedInventory {
+            printers: Vec::new(),
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+profile = \"NT-5890K\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+in_endpoint = \"0x81\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] netum-usb
+    status: unavailable
+    profile: NT-5890K
+    transport: usb
+    usb: 0416:5011; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+"
+        );
+    }
+
+    #[test]
+    fn connected_configured_printer_is_merged_into_one_named_entry() {
         let mut inventory = FixedInventory {
             printers: vec![UsbPrinter {
                 vendor_id: 0x0416,
@@ -328,11 +508,146 @@ in_endpoint = \"0x81\"
 
         execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
 
-        assert!(
-            String::from_utf8(output)
-                .expect("the listing should be UTF-8")
-                .contains("configured as: netum-usb; profile: NT-5890K\n")
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] netum-usb
+    status: connected
+    model: USB Portable Printer
+    profile: NT-5890K
+    transport: usb
+    usb: 0416:5011; bus 3 address 57; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+"
         );
+    }
+
+    #[test]
+    fn connected_printers_sort_first_then_each_status_sorts_by_display_name() {
+        let mut inventory = FixedInventory {
+            printers: vec![
+                UsbPrinter {
+                    vendor_id: 0x1000,
+                    product_id: 0x0001,
+                    bus: "1".to_owned(),
+                    address: 1,
+                    manufacturer: None,
+                    product: Some("Zed Model".to_owned()),
+                    serial_number: Some("CONNECTED".to_owned()),
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: Vec::new(),
+                },
+                UsbPrinter {
+                    vendor_id: 0x2000,
+                    product_id: 0x0002,
+                    bus: "2".to_owned(),
+                    address: 2,
+                    manufacturer: None,
+                    product: Some("Alpha Model".to_owned()),
+                    serial_number: None,
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: Vec::new(),
+                },
+            ],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[Zulu]
+transport = \"usb\"
+profile = \"CONNECTED\"
+vendor_id = \"0x1000\"
+product_id = \"0x0001\"
+serial_number = \"CONNECTED\"
+interface_number = 0
+out_endpoint = \"0x01\"
+
+[charlie]
+transport = \"usb\"
+profile = \"OFFLINE-C\"
+vendor_id = \"0x3000\"
+product_id = \"0x0003\"
+interface_number = 0
+out_endpoint = \"0x01\"
+
+[Bravo]
+transport = \"usb\"
+profile = \"OFFLINE-B\"
+vendor_id = \"0x4000\"
+product_id = \"0x0004\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+
+        let headings = String::from_utf8(output)
+            .expect("the listing should be UTF-8")
+            .lines()
+            .filter(|line| line.starts_with('['))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            headings,
+            vec!["[1] Alpha Model", "[2] Zulu", "[3] Bravo", "[4] charlie",]
+        );
+    }
+
+    #[test]
+    fn one_saved_identity_names_at_most_one_connected_interface() {
+        let mut inventory = FixedInventory {
+            printers: vec![
+                UsbPrinter {
+                    vendor_id: 0x1000,
+                    product_id: 0x0001,
+                    bus: "2".to_owned(),
+                    address: 2,
+                    manufacturer: None,
+                    product: Some("Second Model".to_owned()),
+                    serial_number: None,
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: Vec::new(),
+                },
+                UsbPrinter {
+                    vendor_id: 0x1000,
+                    product_id: 0x0001,
+                    bus: "1".to_owned(),
+                    address: 1,
+                    manufacturer: None,
+                    product: Some("First Model".to_owned()),
+                    serial_number: None,
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: Vec::new(),
+                },
+            ],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[shared-identity]
+transport = \"usb\"
+profile = \"GENERIC\"
+vendor_id = \"0x1000\"
+product_id = \"0x0001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert_eq!(output.matches("] shared-identity\n").count(), 1);
+        assert_eq!(output.matches("status: connected").count(), 2);
+        assert!(!output.contains("status: unavailable"));
     }
 
     #[test]

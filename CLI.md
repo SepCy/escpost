@@ -392,8 +392,17 @@ The default includes every supported transport. `--transport
 usb|bluetooth|network|spooler` narrows the result without changing its shape.
 The human output identifies the transport and shows the connection fields
 needed by the corresponding print command. When a connected USB interface
-matches a saved entry, it also shows the developer-assigned name and profile.
-`--json` exposes the same snapshot for scripts using a versioned schema.
+matches a saved entry, the two records merge into one connected result under
+the developer-assigned name. Saved entries without a current transport match
+remain visible with `status: unavailable`.
+
+Connected printers appear before unavailable printers. Within each status
+group, results sort case-insensitively by display name with stable
+transport-specific tie-breakers. Sorting is intentionally not configurable.
+Future `--status` and `--transport` filters narrow the same ordered inventory;
+they do not define alternate sort modes. `--json` exposes the same snapshot
+for scripts using a versioned schema, allowing callers to apply their own
+sorting.
 
 Listing is passive: it does not pair devices, change configuration, send
 ESC/POS data, or start a broad Bluetooth or network search. Reading USB
@@ -554,6 +563,7 @@ the completed implementation must satisfy.
 | CLI-M07 | Never infer a scan or pairing target by display name or choose silently among several candidates. |
 | CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
 | CLI-M09 | Keep passive listing free of configuration writes while showing names that match connected printers. |
+| CLI-M10 | Merge discovered and configured printers once, list connected before unavailable, and sort each status group by display name. |
 
 ### Web requirements
 

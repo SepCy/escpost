@@ -21,6 +21,7 @@ pub(crate) struct ConfiguredUsbPrinter {
     pub(crate) serial_number: Option<String>,
     pub(crate) interface_number: u8,
     pub(crate) out_endpoint: u8,
+    pub(crate) in_endpoint: Option<u8>,
 }
 
 impl PrinterConfiguration {
@@ -44,6 +45,7 @@ impl PrinterConfiguration {
                 serial_number: optional_string(table, "serial_number", &name)?,
                 interface_number: required_integer(table, "interface_number", &name)?,
                 out_endpoint: required_integer(table, "out_endpoint", &name)?,
+                in_endpoint: optional_integer(table, "in_endpoint", &name)?,
                 name,
             });
         }
@@ -139,6 +141,16 @@ where
     .ok_or_else(|| format!("printer {printer:?} field {field:?} must be a non-negative integer"))?;
 
     T::try_from(integer).map_err(|_| format!("printer {printer:?} field {field:?} is out of range"))
+}
+
+fn optional_integer<T>(table: &toml::Table, field: &str, printer: &str) -> Result<Option<T>, String>
+where
+    T: TryFrom<u64>,
+{
+    table
+        .get(field)
+        .map(|_| required_integer(table, field, printer).map(Some))
+        .unwrap_or(Ok(None))
 }
 
 fn parse_integer_string(value: &str) -> Option<u64> {

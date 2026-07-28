@@ -83,9 +83,15 @@ transfer. It reads `printers.toml` only to identify matching configured names.
 An explicit `--config` file takes precedence over `ESCPOST_CONFIG_DIR`, which
 takes precedence over the platform user-configuration directory resolved by
 Rust's `directories` crate. A missing implicit file is an empty configuration,
-and this read-only path never creates a directory. Descriptor parsing,
-configuration matching, and human output are tested behind the USB inventory
-boundary.
+and this read-only path never creates a directory.
+
+Inventory merges discovered interfaces with saved configuration by USB
+identity. A matched printer is one connected named entry; unmatched discovered
+interfaces remain connected unnamed entries; unmatched configuration becomes
+unavailable entries. Connected entries sort first, then unavailable entries,
+and each group sorts case-insensitively by display name with stable USB
+tie-breakers. Descriptor parsing, configuration matching, merging, ordering,
+and human output are tested behind the USB inventory boundary.
 
 The Docker wrapper creates and mounts `local/config` at the container user's
 normal ESCPost configuration path. This isolates configuration used by a

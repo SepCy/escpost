@@ -99,9 +99,13 @@ List connected USB printer-class devices:
 ./escpost printers list
 ```
 
-The list is read-only and reports the transport, VID/PID, USB location,
-interface, bulk endpoints, cached identity strings, and matching configured
-names. It does not claim the interface, send data, or create configuration.
+The list is read-only and combines connected USB interfaces with saved
+printers that are currently unavailable. Connected printers appear first;
+each status group is alphabetical by display name. A connected saved printer
+appears once under its configured name and includes its model, profile,
+transport, VID/PID, USB location, interface, endpoints, and cached identity
+strings. Listing does not claim an interface, send data, or create
+configuration.
 
 Native installations keep `printers.toml` in the platform user-configuration
 directory. On Linux this is normally

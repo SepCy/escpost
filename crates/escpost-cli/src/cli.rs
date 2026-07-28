@@ -48,7 +48,7 @@ pub(crate) struct RenderArgs {
     pub(crate) output_dir: Option<PathBuf>,
 
     /// Select one one-based sheet for single-PNG output.
-    #[arg(long, conflicts_with = "output_dir")]
+    #[arg(long, conflicts_with = "output_dir", requires = "output")]
     pub(crate) sheet: Option<usize>,
 
     /// Start the local web viewer and keep running.

@@ -35,6 +35,10 @@ fn raw_file_renders_one_png_with_an_explicit_profile() {
         &fs::read(&output_path).expect("the output PNG should exist")[..8],
         b"\x89PNG\r\n\x1a\n"
     );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Profile: REFERENCE"),
+        "file output should report the profile on stderr"
+    );
 
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
 }
@@ -55,6 +59,86 @@ fn hex_extension_decodes_readable_fixture_bytes() {
     assert_eq!(
         fs::read(hex_output).expect("the hex rendering should exist"),
         fs::read(binary_output).expect("the binary rendering should exist")
+    );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn explicit_hex_format_does_not_depend_on_the_filename_extension() {
+    let temporary_directory = temporary_directory("explicit-hex");
+    let binary_input = temporary_directory.join("receipt.bin");
+    let readable_input = temporary_directory.join("receipt.data");
+    let binary_output = temporary_directory.join("binary.png");
+    let readable_output = temporary_directory.join("readable.png");
+    fs::write(&binary_input, b"Hi\n").expect("the binary fixture should be writable");
+    fs::write(&readable_input, "48 69 0a\n").expect("the hex fixture should be writable");
+
+    render_file(&binary_input, &binary_output);
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            readable_input
+                .to_str()
+                .expect("the input path should be UTF-8"),
+            "--format",
+            "hex",
+            "--profile",
+            "REFERENCE",
+            "--output",
+            readable_output
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should start");
+
+    assert!(
+        output.status.success(),
+        "render failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read(readable_output).expect("the explicit hex rendering should exist"),
+        fs::read(binary_output).expect("the binary rendering should exist")
+    );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn option_terminator_allows_a_source_name_that_starts_with_a_hyphen() {
+    let temporary_directory = temporary_directory("option-terminator");
+    let input_path = temporary_directory.join("-receipt.bin");
+    let output_path = temporary_directory.join("receipt.png");
+    fs::write(&input_path, b"Options\n").expect("the input fixture should be writable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .current_dir(&temporary_directory)
+        .args([
+            "render",
+            "--profile",
+            "REFERENCE",
+            "--output",
+            output_path
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+            "--",
+            "-receipt.bin",
+        ])
+        .output()
+        .expect("the escpost command should start");
+
+    assert!(
+        output.status.success(),
+        "render failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        &fs::read(output_path).expect("the output PNG should exist")[..8],
+        b"\x89PNG\r\n\x1a\n"
     );
 
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
@@ -91,6 +175,75 @@ fn case_directory_supplies_input_and_profile_metadata() {
         &fs::read(output_path).expect("the case PNG should exist")[..8],
         b"\x89PNG\r\n\x1a\n"
     );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn explicit_profile_takes_precedence_over_case_metadata() {
+    let temporary_directory = temporary_directory("profile-precedence");
+    let output_path = temporary_directory.join("case.png");
+    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/cases/text/ascii-fonts-and-styles");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            case_directory
+                .to_str()
+                .expect("the case path should be UTF-8"),
+            "--profile",
+            "NT-5890K",
+            "--output",
+            output_path
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should start");
+
+    assert!(
+        output.status.success(),
+        "render failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("Profile: NT-5890K"),
+        "the explicit profile should win over case metadata"
+    );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn arbitrary_directory_is_not_treated_as_an_escpos_source() {
+    let temporary_directory = temporary_directory("arbitrary-directory");
+    let output_path = temporary_directory.join("receipt.png");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            temporary_directory
+                .to_str()
+                .expect("the input path should be UTF-8"),
+            "--profile",
+            "REFERENCE",
+            "--output",
+            output_path
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("directory is not a recognized ESCPost case")
+    );
+    assert!(!output_path.exists());
 
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
 }
@@ -312,6 +465,25 @@ fn empty_job_writes_an_empty_all_sheet_manifest() {
 }
 
 #[test]
+fn empty_job_cannot_be_written_as_a_single_png() {
+    let temporary_directory = temporary_directory("empty-single-output");
+    let input_path = temporary_directory.join("empty.bin");
+    let output_path = temporary_directory.join("receipt.png");
+    fs::write(&input_path, []).expect("the empty fixture should be writable");
+
+    let output = render_process(&input_path, &output_path);
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("single-PNG output requires exactly one sheet")
+    );
+    assert!(!output_path.exists());
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
 fn single_png_destination_rejects_an_unselected_multi_sheet_job() {
     let temporary_directory = temporary_directory("multi-sheet-error");
     let output_path = temporary_directory.join("receipt.png");
@@ -365,9 +537,86 @@ fn non_interactive_mode_reports_a_missing_profile_without_prompting() {
 
     assert!(!output.status.success());
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains(
-            "printer profile is required; pass --profile REFERENCE"
-        )
+        String::from_utf8_lossy(&output.stderr)
+            .contains("printer profile is required; pass --profile REFERENCE")
+    );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn piped_stdin_policy_reports_a_missing_profile_without_an_explicit_flag() {
+    let temporary_directory = temporary_directory("effective-non-interactive");
+    let output_path = temporary_directory.join("receipt.png");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            "-",
+            "--output",
+            output_path
+                .to_str()
+                .expect("the output path should be UTF-8"),
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("the escpost command should finish without prompting");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("printer profile is required; pass --profile REFERENCE")
+    );
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn sheet_selection_requires_a_single_png_destination() {
+    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            case_directory
+                .to_str()
+                .expect("the case path should be UTF-8"),
+            "--sheet",
+            "2",
+            "--web",
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--output"));
+}
+
+#[test]
+fn output_directory_overwrites_current_files_but_preserves_stale_sheets() {
+    let temporary_directory = temporary_directory("directory-overwrite");
+    let output_directory = temporary_directory.join("rendered");
+    let multi_sheet_case = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+    render_to_directory(&multi_sheet_case, &output_directory);
+    let stale_sheet = fs::read(output_directory.join("sheet-002.png"))
+        .expect("the second sheet should initially exist");
+
+    let input_path = temporary_directory.join("replacement.bin");
+    fs::write(&input_path, b"Replacement\n").expect("the replacement input should be writable");
+    render_to_directory(&input_path, &output_directory);
+
+    assert_eq!(
+        fs::read_to_string(output_directory.join("manifest.json"))
+            .expect("the replacement manifest should exist"),
+        "{\n  \"sheets\": [\n    \"sheet-001.png\"\n  ]\n}\n"
+    );
+    assert_eq!(
+        fs::read(output_directory.join("sheet-002.png"))
+            .expect("the stale sheet should be preserved"),
+        stale_sheet
     );
 
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
@@ -398,6 +647,28 @@ fn render_process(input_path: &Path, output_path: &Path) -> std::process::Output
         ])
         .output()
         .expect("the escpost command should start")
+}
+
+fn render_to_directory(input_path: &Path, output_directory: &Path) {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            input_path.to_str().expect("the input path should be UTF-8"),
+            "--profile",
+            "REFERENCE",
+            "--output-dir",
+            output_directory
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should start");
+    assert!(
+        output.status.success(),
+        "render failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 fn temporary_directory(case: &str) -> PathBuf {

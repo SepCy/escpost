@@ -62,6 +62,68 @@ fn web_mode_exposes_ordered_sheet_metadata_and_png_bytes() {
 }
 
 #[test]
+fn empty_job_web_mode_exposes_an_ordered_empty_sheet_list() {
+    let temporary_directory = temporary_directory("empty-job");
+    let input_path = temporary_directory.join("empty.bin");
+    fs::write(&input_path, []).expect("the empty input should be writable");
+    let port = unused_loopback_port();
+    let mut child = start_file_web(&input_path, port, false);
+
+    wait_until_listening(&mut child, port);
+    let metadata_response = http_get_bytes(port, "/api/render");
+    let metadata: serde_json::Value = serde_json::from_slice(response_body(&metadata_response))
+        .expect("the metadata response should be JSON");
+    stop(&mut child);
+
+    assert_eq!(metadata["profile"], "REFERENCE");
+    assert_eq!(
+        metadata["sheets"]
+            .as_array()
+            .expect("sheets should be an array")
+            .len(),
+        0
+    );
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn web_mode_can_publish_the_same_complete_render_to_a_file() {
+    let temporary_directory = temporary_directory("file-and-web");
+    let input_path = temporary_directory.join("receipt.bin");
+    let output_path = temporary_directory.join("receipt.png");
+    fs::write(&input_path, b"Two destinations\n").expect("the input should be writable");
+    let port = unused_loopback_port();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            input_path.to_str().expect("the input path should be UTF-8"),
+            "--profile",
+            "REFERENCE",
+            "--output",
+            output_path
+                .to_str()
+                .expect("the output path should be UTF-8"),
+            "--web-listen",
+            &format!("127.0.0.1:{port}"),
+            "--non-interactive",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the escpost command should start");
+
+    wait_until_listening(&mut child, port);
+    let served_png = response_body(&http_get_bytes(port, "/sheets/1.png")).to_vec();
+    stop(&mut child);
+
+    assert_eq!(
+        fs::read(&output_path).expect("the persisted PNG should exist"),
+        served_png
+    );
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
 fn automatic_web_port_advances_past_an_occupied_9000() {
     let _guard = AUTOMATIC_PORT_TEST
         .lock()
@@ -154,21 +216,28 @@ fn explicit_occupied_web_port_fails_instead_of_falling_back() {
 #[test]
 fn explicit_port_zero_reports_the_operating_system_selected_port() {
     let mut child = start_case_web("text/ascii-fonts-and-styles", 0);
-    let mut first_line = String::new();
-    BufReader::new(
+    let mut stderr = BufReader::new(
         child
             .stderr
             .take()
             .expect("the web command stderr should be piped"),
-    )
-    .read_line(&mut first_line)
-    .expect("the selected URL should be readable");
-    let port = first_line
+    );
+    let viewer_line = loop {
+        let mut line = String::new();
+        stderr
+            .read_line(&mut line)
+            .expect("web status should be readable");
+        assert!(!line.is_empty(), "web viewer URL should be reported");
+        if line.starts_with("Web viewer: ") {
+            break line;
+        }
+    };
+    let port = viewer_line
         .trim()
         .strip_prefix("Web viewer: http://127.0.0.1:")
         .and_then(|value| value.strip_suffix('/'))
         .and_then(|value| value.parse::<u16>().ok())
-        .expect("the first status line should contain the selected port");
+        .expect("the web viewer status should contain the selected port");
 
     let response = http_get(port, "/");
     stop(&mut child);
@@ -251,6 +320,29 @@ fn watch_error_keeps_the_last_complete_render_available() {
     assert!(error.contains("truncated ESC command"));
     assert_eq!(still_available, previous_png);
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn watch_mode_rejects_stdin_as_a_mutable_source() {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            "-",
+            "--format",
+            "binary",
+            "--profile",
+            "REFERENCE",
+            "--watch",
+            "--non-interactive",
+        ])
+        .stdin(Stdio::null())
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("watch mode requires a filesystem source")
+    );
 }
 
 #[test]

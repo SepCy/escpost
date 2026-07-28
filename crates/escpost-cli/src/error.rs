@@ -16,7 +16,9 @@ pub(crate) enum CliError {
     #[error("could not select a printer profile: {0}")]
     ProfilePrompt(String),
 
-    #[error("an output destination is required; pass --output <PNG>")]
+    #[error(
+        "an output destination is required; pass --output <PNG>, --output-dir <DIRECTORY>, or --web"
+    )]
     MissingOutput,
 
     #[error("could not read ESC/POS input {path}: {source}")]

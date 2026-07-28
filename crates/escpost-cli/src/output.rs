@@ -33,6 +33,7 @@ pub(crate) fn write_all(rendered: &RenderResult, output_directory: &Path) -> Res
         path: output_directory.to_path_buf(),
         source,
     })?;
+    remove_previous_manifest(output_directory)?;
 
     let mut sheet_names = Vec::with_capacity(rendered.sheets.len());
     for (index, sheet) in rendered.sheets.iter().enumerate() {
@@ -43,6 +44,15 @@ pub(crate) fn write_all(rendered: &RenderResult, output_directory: &Path) -> Res
     }
 
     write_manifest(output_directory, sheet_names)
+}
+
+fn remove_previous_manifest(output_directory: &Path) -> Result<(), CliError> {
+    let path = output_directory.join("manifest.json");
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(CliError::WriteOutput { path, source }),
+    }
 }
 
 fn select_sheet(
@@ -83,6 +93,9 @@ fn write_manifest(output_directory: &Path, sheets: Vec<String>) -> Result<(), Cl
             source,
         }
     })?;
+
+    // The old manifest was removed before writing sheets. This rename works
+    // consistently on Windows and Unix and publishes the completed list last.
     fs::rename(&pending_path, &manifest_path).map_err(|source| CliError::WriteOutput {
         path: manifest_path,
         source,

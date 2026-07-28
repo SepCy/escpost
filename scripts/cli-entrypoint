@@ -4,6 +4,26 @@ set -eu
 
 virtual_environment=/workspace/.venv
 
+command_name=
+for argument in "$@"; do
+    case "$argument" in
+        --non-interactive)
+            ;;
+        --)
+            break
+            ;;
+        *)
+            command_name=$argument
+            break
+            ;;
+    esac
+done
+
+if [ "$command_name" = "render" ]; then
+    cargo build --quiet --locked --package escpost-cli
+    exec "$CARGO_TARGET_DIR/debug/escpost" "$@"
+fi
+
 if [ ! -x "$virtual_environment/bin/python" ]; then
     python3 -m venv "$virtual_environment"
 fi
@@ -14,4 +34,6 @@ export PIP_QUIET=1
 
 maturin develop --quiet --locked --extras=printer
 
-exec escpost "$@"
+# Use the path explicitly because the Rust and Python executables intentionally
+# share the final product name during this incremental migration.
+exec "$virtual_environment/bin/escpost" "$@"

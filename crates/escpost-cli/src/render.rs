@@ -10,15 +10,22 @@ use crate::{output, profiles, source};
 pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<(), CliError> {
     let web_enabled =
         arguments.web || arguments.browser || arguments.web_listen.is_some() || arguments.watch;
+    let binary_stdout = arguments.output.as_deref() == Some(Path::new("-"));
     if arguments.output.is_none() && arguments.output_dir.is_none() && !web_enabled {
         return Err(CliError::MissingOutput);
     }
-    if arguments.output.as_deref() == Some(Path::new("-")) && web_enabled {
+    if binary_stdout && web_enabled {
         return Err(CliError::StdoutWithWeb);
+    }
+    if arguments.watch {
+        // Reject stdin before trying to consume it. A developer should get the
+        // invalid-invocation error immediately, even if a producer never closes.
+        source::watch_path(&arguments.source)?;
     }
 
     let input = source::load(&arguments.source, arguments.format)?;
     let can_prompt = !non_interactive
+        && !binary_stdout
         && arguments.source != Path::new("-")
         && io::stdin().is_terminal()
         && io::stderr().is_terminal();
@@ -26,6 +33,9 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
     let profile = profiles::load(&profile_id)?;
     let rendered =
         render(&input.bytes, profile).map_err(|error| CliError::Render(error.to_string()))?;
+    if !binary_stdout {
+        eprintln!("Profile: {profile_id}");
+    }
 
     if let Some(output_path) = &arguments.output {
         output::write_single(&rendered, output_path, arguments.sheet)?;

@@ -26,8 +26,8 @@ without duplicating completion state in the contract.
 
 ## Rust CLI location
 
-Reserve `crates/escpost-cli/` for the Rust binary crate. Its executable
-should continue to be named `escpost`.
+`crates/escpost-cli/` is the Rust binary crate. Its executable remains named
+`escpost`.
 
 The crate should initially contain command parsing and the modules used only by
 the developer executable:
@@ -77,27 +77,27 @@ input.
 
 ### Command foundation
 
-- [ ] Create `crates/escpost-cli` with an `escpost` binary and `clap` derive
+- [x] Create `crates/escpost-cli` with an `escpost` binary and `clap` derive
       command model. (`CLI-G01`)
-- [ ] Add the global `--non-interactive` option and effective terminal-policy
+- [x] Add the global `--non-interactive` option and effective terminal-policy
       detection. (`CLI-G02`, `CLI-G03`)
-- [ ] Add one value-resolution layer for explicit values, metadata,
+- [x] Add one value-resolution layer for explicit values, metadata,
       configuration, defaults, and later interactive prompts. (`CLI-G04`)
-- [ ] Keep binary stdout, structured output, human status, and diagnostics on
+- [x] Keep binary stdout, structured output, human status, and diagnostics on
       their documented channels. (`CLI-G05`)
-- [ ] Use typed command errors and nonzero failure statuses without adding a
+- [x] Use typed command errors and nonzero failure statuses without adding a
       catch-all error dependency. (`CLI-G06`)
-- [ ] Handle `Ctrl+C` cleanly for long-running commands. (`CLI-G07`)
-- [ ] Keep the current Python hardware commands reachable during migration
+- [x] Handle `Ctrl+C` cleanly for long-running commands. (`CLI-G07`)
+- [x] Keep the current Python hardware commands reachable during migration
       without publishing two executables named `escpost`.
 
 ### Inputs and profiles
 
-- [ ] Load raw binary files, `.hex` files, and stdin with explicit format
+- [x] Load raw binary files, `.hex` files, and stdin with explicit format
       overrides. (`CLI-I01`, `CLI-I02`, `CLI-I03`)
-- [ ] Recognize conformance-case directories and reject arbitrary directories
+- [x] Recognize conformance-case directories and reject arbitrary directories
       as ESC/POS sources. (`CLI-I04`)
-- [ ] Resolve profiles from `--profile`, case metadata, or an interactive
+- [x] Resolve profiles from `--profile`, case metadata, or an interactive
       choice; fail clearly when unresolved in non-interactive mode.
       (`CLI-I06`)
 - [ ] Add capture inputs only with the capture-store implementation.
@@ -105,37 +105,37 @@ input.
 
 ### PNG destinations
 
-- [ ] Add `escpost render <SOURCE>`. (`CLI-R01`)
-- [ ] Support `-o <PNG>`, `-o -`, and `--output-dir <DIRECTORY>`.
+- [x] Add `escpost render <SOURCE>`. (`CLI-R01`)
+- [x] Support `-o <PNG>`, `-o -`, and `--output-dir <DIRECTORY>`.
       (`CLI-R02`)
-- [ ] Require exactly one sheet for a single-PNG destination unless
+- [x] Require exactly one sheet for a single-PNG destination unless
       `--sheet <NUMBER>` selects one. (`CLI-R03`)
-- [ ] Protect terminal stdout and keep piped PNG bytes exact. (`CLI-R04`)
-- [ ] Write deterministic sheet names and publish the manifest only after all
+- [x] Protect terminal stdout and keep piped PNG bytes exact. (`CLI-R04`)
+- [x] Write deterministic sheet names and publish the manifest only after all
       PNGs succeed. (`CLI-R05`)
-- [ ] Overwrite explicit and conflicting generated outputs without prompting,
+- [x] Overwrite explicit and conflicting generated outputs without prompting,
       render before replacing an existing file, and preserve unrelated or
       stale files. (`CLI-R08`)
 
 ### Rust web output
 
-- [ ] Add `--web`, `--browser`, `--web-listen`, and filesystem `--watch`.
+- [x] Add `--web`, `--browser`, `--web-listen`, and filesystem `--watch`.
       (`CLI-W01`, `CLI-W02`, `CLI-W08`)
-- [ ] Host the current HTML interface from the Rust executable and keep the
+- [x] Host the current HTML interface from the Rust executable and keep the
       initial asset embedded in the binary. (`CLI-W07`, `CLI-W10`)
-- [ ] Search and retain the first bindable loopback port from 9000 through
+- [x] Search and retain the first bindable loopback port from 9000 through
       9099 when no address is specified. (`CLI-W03`, `CLI-W04`)
-- [ ] Bind explicit nonzero addresses strictly, support explicit port zero,
+- [x] Bind explicit nonzero addresses strictly, support explicit port zero,
       and make non-loopback exposure visible. (`CLI-W05`, `CLI-W06`)
-- [ ] Keep jobs and PNGs in memory unless a file destination was explicitly
+- [x] Keep jobs and PNGs in memory unless a file destination was explicitly
       selected. (`CLI-W09`)
-- [ ] Permit file output together with web output, but reject stdout PNG output
+- [x] Permit file output together with web output, but reject stdout PNG output
       with a long-running web mode. (`CLI-R06`, `CLI-R07`)
-- [ ] Add HTTP and CLI integration coverage for `CLI-T01` through `CLI-T06`.
-- [ ] Verify feature parity in Docker and a real browser, then remove the
+- [x] Add HTTP and CLI integration coverage for `CLI-T01` through `CLI-T06`.
+- [x] Verify feature parity in Docker and a real browser, then remove the
       Python `http.server` preview service and its manifest-polling workflow.
       (`CLI-T07`)
-- [ ] Update the root wrapper, Compose configuration, README examples, and
+- [x] Update the root wrapper, Compose configuration, README examples, and
       architecture after the Rust path becomes authoritative.
 
 ## Virtual network printer
@@ -188,9 +188,9 @@ actions. See the
 
 ## Rust web interface
 
-- [ ] Replace the Python preview server with a server hosted by the Rust CLI.
-- [ ] Keep the current ordered sheet names and responsive wrapping.
-- [ ] Keep original one-printer-dot-to-one-screen-pixel display as the default.
+- [x] Replace the Python preview server with a server hosted by the Rust CLI.
+- [x] Keep ordered sheet names and responsive wrapping.
+- [x] Keep original one-printer-dot-to-one-screen-pixel display as the default.
 - [ ] Show live jobs newest first.
 - [ ] Update the page when a job arrives without requiring manual refresh.
 - [ ] Show the selected profile, completion reason, connection, timestamp, and
@@ -307,7 +307,7 @@ rules are specified in `CLI.md`.
 - [ ] Use nonzero exit statuses for rendering, linting, comparison, connection,
       and configuration failures.
 - [ ] Ensure automation never needs to scrape the web interface.
-- [ ] Keep the Docker wrapper as the documented development entry point.
+- [x] Keep the Docker wrapper as the documented development entry point.
 - [ ] Add shell completion only after command names and arguments stabilize.
 
 ### Printer discovery and diagnostics
@@ -398,9 +398,9 @@ escpost lint receipt.bin \
 
 ### Phase 1: Rust render command and web output
 
-- [ ] Complete the Rust CLI foundation and render-migration checklist above.
-- [ ] Verify file, directory, stdout, and web destinations end to end.
-- [ ] Remove the Python preview service only after the Rust web path passes its
+- [x] Complete the Rust CLI foundation and render-migration checklist above.
+- [x] Verify file, directory, stdout, and web destinations end to end.
+- [x] Remove the Python preview service only after the Rust web path passes its
       automated and browser checks.
 
 ### Phase 2: virtual printer

@@ -28,8 +28,16 @@ font. Compare:
 - QR dimensions and placement; and
 - the first Function B marker gap and the vertically adjacent final markers.
 
-The exact PNG is served at <http://localhost:8765/tools/preview/> with integer
-nearest-neighbor zoom.
+Render the exact stream with:
+
+```bash
+./escpost render calibration/input.hex \
+  --profile NT-5890K \
+  --web \
+  --non-interactive
+```
+
+Open the printed loopback URL to inspect it with integer nearest-neighbor zoom.
 
 The initial physical comparison showed that this firmware paints `ESC *`
 8-dot source rows adjacently and adds a faint trailing line. The typed profile

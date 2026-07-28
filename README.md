@@ -31,8 +31,12 @@ The bundled representative font currently covers Latin, Greek, and Cyrillic.
 A decoded character outside that asset returns an error rather than a
 misleading replacement glyph.
 
-The Python binding and developer CLI can render, raw-print, or calibrate the
-same version-controlled byte stream.
+The Rust `escpost render` command accepts raw bytes, readable hexadecimal
+input, stdin, or a conformance-case directory. It can write PNGs, stream one
+PNG to stdout, or host an embedded browser workbench. The Python binding
+remains available to applications, while the existing Python hardware
+commands provide USB discovery, raw printing, and physical calibration during
+their migration to Rust.
 
 The virtual `REFERENCE` profile enables every capability currently represented
 by the renderer without inheriting limitations or quirks from a physical
@@ -64,7 +68,7 @@ All build and test commands run in the project container:
 
 ```bash
 docker compose build
-./escpost --help
+./escpost render --help
 docker compose run --rm test cargo test --workspace
 docker compose run --rm test .venv/bin/python -m unittest discover -s python/tests
 ```
@@ -79,10 +83,11 @@ docker compose run --rm test cargo run --quiet \
   profiles profiles/.generated/profiles.json
 ```
 
-`./escpost` forwards every argument to the Python CLI in the Compose
-container. The CLI service has USB access for printer discovery and physical
-calibration. Its Python environment lives in a named Docker volume and is
-created or updated automatically.
+`./escpost` is the stable development entry point. It runs `render` through
+the Rust CLI and keeps the existing Python printer and calibration commands
+reachable during migration. The CLI service has USB access for physical
+workflows; its Python environment lives in a named Docker volume and is
+created or updated only when a legacy command needs it.
 
 List connected USB printer-class devices:
 
@@ -103,31 +108,51 @@ The Compose service joins host group GID `7`, the conventional `lp` group on
 Debian-derived systems. Set `USB_GROUP_ID` when the USB printer device belongs
 to a different host group.
 
-Render the first conformance case:
+Render a raw byte stream to one PNG:
 
 ```bash
-./escpost case render \
-  tests/cases/graphics/esc-star-8dot-double-density \
-  --output-dir local/rendered
+./escpost render receipt.bin \
+  --profile REFERENCE \
+  --output receipt.png \
+  --non-interactive
 ```
 
-Serve every PNG listed in `local/preview/manifest.json` with automatic refresh,
-ordered sheet labels, responsive wrapping, and selectable integer zoom:
+Render every sheet of a conformance case. Case metadata supplies its profile:
 
 ```bash
-docker compose up -d preview
-```
-
-Open <http://localhost:8765/tools/preview/>.
-
-Render the focused REFERENCE cut case to see three ordered PNG sheets produced
-by full and partial cuts:
-
-```bash
-./escpost case render \
+./escpost render \
   tests/cases/mechanism/reference-full-and-partial-cuts \
-  --output-dir local/preview
+  --output-dir local/rendered \
+  --non-interactive
 ```
+
+The directory contains `sheet-001.png`, `sheet-002.png`, and so on, plus a
+`manifest.json` that lists the current sheets in order. Existing generated
+files are overwritten; unlisted stale or unrelated files are preserved.
+
+Use `-o -` for a byte-clean single-PNG pipeline:
+
+```bash
+generate-receipt |
+  ./escpost render - --format binary --profile REFERENCE \
+    --output - --non-interactive > receipt.png
+```
+
+Start the embedded web workbench to inspect all sheets at 1× printer-dot
+scale. The command selects the first free loopback port from 9000 through
+9099, prints the URL, and remains active until Ctrl+C:
+
+```bash
+./escpost render \
+  tests/cases/mechanism/reference-full-and-partial-cuts \
+  --web \
+  --non-interactive
+```
+
+Add `--watch` to rerender a file or case when its input changes. Add
+`--browser` when running a host-native binary to open the URL automatically.
+The Docker wrapper cannot open a browser on the host, so use `--web` there and
+open the printed URL yourself.
 
 For focused physical calibration, first use discovery to populate
 `local/printers.toml`. The `case calibrate` command renders and sends one

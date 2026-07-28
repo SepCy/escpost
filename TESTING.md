@@ -85,6 +85,33 @@ callers. They cover:
 
 They should not duplicate the complete Rust conformance suite.
 
+### Rust CLI and HTTP tests
+
+`crates/escpost-cli/tests/` exercises the developer command as a subprocess
+and the embedded viewer over real loopback sockets. These tests cover:
+
+- binary, hexadecimal, stdin, and case-directory inputs;
+- explicit and metadata-supplied profile resolution;
+- zero, one, and multiple sheets across file, stdout, directory, and web
+  destinations;
+- exact byte-clean PNG stdout and nonzero error results;
+- output replacement and manifest publication;
+- automatic, strict, and operating-system-selected web ports;
+- ordered HTTP metadata, PNG responses, missing routes, and path traversal;
+- simultaneous persisted and web output; and
+- successful and failed watched rerenders.
+
+Run them with:
+
+```bash
+docker compose run --rm test cargo test -p escpost-cli
+```
+
+Browser verification uses the same Docker entry point and a real browser
+against the printed loopback URL. Confirm responsive ordered sheets, their
+labels and dimensions, 1× default scale, integer zoom, and watch refresh before
+removing or materially changing an older preview path.
+
 ### Robustness tests
 
 Malformed, truncated, adversarial, and resource-intensive streams verify that
@@ -198,9 +225,10 @@ renders as well as failures.
 Shared calibration outputs use
 `local/test-output/calibration/<profile-id>/actual-001.png`.
 
-CLI render output also includes `manifest.json`, whose `sheets` array lists
-the current `actual-NNN.png` files in receipt order. The preview reads this
-manifest instead of guessing how many sheets exist or displaying stale files.
+The Python calibration commands also write `manifest.json`, whose `sheets`
+array lists the current `actual-NNN.png` files in receipt order. The native
+`escpost render --output-dir` command instead writes `sheet-NNN.png`; its
+manifest is likewise the authority, so stale unlisted PNGs are ignored.
 
 When pixels differ, the test also writes `diff-001.png` and
 `comparison.html`. Matching ink is black, matching paper is white, unexpected
@@ -306,11 +334,11 @@ transport.
 bytes to the printer. This prevents accidental divergence between the two
 paths.
 
-Render calibration output to `local/preview` and start the Compose `preview`
-service. The page at <http://localhost:8765/tools/preview/> refreshes all
-current PNG sheets automatically, labels them in order, and uses a wrapping
-layout so sheets remain side by side when space permits. It scales every sheet
-only by integer multiples so individual printer dots remain inspectable.
+Use `escpost render <SOURCE> --web` for visual inspection. Its Rust web server
+holds the rendered sheets in memory, labels them in order, wraps them when
+space permits, and scales only by integer multiples so individual printer dots
+remain inspectable. `--watch` updates the view after successful filesystem
+changes while retaining the last complete render after an error.
 
 The printing adapter may use python-escpos's USB transport, but it uses only
 the raw-byte operation. It must not call high-level helpers such as `text`,

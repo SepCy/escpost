@@ -8,9 +8,10 @@ Python and Rust command families.
 
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
-be reviewed. Features described here may still be planned; `README.md`
-describes what works today, while `TODO.md` is the single implementation
-checklist.
+be reviewed. `render` is implemented; the other top-level commands remain
+planned or temporarily available through the Python hardware workflow.
+`README.md` describes what works today, while `TODO.md` is the single
+implementation checklist.
 
 Stable requirement identifiers appear in the final section. Keep an identifier
 when wording is clarified so tests, issues, and roadmap items can continue to
@@ -165,6 +166,8 @@ suggests `--profile REFERENCE` for a generic virtual printer. ESCPost does not
 silently claim hardware fidelity by choosing a physical profile.
 
 Commands must show the selected profile in human and structured results.
+File and directory rendering report it on stderr. Binary stdout remains
+byte-clean, and the web API includes it in its JSON result.
 
 ## `escpost render`
 
@@ -203,6 +206,7 @@ error.
 
 If several sheets exist and no sheet was selected, ESCPost fails and recommends
 `--output-dir`. It never discards later sheets or concatenates PNG files.
+`--sheet` is valid only together with `--output`.
 
 An explicit file destination is overwritten without prompting when rendering
 succeeds. This is normal transformation-command behavior and keeps automation
@@ -220,6 +224,9 @@ end-of-file.
 the manifest only after all PNG files are complete. Consumers can therefore
 treat a visible manifest as the ordered list of completed output.
 
+Sheet names are `sheet-001.png`, `sheet-002.png`, and so on. `manifest.json`
+contains those names in print order.
+
 The command creates the directory when necessary and overwrites generated
 files with the same names. It does not delete unrelated files or stale sheets
 left by an earlier render. The manifest is the authoritative list for the
@@ -233,6 +240,10 @@ and remains active until interrupted.
 `--browser` implies `--web` and additionally opens the selected URL with the
 operating system's default browser. Browser launch is never implied by
 `--web`, which keeps Docker, SSH, and headless use predictable.
+
+The development Docker wrapper cannot launch the host browser. Use `--web`
+with the wrapper and open its printed URL; `--browser` is intended for the
+host-native executable.
 
 If `--web-listen` is omitted, ESCPost:
 
@@ -262,6 +273,11 @@ choose a non-loopback address by default.
 `--web-listen` implies `--web`. `--watch` also implies `--web` and rerenders a
 filesystem source after it changes. Watch mode is unavailable for stdin and
 immutable captures.
+
+When file output and watch mode are combined, every successful rerender also
+updates the selected file destination. Parse or render failures keep the
+previous complete files and web result available and expose the error in the
+web page.
 
 The initial web interface must:
 

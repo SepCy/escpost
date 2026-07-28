@@ -23,21 +23,63 @@ model.
 
 ## Workspace boundaries
 
-The Rust workspace contains three crates:
+The Rust workspace contains four crates:
 
 - `escpost-profiles` imports, enriches, validates, and loads printer
   profiles.
 - `escpost` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
+- `escpost-cli` provides the native `escpost` executable, PNG destinations,
+  and embedded local web viewer.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
 
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 
-The Python package also contains the developer CLI for conformance cases and
-physical USB printers. Its calibration commands render and print the one
-shared stream with a selected profile. Hardware discovery and printing are not
-part of the Rust rendering library.
+The Python package still contains the physical USB and calibration commands.
+The root development wrapper routes `render` to the Rust executable and the
+remaining hardware commands to that package, keeping one public command name
+during migration. Hardware discovery and printing are not part of the Rust
+rendering library.
+
+## Rust render command
+
+`escpost-cli` is an application boundary around the renderer. It embeds the
+canonical profile pack and resolves a profile from an explicit argument,
+recognized source metadata, or an interactive selection. Non-interactive
+operation fails instead of silently choosing a physical printer.
+
+The command accepts raw files, readable `.hex` files, stdin, and recognized
+conformance-case directories. Output adapters consume one completed
+`RenderResult`:
+
+```text
+Known ESC/POS source
+        │
+        ▼
+Profile resolution → escpost::render
+                           │
+             ┌─────────────┼─────────────┐
+             ▼             ▼             ▼
+        one PNG       sheet directory   in-memory job
+        or stdout     plus manifest     and web viewer
+```
+
+Single-PNG output never drops later sheets. Directory output publishes its
+manifest only after all current sheets are complete. An explicit file and the
+web viewer may consume the same render without parsing or rendering twice.
+
+The web application, CSS, and JavaScript are embedded in the executable.
+Rendered PNGs live in a shared in-memory job store, which is also the intended
+handoff point for the future virtual printer. HTTP binds to loopback by
+default. The viewer reports ordered sheet names and printer-dot dimensions,
+uses one screen pixel per dot initially, and offers only integer,
+nearest-neighbor zoom.
+
+Watch mode polls the selected filesystem input and performs each rerender away
+from the asynchronous HTTP task. A successful result atomically replaces the
+visible job. A parse or render failure is reported by the page while the last
+complete sheets remain available.
 
 ## Rendering pipeline
 

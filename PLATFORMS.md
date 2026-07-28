@@ -42,14 +42,18 @@ As of 2026-07-28, development and physical-printer calibration have been
 performed on Linux x86-64:
 
 - the Rust renderer and profile compiler pass their complete automated suites;
+- the Rust `render` CLI and embedded web viewer pass their CLI and HTTP
+  integration suites in Docker and have been checked in a headless Chromium
+  browser;
 - the Python binding and Click CLI pass their automated suites;
 - Docker Compose exposes the Linux host's `/dev/bus/usb` tree to the CLI; and
 - USB printing has been exercised with the NT-5890K profile and connected
   printer.
 
-macOS and Windows builds have not yet been verified by ESCPost. The Rust CLI,
-embedded web server, virtual RAW printer, native Windows spooler, and Rust USB
-backend are all planned work.
+macOS and Windows builds have not yet been verified by ESCPost. The virtual RAW
+printer, native Windows spooler, and Rust USB backend are planned work. The
+Rust CLI and embedded web server are implemented but still need native
+macOS/Windows release verification.
 
 ## Release artifacts
 

@@ -20,6 +20,10 @@ unless the current README and command coverage say otherwise. Once a feature
 exists and its shape is durable, its architecture belongs in `ARCHITECTURE.md`
 and the completed item can be removed from this roadmap.
 
+`CLI.md` is the durable command-line contract. This file is the only
+implementation checklist: roadmap items refer to stable CLI requirement IDs
+without duplicating completion state in the contract.
+
 ## Rust CLI location
 
 Reserve `crates/escpost-cli/` for the Rust binary crate. Its executable
@@ -63,6 +67,75 @@ current Click commands incrementally and remove them only after the Rust CLI
 has equivalent behavior. The root `./escpost` container wrapper should
 eventually invoke the Rust executable while keeping the developer-facing
 command name stable.
+
+## Rust CLI foundation and render migration
+
+These tasks implement the first vertical slice of `CLI.md`. They come before
+the virtual printer because `render --web` proves the executable, renderer
+integration, web server, embedded assets, and packaging model with a known
+input.
+
+### Command foundation
+
+- [ ] Create `crates/escpost-cli` with an `escpost` binary and `clap` derive
+      command model. (`CLI-G01`)
+- [ ] Add the global `--non-interactive` option and effective terminal-policy
+      detection. (`CLI-G02`, `CLI-G03`)
+- [ ] Add one value-resolution layer for explicit values, metadata,
+      configuration, defaults, and later interactive prompts. (`CLI-G04`)
+- [ ] Keep binary stdout, structured output, human status, and diagnostics on
+      their documented channels. (`CLI-G05`)
+- [ ] Use typed command errors and nonzero failure statuses without adding a
+      catch-all error dependency. (`CLI-G06`)
+- [ ] Handle `Ctrl+C` cleanly for long-running commands. (`CLI-G07`)
+- [ ] Keep the current Python hardware commands reachable during migration
+      without publishing two executables named `escpost`.
+
+### Inputs and profiles
+
+- [ ] Load raw binary files, `.hex` files, and stdin with explicit format
+      overrides. (`CLI-I01`, `CLI-I02`, `CLI-I03`)
+- [ ] Recognize conformance-case directories and reject arbitrary directories
+      as ESC/POS sources. (`CLI-I04`)
+- [ ] Resolve profiles from `--profile`, case metadata, or an interactive
+      choice; fail clearly when unresolved in non-interactive mode.
+      (`CLI-I06`)
+- [ ] Add capture inputs only with the capture-store implementation.
+      (`CLI-I05`)
+
+### PNG destinations
+
+- [ ] Add `escpost render <SOURCE>`. (`CLI-R01`)
+- [ ] Support `-o <PNG>`, `-o -`, and `--output-dir <DIRECTORY>`.
+      (`CLI-R02`)
+- [ ] Require exactly one sheet for a single-PNG destination unless
+      `--sheet <NUMBER>` selects one. (`CLI-R03`)
+- [ ] Protect terminal stdout and keep piped PNG bytes exact. (`CLI-R04`)
+- [ ] Write deterministic sheet names and publish the manifest only after all
+      PNGs succeed. (`CLI-R05`)
+- [ ] Finalize safe overwrite and stale-sheet behavior, then record it in
+      `CLI.md`.
+
+### Rust web output
+
+- [ ] Add `--web`, `--browser`, `--web-listen`, and filesystem `--watch`.
+      (`CLI-W01`, `CLI-W02`, `CLI-W08`)
+- [ ] Host the current HTML interface from the Rust executable and keep the
+      initial asset embedded in the binary. (`CLI-W07`, `CLI-W10`)
+- [ ] Search and retain the first bindable loopback port from 9000 through
+      9099 when no address is specified. (`CLI-W03`, `CLI-W04`)
+- [ ] Bind explicit nonzero addresses strictly, support explicit port zero,
+      and make non-loopback exposure visible. (`CLI-W05`, `CLI-W06`)
+- [ ] Keep jobs and PNGs in memory unless a file destination was explicitly
+      selected. (`CLI-W09`)
+- [ ] Permit file output together with web output, but reject stdout PNG output
+      with a long-running web mode. (`CLI-R06`, `CLI-R07`)
+- [ ] Add HTTP and CLI integration coverage for `CLI-T01` through `CLI-T06`.
+- [ ] Verify feature parity in Docker and a real browser, then remove the
+      Python `http.server` preview service and its manifest-polling workflow.
+      (`CLI-T07`)
+- [ ] Update the root wrapper, Compose configuration, README examples, and
+      architecture after the Rust path becomes authoritative.
 
 ## Virtual network printer
 
@@ -224,21 +297,8 @@ documentation.
 
 ## Developer CLI
 
-The eventual top-level command set should be coherent rather than exposing
-separate Python and Rust tools:
-
-```text
-escpost render       Render a file, hexadecimal input, or stdin
-escpost inspect      Decode and explain a stream
-escpost serve        Run the virtual printer and web interface
-escpost proxy        Capture while forwarding to physical hardware
-escpost replay       Resend a captured job
-escpost diff         Compare two jobs or renderings
-escpost lint         Find portability and profile problems
-escpost printers     Discover and configure printers
-escpost calibrate    Calibrate a profile against hardware
-escpost doctor       Diagnose ports, USB access, configuration, and profiles
-```
+The eventual command set and its shared interaction, input, output, and error
+rules are specified in `CLI.md`.
 
 - [ ] Accept binary files, hexadecimal text files, standard input, and captured
       job identifiers where applicable.
@@ -335,30 +395,36 @@ escpost lint receipt.bin \
 
 ## Implementation order
 
-### Phase 1: virtual printer
+### Phase 1: Rust render command and web output
 
-- [ ] Create `crates/escpost-cli` with the Rust `escpost` executable.
-- [ ] Port the basic render command needed to exercise the binary.
+- [ ] Complete the Rust CLI foundation and render-migration checklist above.
+- [ ] Verify file, directory, stdout, and web destinations end to end.
+- [ ] Remove the Python preview service only after the Rust web path passes its
+      automated and browser checks.
+
+### Phase 2: virtual printer
+
 - [ ] Add the RAW TCP listener and job framing.
-- [ ] Host the current preview behavior from Rust.
+- [ ] Feed completed network jobs into the web job store shared with
+      `render --web`.
 - [ ] Show live ordered sheets and downloadable raw input.
 - [ ] Add container health and transport-fragmentation tests.
 
-### Phase 2: inspection
+### Phase 3: inspection
 
 - [ ] Add a public command trace and structured diagnostics to the renderer.
 - [ ] Add byte offsets, state changes, painted bounds, and device events.
 - [ ] Expose the trace through CLI JSON and the web interface.
 - [ ] Add profile switching and rerendering of captured jobs.
 
-### Phase 3: hardware loop
+### Phase 4: hardware loop
 
 - [ ] Port printer configuration and discovery to the Rust CLI.
 - [ ] Add replay to USB and RAW network printers.
 - [ ] Add transparent proxy mode with response forwarding.
 - [ ] Port calibration commands and then retire the Click CLI.
 
-### Phase 4: realistic emulation and integration testing
+### Phase 5: realistic emulation and integration testing
 
 - [ ] Add status and printer-identity responses.
 - [ ] Add controllable printer faults and timing behavior.

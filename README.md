@@ -180,6 +180,8 @@ The renderer does not initially promise:
 - [Architecture](ARCHITECTURE.md) describes the current coherent system design.
 - [Coding style](CODING_STYLE.md) defines how code, comments, and tests should
   explain non-obvious behavior in plain language.
+- [CLI contract](CLI.md) documents command behavior, inputs, output modes,
+  interactive rules, and requirements for the Rust developer tool.
 - [Command coverage](COMMAND_COVERAGE.md) defines the version 1 boundary and
   tracks implementation, automated coverage, and physical validation.
 - [Developer-tool roadmap](TODO.md) tracks the planned virtual printer,

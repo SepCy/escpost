@@ -184,6 +184,8 @@ The renderer does not initially promise:
   tracks implementation, automated coverage, and physical validation.
 - [Developer-tool roadmap](TODO.md) tracks the planned virtual printer,
   inspector, proxy, Rust CLI, and web workbench.
+- [Platform support](PLATFORMS.md) tracks release targets, transport backends,
+  operating-system caveats, and verified compatibility.
 - [Design decisions](DESIGN_DECISIONS.md) records why durable choices were
   made, their consequences, and which questions remain open.
 - [Printer profile enrichments](PROFILE_SCHEMA.md) defines how upstream

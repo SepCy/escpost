@@ -3,6 +3,7 @@
 mod cli;
 mod error;
 mod output;
+mod print;
 mod profiles;
 mod render;
 mod source;
@@ -30,5 +31,6 @@ pub async fn main() -> ExitCode {
 async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Render(arguments) => render::run(arguments, cli.non_interactive).await,
+        Command::Print(arguments) => print::run(arguments),
     }
 }

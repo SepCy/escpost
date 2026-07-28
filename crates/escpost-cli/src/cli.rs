@@ -24,6 +24,9 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Render a known ESC/POS byte stream.
     Render(RenderArgs),
+
+    /// Send a known ESC/POS byte stream unchanged to a USB printer.
+    Print(PrintArgs),
 }
 
 #[derive(Debug, Args)]
@@ -68,10 +71,53 @@ pub(crate) struct RenderArgs {
     pub(crate) watch: bool,
 }
 
+#[derive(Debug, Args)]
+pub(crate) struct PrintArgs {
+    /// Raw ESC/POS file, hexadecimal file, case directory, or - for stdin.
+    pub(crate) source: PathBuf,
+
+    /// Input representation.
+    #[arg(long, value_enum, default_value_t = InputFormat::Auto)]
+    pub(crate) format: InputFormat,
+
+    /// USB vendor ID.
+    #[arg(long, value_parser = parse_u16)]
+    pub(crate) usb_vendor_id: u16,
+
+    /// USB product ID.
+    #[arg(long, value_parser = parse_u16)]
+    pub(crate) usb_product_id: u16,
+
+    /// USB interface number to claim.
+    #[arg(long, value_parser = parse_u8)]
+    pub(crate) usb_interface: u8,
+
+    /// Bulk OUT endpoint address.
+    #[arg(long, value_parser = parse_u8)]
+    pub(crate) usb_out_endpoint: u8,
+}
+
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub(crate) enum InputFormat {
     #[default]
     Auto,
     Binary,
     Hex,
+}
+
+fn parse_u16(value: &str) -> Result<u16, String> {
+    let (digits, radix) = integer_parts(value);
+    u16::from_str_radix(digits, radix).map_err(|_| format!("{value:?} is not a 16-bit integer"))
+}
+
+fn parse_u8(value: &str) -> Result<u8, String> {
+    let (digits, radix) = integer_parts(value);
+    u8::from_str_radix(digits, radix).map_err(|_| format!("{value:?} is not an 8-bit integer"))
+}
+
+fn integer_parts(value: &str) -> (&str, u32) {
+    value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+        .map_or((value, 10), |digits| (digits, 16))
 }

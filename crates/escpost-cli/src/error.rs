@@ -99,6 +99,55 @@ pub(crate) enum CliError {
     #[error("watch mode requires a filesystem source, not stdin")]
     WatchStdin,
 
+    #[error("could not enumerate USB devices: {0}")]
+    EnumerateUsb(nusb::Error),
+
+    #[error("no USB device matches vendor {vendor_id:#06x} and product {product_id:#06x}")]
+    UsbDeviceNotFound { vendor_id: u16, product_id: u16 },
+
+    #[error(
+        "{count} USB devices match vendor {vendor_id:#06x} and product {product_id:#06x}; refusing to choose one implicitly"
+    )]
+    AmbiguousUsbDevices {
+        vendor_id: u16,
+        product_id: u16,
+        count: usize,
+    },
+
+    #[error("USB OUT endpoint must be between 0x01 and 0x0f, got {0:#04x}")]
+    InvalidUsbOutEndpoint(u8),
+
+    #[error("could not open USB device {vendor_id:#06x}:{product_id:#06x}: {source}")]
+    OpenUsbDevice {
+        vendor_id: u16,
+        product_id: u16,
+        source: nusb::Error,
+    },
+
+    #[error("could not detach and claim USB interface {interface}: {source}")]
+    ClaimUsbInterface { interface: u8, source: nusb::Error },
+
+    #[error(
+        "could not open bulk OUT endpoint {endpoint:#04x} on USB interface {interface}: {source}"
+    )]
+    OpenUsbOutEndpoint {
+        interface: u8,
+        endpoint: u8,
+        source: nusb::Error,
+    },
+
+    #[error("could not write ESC/POS bytes to USB endpoint {endpoint:#04x}: {source}")]
+    WriteUsb {
+        endpoint: u8,
+        source: std::io::Error,
+    },
+
+    #[error("could not finish the USB write on endpoint {endpoint:#04x}: {source}")]
+    FlushUsb {
+        endpoint: u8,
+        source: std::io::Error,
+    },
+
     #[error("could not inspect watched source {path}: {source}")]
     InspectWatchedSource {
         path: PathBuf,

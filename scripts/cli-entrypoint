@@ -19,10 +19,12 @@ for argument in "$@"; do
     esac
 done
 
-if [ "$command_name" = "render" ]; then
-    cargo build --quiet --locked --package escpost-cli
-    exec "$CARGO_TARGET_DIR/debug/escpost" "$@"
-fi
+case "$command_name" in
+    render|print)
+        cargo build --quiet --locked --package escpost-cli
+        exec "$CARGO_TARGET_DIR/debug/escpost" "$@"
+        ;;
+esac
 
 if [ ! -x "$virtual_environment/bin/python" ]; then
     python3 -m venv "$virtual_environment"

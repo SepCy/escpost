@@ -5,6 +5,7 @@ set -eu
 virtual_environment=/workspace/.venv
 
 command_name=
+subcommand_name=
 for argument in "$@"; do
     case "$argument" in
         --non-interactive)
@@ -13,14 +14,18 @@ for argument in "$@"; do
             break
             ;;
         *)
-            command_name=$argument
-            break
+            if [ -z "$command_name" ]; then
+                command_name=$argument
+            elif [ -z "$subcommand_name" ]; then
+                subcommand_name=$argument
+                break
+            fi
             ;;
     esac
 done
 
-case "$command_name" in
-    render|print)
+case "$command_name:$subcommand_name" in
+    render:*|print:*|printers:list)
         cargo build --quiet --locked --package escpost-cli
         exec "$CARGO_TARGET_DIR/debug/escpost" "$@"
         ;;

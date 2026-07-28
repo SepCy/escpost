@@ -124,6 +124,15 @@ pub(crate) enum CliError {
         source: nusb::Error,
     },
 
+    #[error(
+        "could not inspect the active configuration of USB device {vendor_id:#06x}:{product_id:#06x}: {source}"
+    )]
+    InspectUsbConfiguration {
+        vendor_id: u16,
+        product_id: u16,
+        source: nusb::ActiveConfigurationError,
+    },
+
     #[error("could not detach and claim USB interface {interface}: {source}")]
     ClaimUsbInterface { interface: u8, source: nusb::Error },
 
@@ -147,6 +156,9 @@ pub(crate) enum CliError {
         endpoint: u8,
         source: std::io::Error,
     },
+
+    #[error("could not write command output: {0}")]
+    WriteHumanOutput(std::io::Error),
 
     #[error("could not inspect watched source {path}: {source}")]
     InspectWatchedSource {

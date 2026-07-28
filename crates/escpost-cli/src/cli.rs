@@ -27,6 +27,9 @@ pub(crate) enum Command {
 
     /// Send a known ESC/POS byte stream unchanged to a USB printer.
     Print(PrintArgs),
+
+    /// List available printers and manage discovery or pairing.
+    Printers(PrintersArgs),
 }
 
 #[derive(Debug, Args)]
@@ -95,6 +98,18 @@ pub(crate) struct PrintArgs {
     /// Bulk OUT endpoint address.
     #[arg(long, value_parser = parse_u8)]
     pub(crate) usb_out_endpoint: u8,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct PrintersArgs {
+    #[command(subcommand)]
+    pub(crate) command: PrintersCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub(crate) enum PrintersCommand {
+    /// List currently usable printers.
+    List,
 }
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]

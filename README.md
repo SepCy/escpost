@@ -33,10 +33,11 @@ misleading replacement glyph.
 
 The Rust `escpost render` command accepts raw bytes, readable hexadecimal
 input, stdin, or a conformance-case directory. It can write PNGs, stream one
-PNG to stdout, or host an embedded browser workbench. The Python binding
-remains available to applications, while the existing Python hardware
-commands provide USB discovery, raw printing, and physical calibration during
-their migration to Rust.
+PNG to stdout, or host an embedded browser workbench. The Rust `print` command
+sends the same source types unchanged to an explicitly addressed USB printer.
+The Python binding remains available to applications, while the existing
+Python hardware commands continue to provide USB discovery and higher-level
+physical calibration during their migration to Rust.
 
 The virtual `REFERENCE` profile enables every capability currently represented
 by the renderer without inheriting limitations or quirks from a physical
@@ -83,11 +84,11 @@ docker compose run --rm test cargo run --quiet \
   profiles profiles/.generated/profiles.json
 ```
 
-`./escpost` is the stable development entry point. It runs `render` through
-the Rust CLI and keeps the existing Python printer and calibration commands
-reachable during migration. The CLI service has USB access for physical
-workflows; its Python environment lives in a named Docker volume and is
-created or updated only when a legacy command needs it.
+`./escpost` is the stable development entry point. It runs `render` and
+`print` through the Rust CLI and keeps the existing Python discovery and
+calibration commands reachable during migration. The CLI service has USB
+access for physical workflows; its Python environment lives in a named Docker
+volume and is created or updated only when a legacy command needs it.
 
 List connected USB printer-class devices:
 
@@ -107,6 +108,22 @@ Save one selected device to the ignored local configuration:
 The Compose service joins host group GID `7`, the conventional `lp` group on
 Debian-derived systems. Set `USB_GROUP_ID` when the USB printer device belongs
 to a different host group.
+
+Send a raw or hexadecimal ESC/POS stream unchanged to a USB printer:
+
+```bash
+./escpost print receipt.hex \
+  --usb-vendor-id 0x0416 \
+  --usb-product-id 0x5011 \
+  --usb-interface 0 \
+  --usb-out-endpoint 0x01 \
+  --non-interactive
+```
+
+All four USB values are required. `print` does not read a printer alias,
+infer values from a profile, or discover an interface or endpoint. Use
+`printers discover` to inspect a connected device, then pass the selected
+values explicitly. The invocation itself authorizes the physical write.
 
 Render a raw byte stream to one PNG:
 

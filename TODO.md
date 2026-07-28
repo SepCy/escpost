@@ -138,6 +138,30 @@ input.
 - [x] Update the root wrapper, Compose configuration, README examples, and
       architecture after the Rust path becomes authoritative.
 
+## Rust direct USB printing
+
+This is the physical-output primitive later used by profile calibration.
+`print` consumes the same immutable source loader as `render`, but it does not
+render and does not require a profile.
+
+- [x] Add `escpost print <SOURCE>` to the Rust CLI. (`CLI-P01`)
+- [x] Require explicit USB vendor ID, product ID, interface, and bulk OUT
+      endpoint with decimal and `0x` notation. (`CLI-P02`, `CLI-P03`)
+- [x] Send the decoded source bytes unchanged and report the target and byte
+      count without logging receipt contents. (`CLI-P04`, `CLI-P06`)
+- [x] Refuse missing and ambiguous devices before claiming an interface or
+      writing data. (`CLI-P05`)
+- [x] Add typed enumeration, open, claim, endpoint, and transfer failures.
+      (`CLI-P07`)
+- [x] Put only the physical USB boundary behind a test transport and keep
+      ordinary automated runs incapable of printing. (`CLI-P08`)
+- [x] Route `./escpost print` to Rust while leaving Python discovery and
+      calibration commands reachable during migration.
+- [x] Verify the exact command through Docker against the connected NT-5890K
+      using a small, reviewable ESC/POS smoke stream.
+- [x] Update README, architecture, platform, and testing documentation after
+      the Rust path is verified.
+
 ## Virtual network printer
 
 - [ ] Add an `escpost serve` command.

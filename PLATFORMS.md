@@ -47,13 +47,13 @@ performed on Linux x86-64:
   browser;
 - the Python binding and Click CLI pass their automated suites;
 - Docker Compose exposes the Linux host's `/dev/bus/usb` tree to the CLI; and
-- USB printing has been exercised with the NT-5890K profile and connected
-  printer.
+- both the Python calibration path and the Rust direct-USB `print` command
+  have been exercised with the connected NT-5890K printer.
 
 macOS and Windows builds have not yet been verified by ESCPost. The virtual RAW
-printer, native Windows spooler, and Rust USB backend are planned work. The
-Rust CLI and embedded web server are implemented but still need native
-macOS/Windows release verification.
+printer and native Windows spooler are planned work. The Rust CLI, embedded
+web server, and direct-USB backend are implemented but still need native
+macOS/Windows verification.
 
 ## Release artifacts
 
@@ -122,17 +122,16 @@ choice for remote access.
 Direct USB is necessary for discovery, endpoint access, and bidirectional
 testing of USB-only printers.
 
-The current Python tooling delegates native USB access to python-escpos,
-PyUSB, and libusb:
+The Rust `print` command uses `nusb` for direct bulk transfers:
 
 ```text
-ESCPost Python CLI → python-escpos → PyUSB → libusb → operating system
+ESCPost Rust CLI → nusb → operating system USB API
 ```
 
-The future Rust CLI should replace that path with a Rust USB backend. `rusb`
-is a safe wrapper around libusb and is a suitable candidate. A pure-Rust
-backend such as `nusb` should also be evaluated before the transport API is
-made stable. Selection must consider:
+The legacy Python discovery and calibration workflow continues to use
+python-escpos, PyUSB, and libusb while those higher-level commands are
+migrated. The Rust choice avoids requiring a separately installed libusb
+runtime. It was selected after considering:
 
 - bulk endpoint discovery and transfers;
 - interface claim, detach, and reattach behavior;
@@ -185,7 +184,8 @@ ESC/POS serial support.
 
 ### Direct USB
 
-Current status: **Verified through the Python/libusb tooling on Linux x86-64.**
+Current status: **Verified through both Rust/nusb and Python/libusb on Linux
+x86-64.**
 
 Known caveats:
 
@@ -193,8 +193,8 @@ Known caveats:
 - A udev rule or membership in the device's owning group is preferable to
   running ESCPost as root.
 - The `usblp` kernel driver may already own the printer interface.
-- A direct USB backend may need to detach that driver before claiming the
-  interface and reattach it when finished.
+- The Rust direct-USB backend detaches that driver while claiming the selected
+  interface and asks the kernel to reattach it when the claim is dropped.
 - Only one process should own a direct interface unless the driver and backend
   explicitly support sharing.
 
@@ -262,13 +262,13 @@ Expected limitations:
 
 ### Windows direct USB
 
-Planned advanced backend for discovery, endpoint access, and bidirectional
-protocol testing.
+Implemented but unverified advanced output backend. Discovery and
+bidirectional protocol testing remain in the Python workflow or planned Rust
+work.
 
 Known caveats:
 
-- A libusb DLL or an equivalent packaged backend is required when using
-  libusb.
+- The current `nusb` backend uses the Windows USB API without a libusb DLL.
 - The printer interface normally needs a compatible WinUSB or libusbK driver.
 - Installing WinUSB with a tool such as Zadig can replace the driver used by
   the ordinary Windows printer queue.
@@ -284,7 +284,8 @@ should be an explicit developer choice.
 
 Docker Desktop runs Linux containers inside a virtual machine. Passing a
 Windows USB printer into the current Linux Compose service is not a supported
-hardware workflow. Use the future native Windows executable instead.
+hardware workflow. Use a host-native Windows executable after its direct-USB
+path is verified.
 
 ## Known-issue register
 
@@ -293,12 +294,12 @@ belong in the issue tracker.
 
 | Platform/backend | Status | Caveat or missing evidence | Current direction |
 |---|---|---|---|
-| Linux direct USB | Verified with current Python path | Device permissions and `usblp` ownership vary by host | Add diagnostics and safe claim/release in Rust |
+| Linux direct USB | Verified with Rust/nusb and Python/libusb | Device permissions and `usblp` ownership vary by host | Add diagnostics for permissions and interface ownership |
 | Linux Docker USB | Verified on the development host | Requires `/dev/bus/usb` plus the correct group | Keep explicit Compose device access |
 | macOS direct USB | Unverified | Backend packaging and interface claiming need hardware evidence | Test the host-native Rust binary |
 | macOS Docker USB | Unsupported for the physical workflow | Docker Desktop does not mirror Linux host USB access | Use the host-native binary |
 | Windows spooler | Planned | RAW byte preservation and completion semantics need tests | Make this the default Windows print path |
-| Windows direct USB | Planned, advanced | May require replacing the printer driver with WinUSB | Require an explicit mode and warning |
+| Windows direct USB | Implemented, unverified | May require replacing the printer driver with WinUSB | Verify the native Rust executable and retain explicit targeting |
 | Windows direct USB status | Unverified | Driver and exclusive-access behavior vary | Test replies on representative printers |
 | Windows Docker USB | Unsupported for the physical workflow | Printer is outside the Linux VM | Use the host-native binary |
 | Classic Bluetooth serial | Planned | OS pairing and RFCOMM naming vary | Treat an exposed port as serial |
@@ -328,5 +329,5 @@ printer firmware quirk into a platform rule.
 - [PyUSB platform and backend support](https://github.com/pyusb/pyusb#requirements-and-platform-support)
 - [libusb Windows backend and driver notes](https://github.com/libusb/libusb/wiki/Windows)
 - [Rust target support](https://doc.rust-lang.org/rustc/platform-support.html)
-- [`rusb` documentation](https://docs.rs/crate/rusb/latest)
+- [`nusb` documentation](https://docs.rs/nusb/0.2.5/nusb/)
 - [Homebrew bottle documentation](https://docs.brew.sh/Bottles)

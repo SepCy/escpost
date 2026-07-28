@@ -30,17 +30,47 @@ The Rust workspace contains four crates:
 - `escpost` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
 - `escpost-cli` provides the native `escpost` executable, PNG destinations,
-  and embedded local web viewer.
+  embedded local web viewer, and direct USB output.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
 
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 
-The Python package still contains the physical USB and calibration commands.
-The root development wrapper routes `render` to the Rust executable and the
-remaining hardware commands to that package, keeping one public command name
-during migration. Hardware discovery and printing are not part of the Rust
-rendering library.
+The Python package still contains USB discovery and the higher-level
+calibration commands. The root development wrapper routes `render` and
+`print` to the Rust executable and the remaining hardware commands to that
+package, keeping one public command name during migration. Hardware discovery
+and printing are not part of the Rust rendering library.
+
+## Rust direct USB printing
+
+`escpost-cli` loads a `print` source through the same immutable source loader
+as `render`, then hands those decoded bytes directly to a USB transport. It
+does not invoke the renderer or require a printer profile.
+
+```text
+Known ESC/POS source → decode once → nusb bulk OUT transfer
+                                          │
+                     explicit VID, PID, interface, endpoint
+```
+
+The initial command requires all four USB coordinates. It does not consult
+printer names or local configuration, infer values from profiles, discover
+endpoints, or choose among identical devices. This keeps the physical target
+reviewable at the call site while the printer-management workflow is still
+being designed.
+
+The USB implementation uses `nusb`. On Linux it detaches a kernel driver such
+as `usblp` only while claiming the requested interface and reattaches it when
+the interface is released. A buffered bulk writer waits for every submitted
+transfer to complete and applies a ten-second timeout to each blocking
+transfer. It deliberately uses a normal flush rather than adding a USB
+zero-length packet, matching ordinary raw USB writes and leaving the ESC/POS
+payload unchanged.
+
+Automated tests replace only the `UsbTransport` boundary. Source loading,
+target validation, and byte preservation remain real; ordinary tests cannot
+open or write to connected hardware.
 
 ## Rust render command
 

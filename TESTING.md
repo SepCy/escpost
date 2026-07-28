@@ -349,6 +349,33 @@ python-escpos and its USB dependencies are development or optional hardware
 dependencies. They are not dependencies of the Rust core or ordinary renderer
 installations.
 
+## Rust direct-print smoke tests
+
+Use `escpost print` when only an exact byte stream and explicit USB target are
+needed. Unlike the Python calibration commands, this low-level command does
+not use a configured printer name or renderer profile:
+
+```bash
+./escpost print examples/rust-usb-print-smoke.hex \
+  --usb-vendor-id 0x0416 \
+  --usb-product-id 0x5011 \
+  --usb-interface 0 \
+  --usb-out-endpoint 0x01 \
+  --non-interactive
+```
+
+The committed smoke stream is intentionally short and reviewable, identifies
+itself in plain text, and contains no cut command so it is safe for printers
+without a cutter. The command reports the selected target and transferred byte
+count, but never logs the receipt payload.
+
+Automated `print` tests use a recording transport at the USB boundary. They
+exercise real source decoding and target validation, then assert that the
+transport received the same bytes. CLI subprocess tests stop at argument or
+endpoint validation before the transport boundary. Device-selection tests
+call the pure selection helper with zero or several synthetic matches. Never
+add an automated test that can match and write to ordinary connected hardware.
+
 ## Local printer configuration
 
 Connection details belong in an ignored `local/printers.toml`:

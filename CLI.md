@@ -8,7 +8,8 @@ Python and Rust command families.
 
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
-be reviewed. `render`, direct-USB `print`, and USB-backed `printers list` are
+be reviewed. `render`, direct-USB `print`, USB and configured-network
+`printers list`, and manual network registration through `printers add` are
 implemented; the other top-level commands remain planned or temporarily
 available through the Python hardware workflow.
 `README.md` describes what works today, while `TODO.md` is the single
@@ -356,6 +357,11 @@ only through an explicit `escpost print` invocation.
 setup:
 
 ```text
+escpost printers [--config <FILE>] add [<NAME>]
+    [--transport network]
+    [--host <HOST>]
+    [--port <PORT>]
+    [--profile <PROFILE>]
 escpost printers [--config <FILE>] list [--transport <TRANSPORT>] [--json]
 escpost printers [--config <FILE>] scan [--transport <TRANSPORT>]
 escpost printers [--config <FILE>] pair <CANDIDATE>
@@ -375,39 +381,96 @@ The platform default comes from the operating system through Rust's
 `~/.config/escpost/printers.toml`. A missing implicit file means no configured
 printers. Read-only commands do not create the directory or file.
 
+### `printers add`
+
+`add` registers a printer whose connection information is already known. It is
+the manual counterpart to the future `scan` workflow and does not require
+discovery:
+
+```bash
+escpost printers add kitchen \
+  --transport network \
+  --host 10.42.0.71 \
+  --port 9100 \
+  --profile REFERENCE
+```
+
+The first implementation supports RAW TCP network targets. The name,
+transport, and host are required. At an interactive terminal, omitted required
+values are requested in that order. When this interactive wizard is active, it
+also offers an optional profile field; an empty answer leaves the printer
+unprofiled. Port `9100` is the default and is always stored explicitly. The
+rendering profile remains optional because sending an existing ESC/POS stream
+does not require one and an unknown printer may need calibration before a
+truthful profile exists.
+
+`--non-interactive` disables all questions and reports the first missing
+required value. ESCPost behaves the same way when no terminal is attached, so
+pipelines and CI jobs cannot wait indefinitely for input. For example:
+
+```bash
+escpost --non-interactive printers add kitchen \
+  --transport network \
+  --host printer.local
+```
+
+The resulting entry is ordinary, developer-editable TOML:
+
+```toml
+[kitchen]
+transport = "network"
+host = "printer.local"
+port = 9100
+```
+
+Adding a printer:
+
+- creates the selected configuration directory and file when needed;
+- preserves existing comments, field order, and formatting;
+- refuses to replace an existing name;
+- validates existing configuration before changing it;
+- writes a complete temporary file before atomically replacing the
+  destination;
+- creates a new file with mode `0600` on Unix; and
+- reports the resolved configuration path.
+
+Registration does not connect to the host, send bytes, infer a profile, or
+prove that the printer is online. Manual editing remains supported. Printing
+through a saved network name and active network discovery are separate planned
+capabilities.
+
 ### `printers list`
 
-`list` is the normal read-only command. It returns printers that are currently
-usable or already known to the operating system, across every implemented
-transport:
+`list` is the normal read-only command. The current implementation combines
+attached USB printers with configured RAW TCP network printers. Bluetooth and
+operating-system spooler inventory remain planned.
 
-- attached USB printers;
-- paired Bluetooth Classic printers exposed through a supported serial or
-  RFCOMM path;
-- supported, paired Bluetooth Low Energy printers;
-- configured operating-system printer queues; and
-- configured network printers.
-
-The default includes every supported transport. `--transport
-usb|bluetooth|network|spooler` narrows the result without changing its shape.
+The default includes every supported transport. `--transport usb|network`
+narrows the result without changing its shape.
 The human output identifies the transport and shows the connection fields
 needed by the corresponding print command. When a connected USB interface
 matches a saved entry, the two records merge into one connected result under
-the developer-assigned name. Saved entries without a current transport match
-remain visible with `status: unavailable`.
+the developer-assigned name. A configured network target is connected when a
+TCP connection to its saved host and port succeeds; refused, unresolved, and
+timed-out targets are unavailable.
+
+Every result has a `profile` row regardless of transport or connection status.
+It contains the configured profile identifier or `unassigned` when no profile
+has been selected yet. This keeps the inventory shape predictable while
+allowing unknown printers to be registered before calibration.
 
 Connected printers appear before unavailable printers. Within each status
 group, results sort case-insensitively by display name with stable
 transport-specific tie-breakers. Sorting is intentionally not configurable.
-Future `--status` and `--transport` filters narrow the same ordered inventory;
-they do not define alternate sort modes. `--json` exposes the same snapshot
-for scripts using a versioned schema, allowing callers to apply their own
-sorting.
+The future `--status` filter will narrow the same ordered inventory rather than
+define an alternate sort mode. `--json` will expose the same snapshot for
+scripts using a versioned schema, allowing callers to apply their own sorting.
 
-Listing is passive: it does not pair devices, change configuration, send
-ESC/POS data, or start a broad Bluetooth or network search. Reading USB
-descriptors and querying printers already registered with the operating system
-are part of listing.
+Listing does not pair devices, change configuration, send ESC/POS data, or
+start a broad Bluetooth or network search. It opens and immediately closes one
+TCP connection to each configured network target, using a one-second timeout.
+These probes run concurrently and send zero bytes. Reading USB descriptors is
+also part of listing.
 
 ### `printers scan`
 
@@ -562,8 +625,12 @@ the completed implementation must satisfy.
 | CLI-M06 | Reserve `printers pair` for an explicit state-changing connection workflow which may delegate to the operating system. |
 | CLI-M07 | Never infer a scan or pairing target by display name or choose silently among several candidates. |
 | CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
-| CLI-M09 | Keep passive listing free of configuration writes while showing names that match connected printers. |
+| CLI-M09 | Keep passive listing free of configuration writes while showing matched names and an explicit assigned or unassigned profile for every printer. |
 | CLI-M10 | Merge discovered and configured printers once, list connected before unavailable, and sort each status group by display name. |
+| CLI-M11 | Register a known network target with `printers add`, prompting for missing required values only at an interactive terminal. |
+| CLI-M12 | Make non-interactive registration deterministic, default RAW TCP to port 9100, and keep the profile optional. |
+| CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |
+| CLI-M14 | List configured network targets as connected or unavailable using concurrent, bounded TCP handshakes that send zero bytes. |
 
 ### Web requirements
 

@@ -6,12 +6,27 @@ virtual_environment=/workspace/.venv
 
 command_name=
 subcommand_name=
+skip_argument=false
 for argument in "$@"; do
+    if [ "$skip_argument" = true ]; then
+        skip_argument=false
+        continue
+    fi
+
     case "$argument" in
         --non-interactive)
             ;;
+        --config)
+            # The printers group accepts this option before or after its
+            # subcommand. Its value must not be mistaken for the subcommand.
+            skip_argument=true
+            ;;
+        --config=*)
+            ;;
         --)
             break
+            ;;
+        -*)
             ;;
         *)
             if [ -z "$command_name" ]; then
@@ -25,7 +40,7 @@ for argument in "$@"; do
 done
 
 case "$command_name:$subcommand_name" in
-    render:*|print:*|printers:list)
+    render:*|print:*|printers:list|printers:add)
         cargo build --quiet --locked --package escpost-cli
         exec "$CARGO_TARGET_DIR/debug/escpost" "$@"
         ;;

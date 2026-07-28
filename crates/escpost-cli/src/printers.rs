@@ -1,13 +1,25 @@
-use std::io::{self, Write};
+use std::fmt;
+use std::io::{self, IsTerminal, Write};
+use std::time::Duration;
 
-use crate::cli::{PrintersArgs, PrintersCommand};
-use crate::configuration::{self, ConfiguredUsbPrinter, PrinterConfiguration};
+use crate::cli::{
+    AddPrinterArgs, InventoryTransport, PrinterTransport, PrintersArgs, PrintersCommand,
+};
+use crate::configuration::{
+    self, ConfiguredNetworkPrinter, ConfiguredUsbPrinter, PrinterConfiguration,
+};
 use crate::error::CliError;
+use inquire::{Select, Text};
 use nusb::MaybeFuture;
 use nusb::descriptors::{ConfigurationDescriptor, TransferType};
 use nusb::transfer::Direction;
+use tokio::net::TcpStream;
+use tokio::task::JoinSet;
+use tokio::time::timeout;
 
 const USB_CLASS_PRINTER: u8 = 0x07;
+const NETWORK_PROBE_TIMEOUT: Duration = Duration::from_secs(1);
+const UNASSIGNED_PROFILE: &str = "unassigned";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct UsbPrinter {
@@ -40,16 +52,170 @@ struct ConnectedUsbPrinter {
     configuration_index: Option<usize>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct ResolvedAddPrinter {
+    name: String,
+    transport: PrinterTransport,
+    host: String,
+    port: u16,
+    profile: Option<String>,
+}
+
+struct ListedPrinter<'a> {
+    display_name: String,
+    kind: ListedPrinterKind<'a>,
+}
+
+enum ListedPrinterKind<'a> {
+    ConnectedUsb(&'a ConnectedUsbPrinter),
+    UnavailableUsb(&'a ConfiguredUsbPrinter),
+    Network {
+        printer: &'a ConfiguredNetworkPrinter,
+        connected: bool,
+    },
+}
+
 trait UsbInventory {
     fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError>;
 }
 
-pub(crate) fn run(arguments: PrintersArgs) -> Result<(), CliError> {
+trait AddPrompter {
+    fn name(&mut self) -> Result<String, CliError>;
+    fn transport(&mut self) -> Result<PrinterTransport, CliError>;
+    fn host(&mut self) -> Result<String, CliError>;
+    fn profile(&mut self) -> Result<Option<String>, CliError>;
+}
+
+pub(crate) async fn run(arguments: PrintersArgs, non_interactive: bool) -> Result<(), CliError> {
     match arguments.command {
-        PrintersCommand::List => {
+        PrintersCommand::List(list) => {
             let configuration = configuration::load(arguments.config.as_deref())?;
+            let network_statuses = if list.transport == Some(InventoryTransport::Usb) {
+                Vec::new()
+            } else {
+                probe_network_printers(configuration.network_printers()).await
+            };
             let mut inventory = NusbInventory;
-            execute(&mut inventory, &configuration, &mut io::stdout().lock())
+            execute(
+                &mut inventory,
+                &configuration,
+                &network_statuses,
+                list.transport,
+                &mut io::stdout().lock(),
+            )
+        }
+        PrintersCommand::Add(add) => add_printer(arguments.config.as_deref(), add, non_interactive),
+    }
+}
+
+fn add_printer(
+    config_path: Option<&std::path::Path>,
+    arguments: AddPrinterArgs,
+    non_interactive: bool,
+) -> Result<(), CliError> {
+    let can_prompt = !non_interactive && io::stdin().is_terminal() && io::stderr().is_terminal();
+    let resolved = resolve_add(arguments, can_prompt, &mut InquireAddPrompter)?;
+    let path = match resolved.transport {
+        PrinterTransport::Network => configuration::add_network_printer(
+            config_path,
+            &resolved.name,
+            &resolved.host,
+            resolved.port,
+            resolved.profile.as_deref(),
+        ),
+    }?;
+    eprintln!("Printer: {}", resolved.name);
+    eprintln!("Transport: {}", resolved.transport);
+    eprintln!("Configuration: {}", path.display());
+    Ok(())
+}
+
+fn resolve_add(
+    arguments: AddPrinterArgs,
+    can_prompt: bool,
+    prompter: &mut impl AddPrompter,
+) -> Result<ResolvedAddPrinter, CliError> {
+    let interactive_wizard = can_prompt
+        && (arguments.name.is_none() || arguments.transport.is_none() || arguments.host.is_none());
+    let name = match arguments.name {
+        Some(name) => name,
+        None if can_prompt => prompter.name()?,
+        None => return Err(CliError::MissingPrinterName),
+    };
+    if name.trim().is_empty() {
+        return Err(CliError::BlankPrinterName);
+    }
+    let transport = match arguments.transport {
+        Some(transport) => transport,
+        None if can_prompt => prompter.transport()?,
+        None => return Err(CliError::MissingPrinterTransport),
+    };
+    let host = match arguments.host {
+        Some(host) => host,
+        None if can_prompt => prompter.host()?,
+        None => return Err(CliError::MissingPrinterHost),
+    };
+    if host.trim().is_empty() {
+        return Err(CliError::BlankPrinterHost);
+    }
+    if arguments.port == 0 {
+        return Err(CliError::InvalidPrinterPort);
+    }
+    let profile = match arguments.profile {
+        Some(profile) => Some(profile),
+        None if interactive_wizard => prompter.profile()?,
+        None => None,
+    };
+    if profile
+        .as_deref()
+        .is_some_and(|profile| profile.trim().is_empty())
+    {
+        return Err(CliError::BlankPrinterProfile);
+    }
+
+    Ok(ResolvedAddPrinter {
+        name,
+        transport,
+        host,
+        port: arguments.port,
+        profile,
+    })
+}
+
+struct InquireAddPrompter;
+
+impl AddPrompter for InquireAddPrompter {
+    fn name(&mut self) -> Result<String, CliError> {
+        Text::new("Printer name")
+            .prompt()
+            .map_err(|error| CliError::PrinterPrompt(error.to_string()))
+    }
+
+    fn transport(&mut self) -> Result<PrinterTransport, CliError> {
+        Select::new("Transport", vec![PrinterTransport::Network])
+            .prompt()
+            .map_err(|error| CliError::PrinterPrompt(error.to_string()))
+    }
+
+    fn host(&mut self) -> Result<String, CliError> {
+        Text::new("Network host")
+            .prompt()
+            .map_err(|error| CliError::PrinterPrompt(error.to_string()))
+    }
+
+    fn profile(&mut self) -> Result<Option<String>, CliError> {
+        let profile = Text::new("Printer profile (optional)")
+            .with_help_message("Leave empty when the printer has not been calibrated yet")
+            .prompt()
+            .map_err(|error| CliError::PrinterPrompt(error.to_string()))?;
+        Ok((!profile.trim().is_empty()).then(|| profile.trim().to_owned()))
+    }
+}
+
+impl fmt::Display for PrinterTransport {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Network => formatter.write_str("network"),
         }
     }
 }
@@ -57,32 +223,142 @@ pub(crate) fn run(arguments: PrintersArgs) -> Result<(), CliError> {
 fn execute(
     inventory: &mut impl UsbInventory,
     configuration: &PrinterConfiguration,
+    network_statuses: &[bool],
+    transport: Option<InventoryTransport>,
     output: &mut impl Write,
 ) -> Result<(), CliError> {
-    let listing = merge_usb_inventory(inventory.list()?, configuration);
-    if listing.connected.is_empty() && listing.unavailable_configuration_indexes.is_empty() {
+    let usb_printers = if transport == Some(InventoryTransport::Network) {
+        Vec::new()
+    } else {
+        inventory.list()?
+    };
+    let listing = merge_usb_inventory(usb_printers, configuration);
+    let mut printers = listed_printers(
+        &listing,
+        configuration,
+        network_statuses,
+        transport != Some(InventoryTransport::Usb),
+    );
+    if printers.is_empty() {
         writeln!(output, "No usable printers found.").map_err(CliError::WriteHumanOutput)?;
         return Ok(());
     }
 
-    for (index, connected) in listing.connected.iter().enumerate() {
+    printers.sort_by(|left, right| {
+        left.status_rank()
+            .cmp(&right.status_rank())
+            .then_with(|| {
+                left.display_name
+                    .to_lowercase()
+                    .cmp(&right.display_name.to_lowercase())
+            })
+            .then_with(|| left.display_name.cmp(&right.display_name))
+            .then_with(|| left.transport_rank().cmp(&right.transport_rank()))
+    });
+    for (offset, printer) in printers.into_iter().enumerate() {
+        match printer.kind {
+            ListedPrinterKind::ConnectedUsb(connected) => {
+                let configured = connected
+                    .configuration_index
+                    .map(|index| &configuration.usb_printers()[index]);
+                write_printer(output, offset + 1, &connected.printer, configured)?;
+            }
+            ListedPrinterKind::UnavailableUsb(printer) => {
+                write_unavailable_printer(output, offset + 1, printer)?;
+            }
+            ListedPrinterKind::Network { printer, connected } => {
+                write_network_printer(output, offset + 1, printer, connected)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+async fn probe_network_printers(printers: &[ConfiguredNetworkPrinter]) -> Vec<bool> {
+    let mut probes = JoinSet::new();
+    for (index, printer) in printers.iter().enumerate() {
+        let host = printer.host.clone();
+        let port = printer.port;
+        probes.spawn(async move {
+            // Opening and immediately dropping a TCP stream proves that the
+            // configured RAW endpoint accepts connections without sending a
+            // single byte that the printer could interpret as ESC/POS data.
+            let connected = timeout(
+                NETWORK_PROBE_TIMEOUT,
+                TcpStream::connect((host.as_str(), port)),
+            )
+            .await
+            .is_ok_and(|result| result.is_ok());
+            (index, connected)
+        });
+    }
+
+    let mut statuses = vec![false; printers.len()];
+    while let Some(result) = probes.join_next().await {
+        if let Ok((index, connected)) = result {
+            statuses[index] = connected;
+        }
+    }
+    statuses
+}
+
+fn listed_printers<'a>(
+    usb: &'a MergedUsbInventory,
+    configuration: &'a PrinterConfiguration,
+    network_statuses: &[bool],
+    include_network: bool,
+) -> Vec<ListedPrinter<'a>> {
+    let mut printers = Vec::new();
+    for connected in &usb.connected {
         let configured = connected
             .configuration_index
             .map(|index| &configuration.usb_printers()[index]);
-        write_printer(output, index + 1, &connected.printer, configured)?;
+        printers.push(ListedPrinter {
+            display_name: connected_display_name(&connected.printer, configured),
+            kind: ListedPrinterKind::ConnectedUsb(connected),
+        });
     }
-    for (offset, configuration_index) in listing
-        .unavailable_configuration_indexes
-        .into_iter()
-        .enumerate()
-    {
-        write_unavailable_printer(
-            output,
-            listing.connected.len() + offset + 1,
-            &configuration.usb_printers()[configuration_index],
-        )?;
+    for index in &usb.unavailable_configuration_indexes {
+        let printer = &configuration.usb_printers()[*index];
+        printers.push(ListedPrinter {
+            display_name: printer.name.clone(),
+            kind: ListedPrinterKind::UnavailableUsb(printer),
+        });
     }
-    Ok(())
+    if include_network {
+        for (index, printer) in configuration.network_printers().iter().enumerate() {
+            printers.push(ListedPrinter {
+                display_name: printer.name.clone(),
+                kind: ListedPrinterKind::Network {
+                    printer,
+                    connected: network_statuses.get(index).copied().unwrap_or(false),
+                },
+            });
+        }
+    }
+    printers
+}
+
+impl ListedPrinter<'_> {
+    fn status_rank(&self) -> u8 {
+        match self.kind {
+            ListedPrinterKind::ConnectedUsb(_)
+            | ListedPrinterKind::Network {
+                connected: true, ..
+            } => 0,
+            ListedPrinterKind::UnavailableUsb(_)
+            | ListedPrinterKind::Network {
+                connected: false, ..
+            } => 1,
+        }
+    }
+
+    fn transport_rank(&self) -> u8 {
+        match self.kind {
+            ListedPrinterKind::ConnectedUsb(_) | ListedPrinterKind::UnavailableUsb(_) => 0,
+            ListedPrinterKind::Network { .. } => 1,
+        }
+    }
 }
 
 fn merge_usb_inventory(
@@ -241,6 +517,9 @@ fn write_printer(
         writeln!(output, "    model: {model}").map_err(CliError::WriteHumanOutput)?;
         writeln!(output, "    profile: {}", configured.profile)
             .map_err(CliError::WriteHumanOutput)?;
+    } else {
+        writeln!(output, "    profile: {UNASSIGNED_PROFILE}")
+            .map_err(CliError::WriteHumanOutput)?;
     }
     writeln!(output, "    transport: usb").map_err(CliError::WriteHumanOutput)?;
     writeln!(
@@ -295,6 +574,46 @@ fn write_unavailable_printer(
         writeln!(output, "    serial: {serial_number}").map_err(CliError::WriteHumanOutput)?;
     }
     Ok(())
+}
+
+fn write_network_printer(
+    output: &mut impl Write,
+    number: usize,
+    printer: &ConfiguredNetworkPrinter,
+    connected: bool,
+) -> Result<(), CliError> {
+    writeln!(output, "[{number}] {}", printer.name).map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "    status: {}",
+        if connected {
+            "connected"
+        } else {
+            "unavailable"
+        }
+    )
+    .map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "    profile: {}",
+        printer.profile.as_deref().unwrap_or(UNASSIGNED_PROFILE)
+    )
+    .map_err(CliError::WriteHumanOutput)?;
+    writeln!(output, "    transport: network").map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "    network: {}",
+        format_network_endpoint(&printer.host, printer.port)
+    )
+    .map_err(CliError::WriteHumanOutput)
+}
+
+fn format_network_endpoint(host: &str, port: u16) -> String {
+    if host.contains(':') && !(host.starts_with('[') && host.ends_with(']')) {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    }
 }
 
 fn configuration_matches(printer: &UsbPrinter, configured: &ConfiguredUsbPrinter) -> bool {
@@ -375,9 +694,55 @@ fn printer_interfaces(configuration: ConfigurationDescriptor<'_>) -> Vec<UsbPrin
 
 #[cfg(test)]
 mod tests {
-    use super::{UsbInventory, UsbPrinter, UsbPrinterInterface, execute, printer_interfaces};
+    use super::{
+        AddPrompter, ResolvedAddPrinter, UsbInventory, UsbPrinter, UsbPrinterInterface, execute,
+        printer_interfaces, resolve_add,
+    };
+    use crate::cli::{AddPrinterArgs, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
     use crate::error::CliError;
+
+    #[test]
+    fn add_prompts_for_missing_required_network_values() {
+        let arguments = AddPrinterArgs {
+            name: None,
+            transport: None,
+            host: None,
+            port: 9100,
+            profile: None,
+        };
+        let mut prompter = FixedAddPrompter;
+
+        let resolved =
+            resolve_add(arguments, true, &mut prompter).expect("interactive values should resolve");
+
+        assert_eq!(
+            resolved,
+            ResolvedAddPrinter {
+                name: "kitchen".to_owned(),
+                transport: PrinterTransport::Network,
+                host: "10.42.0.71".to_owned(),
+                port: 9100,
+                profile: Some("REFERENCE".to_owned()),
+            }
+        );
+    }
+
+    #[test]
+    fn add_does_not_prompt_for_an_optional_profile_when_required_values_are_complete() {
+        let arguments = AddPrinterArgs {
+            name: Some("kitchen".to_owned()),
+            transport: Some(PrinterTransport::Network),
+            host: Some("10.42.0.71".to_owned()),
+            port: 9100,
+            profile: None,
+        };
+
+        let resolved = resolve_add(arguments, true, &mut UnexpectedAddPrompter)
+            .expect("complete explicit values should resolve");
+
+        assert_eq!(resolved.profile, None);
+    }
 
     #[test]
     fn list_shows_the_usb_coordinates_needed_by_print() {
@@ -400,6 +765,8 @@ mod tests {
         execute(
             &mut inventory,
             &PrinterConfiguration::default(),
+            &[],
+            None,
             &mut output,
         )
         .expect("listing should succeed");
@@ -409,6 +776,7 @@ mod tests {
             "\
 [1] USB Portable Printer (YICHIP3121)
     status: connected
+    profile: unassigned
     transport: usb
     usb: 0416:5011; bus 3 address 57; interface 0
     endpoints: out 0x01; in 0x81
@@ -427,6 +795,8 @@ mod tests {
         execute(
             &mut inventory,
             &PrinterConfiguration::default(),
+            &[],
+            None,
             &mut output,
         )
         .expect("an empty listing should succeed");
@@ -458,7 +828,8 @@ in_endpoint = \"0x81\"
         .expect("the printer configuration should be valid");
         let mut output = Vec::new();
 
-        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
 
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
@@ -506,7 +877,8 @@ in_endpoint = \"0x81\"
         .expect("the printer configuration should be valid");
         let mut output = Vec::new();
 
-        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
 
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
@@ -584,7 +956,8 @@ out_endpoint = \"0x01\"
         .expect("the printer configuration should be valid");
         let mut output = Vec::new();
 
-        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
 
         let headings = String::from_utf8(output)
             .expect("the listing should be UTF-8")
@@ -642,7 +1015,8 @@ out_endpoint = \"0x01\"
         .expect("the printer configuration should be valid");
         let mut output = Vec::new();
 
-        execute(&mut inventory, &configuration, &mut output).expect("listing should succeed");
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
 
         let output = String::from_utf8(output).expect("the listing should be UTF-8");
         assert_eq!(output.matches("] shared-identity\n").count(), 1);
@@ -678,6 +1052,46 @@ out_endpoint = \"0x01\"
 
     struct FixedInventory {
         printers: Vec<UsbPrinter>,
+    }
+
+    struct FixedAddPrompter;
+
+    struct UnexpectedAddPrompter;
+
+    impl AddPrompter for FixedAddPrompter {
+        fn name(&mut self) -> Result<String, CliError> {
+            Ok("kitchen".to_owned())
+        }
+
+        fn transport(&mut self) -> Result<PrinterTransport, CliError> {
+            Ok(PrinterTransport::Network)
+        }
+
+        fn host(&mut self) -> Result<String, CliError> {
+            Ok("10.42.0.71".to_owned())
+        }
+
+        fn profile(&mut self) -> Result<Option<String>, CliError> {
+            Ok(Some("REFERENCE".to_owned()))
+        }
+    }
+
+    impl AddPrompter for UnexpectedAddPrompter {
+        fn name(&mut self) -> Result<String, CliError> {
+            panic!("name prompt was not expected")
+        }
+
+        fn transport(&mut self) -> Result<PrinterTransport, CliError> {
+            panic!("transport prompt was not expected")
+        }
+
+        fn host(&mut self) -> Result<String, CliError> {
+            panic!("host prompt was not expected")
+        }
+
+        fn profile(&mut self) -> Result<Option<String>, CliError> {
+            panic!("profile prompt was not expected")
+        }
     }
 
     impl UsbInventory for FixedInventory {

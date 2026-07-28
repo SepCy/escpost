@@ -169,6 +169,48 @@ pub(crate) enum CliError {
     #[error("invalid printer configuration {path}: {message}")]
     InvalidPrinterConfiguration { path: PathBuf, message: String },
 
+    #[error("printer name is required")]
+    MissingPrinterName,
+
+    #[error("printer name must not be blank")]
+    BlankPrinterName,
+
+    #[error("printer transport is required")]
+    MissingPrinterTransport,
+
+    #[error("network printer host is required")]
+    MissingPrinterHost,
+
+    #[error("network printer host must not be blank")]
+    BlankPrinterHost,
+
+    #[error("could not read printer information: {0}")]
+    PrinterPrompt(String),
+
+    #[error("printer port must be between 1 and 65535")]
+    InvalidPrinterPort,
+
+    #[error("printer profile must not be blank")]
+    BlankPrinterProfile,
+
+    #[error("printer {0:?} is already configured")]
+    PrinterAlreadyConfigured(String),
+
+    #[error("could not create printer configuration directory {path}: {source}")]
+    CreatePrinterConfigurationDirectory {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("could not serialize printer configuration: {0}")]
+    SerializePrinterConfiguration(String),
+
+    #[error("could not write printer configuration {path}: {source}")]
+    WritePrinterConfiguration {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
     #[error("the operating system did not provide a user configuration directory")]
     NoUserConfigDirectory,
 

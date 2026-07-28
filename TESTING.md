@@ -360,11 +360,13 @@ Its unit tests substitute the USB inventory boundary, verify the exact
 connection fields shown to developers, and parse synthetic USB configuration
 descriptors to exclude non-printer and non-bulk endpoints. The connected
 printer smoke check verifies the `nusb` enumeration path without claiming an
-interface or printing paper. Configuration tests verify explicit-path and
-environment precedence, Linux/XDG platform resolution, configured-name
-matching, unavailable saved printers, connected/configured de-duplication,
-status-first display-name ordering, and the absence of filesystem writes
-during passive listing.
+interface or printing paper. A loopback integration test verifies that a
+configured network endpoint moves between connected and unavailable as its
+listener appears and disappears, and that the reachability handshake sends
+zero bytes. Configuration tests verify explicit-path and environment
+precedence, Linux/XDG platform resolution, configured-name matching,
+unavailable saved printers, connected/configured de-duplication, status-first
+display-name ordering, and the absence of filesystem writes during listing.
 
 ## Rust direct-print smoke tests
 

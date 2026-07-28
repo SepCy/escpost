@@ -99,13 +99,16 @@ List connected USB printer-class devices:
 ./escpost printers list
 ```
 
-The list is read-only and combines connected USB interfaces with saved
-printers that are currently unavailable. Connected printers appear first;
-each status group is alphabetical by display name. A connected saved printer
-appears once under its configured name and includes its model, profile,
-transport, VID/PID, USB location, interface, endpoints, and cached identity
-strings. Listing does not claim an interface, send data, or create
-configuration.
+The list is read-only and combines connected USB interfaces with configured
+RAW TCP network printers. Network targets are marked connected when their
+saved endpoint accepts a one-second TCP handshake. Probes run concurrently and
+send zero bytes. Connected printers appear first; each status group is
+alphabetical by display name. Every result includes either its configured
+profile or `profile: unassigned`, independently of its transport. A connected
+saved USB printer appears once under its configured name and includes its
+model, transport, VID/PID, USB location, interface, endpoints, and cached
+identity strings. Listing does not claim a USB interface, send ESC/POS data,
+scan the network, or create configuration.
 
 Native installations keep `printers.toml` in the platform user-configuration
 directory. On Linux this is normally
@@ -116,6 +119,21 @@ development wrapper deliberately uses the separate ignored file
 another directory in a native installation, or pass
 `printers --config <FILE>` for one invocation. With the Docker wrapper, set
 `ESCPOST_CONFIG_HOST_DIR` to deliberately mount another host directory.
+
+Register a network printer when its address is already known:
+
+```bash
+./escpost printers add kitchen \
+  --transport network \
+  --host 10.42.0.71
+```
+
+At a terminal, the name, transport, and host may be omitted and ESCPost asks
+for the missing values, followed by an optional profile. Port `9100` is used by
+default. Pass `--non-interactive` to make missing required values fail instead.
+The command updates the same developer-editable `printers.toml` used by
+`printers list`; it does not probe the address or send print data. Printing
+through the saved network name is planned separately.
 
 The temporary Python command for saving one selected device to the ignored
 local configuration remains available until calibration configuration moves

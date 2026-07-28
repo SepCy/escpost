@@ -34,6 +34,6 @@ async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Render(arguments) => render::run(arguments, cli.non_interactive).await,
         Command::Print(arguments) => print::run(arguments),
-        Command::Printers(arguments) => printers::run(arguments),
+        Command::Printers(arguments) => printers::run(arguments, cli.non_interactive).await,
     }
 }

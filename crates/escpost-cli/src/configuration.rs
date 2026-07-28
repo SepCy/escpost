@@ -1,15 +1,22 @@
 use std::env;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 use crate::error::CliError;
 
 const CONFIG_DIRECTORY_ENV: &str = "ESCPOST_CONFIG_DIR";
 const PRINTERS_FILE: &str = "printers.toml";
+static TEMPORARY_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Default)]
 pub(crate) struct PrinterConfiguration {
     usb_printers: Vec<ConfiguredUsbPrinter>,
+    network_printers: Vec<ConfiguredNetworkPrinter>,
 }
 
 #[derive(Debug)]
@@ -24,37 +31,55 @@ pub(crate) struct ConfiguredUsbPrinter {
     pub(crate) in_endpoint: Option<u8>,
 }
 
+#[derive(Debug)]
+pub(crate) struct ConfiguredNetworkPrinter {
+    pub(crate) name: String,
+    pub(crate) profile: Option<String>,
+    pub(crate) host: String,
+    pub(crate) port: u16,
+}
+
 impl PrinterConfiguration {
     pub(crate) fn parse(content: &str) -> Result<Self, String> {
         let document = toml::from_str::<toml::Table>(content).map_err(|error| error.to_string())?;
         let mut usb_printers = Vec::new();
+        let mut network_printers = Vec::new();
 
         for (name, value) in document {
             let table = value
                 .as_table()
                 .ok_or_else(|| format!("printer {name:?} must be a table"))?;
             let transport = required_string(table, "transport", &name)?;
-            if transport != "usb" {
+            if transport == "network" {
+                network_printers.push(parse_network_printer(table, name)?);
                 continue;
             }
-
-            usb_printers.push(ConfiguredUsbPrinter {
-                profile: required_string(table, "profile", &name)?.to_owned(),
-                vendor_id: required_integer(table, "vendor_id", &name)?,
-                product_id: required_integer(table, "product_id", &name)?,
-                serial_number: optional_string(table, "serial_number", &name)?,
-                interface_number: required_integer(table, "interface_number", &name)?,
-                out_endpoint: required_integer(table, "out_endpoint", &name)?,
-                in_endpoint: optional_integer(table, "in_endpoint", &name)?,
-                name,
-            });
+            if transport == "usb" {
+                usb_printers.push(ConfiguredUsbPrinter {
+                    profile: required_string(table, "profile", &name)?.to_owned(),
+                    vendor_id: required_integer(table, "vendor_id", &name)?,
+                    product_id: required_integer(table, "product_id", &name)?,
+                    serial_number: optional_string(table, "serial_number", &name)?,
+                    interface_number: required_integer(table, "interface_number", &name)?,
+                    out_endpoint: required_integer(table, "out_endpoint", &name)?,
+                    in_endpoint: optional_integer(table, "in_endpoint", &name)?,
+                    name,
+                });
+            }
         }
 
-        Ok(Self { usb_printers })
+        Ok(Self {
+            usb_printers,
+            network_printers,
+        })
     }
 
     pub(crate) fn usb_printers(&self) -> &[ConfiguredUsbPrinter] {
         &self.usb_printers
+    }
+
+    pub(crate) fn network_printers(&self) -> &[ConfiguredNetworkPrinter] {
+        &self.network_printers
     }
 }
 
@@ -64,13 +89,7 @@ impl PrinterConfiguration {
 /// the developer must be readable and valid. Keeping that distinction here
 /// prevents read-only commands from creating configuration as a side effect.
 pub(crate) fn load(explicit_path: Option<&Path>) -> Result<PrinterConfiguration, CliError> {
-    let (path, required) = match explicit_path {
-        Some(path) => (path.to_owned(), true),
-        None => match config_directory_override() {
-            Some(directory) => (directory.join(PRINTERS_FILE), false),
-            None => (platform_config_directory()?.join(PRINTERS_FILE), false),
-        },
-    };
+    let (path, required) = resolve_path(explicit_path)?;
 
     let content = match fs::read_to_string(&path) {
         Ok(content) => content,
@@ -85,6 +104,139 @@ pub(crate) fn load(explicit_path: Option<&Path>) -> Result<PrinterConfiguration,
         .map_err(|message| CliError::InvalidPrinterConfiguration { path, message })
 }
 
+pub(crate) fn add_network_printer(
+    explicit_path: Option<&Path>,
+    name: &str,
+    host: &str,
+    port: u16,
+    profile: Option<&str>,
+) -> Result<PathBuf, CliError> {
+    let (path, _) = resolve_path(explicit_path)?;
+    let existing = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(source) => return Err(CliError::ReadPrinterConfiguration { path, source }),
+    };
+    if !existing.is_empty() {
+        PrinterConfiguration::parse(&existing).map_err(|message| {
+            CliError::InvalidPrinterConfiguration {
+                path: path.clone(),
+                message,
+            }
+        })?;
+    }
+    let document = if existing.is_empty() {
+        toml::Table::new()
+    } else {
+        toml::from_str::<toml::Table>(&existing).map_err(|error| {
+            CliError::InvalidPrinterConfiguration {
+                path: path.clone(),
+                message: error.to_string(),
+            }
+        })?
+    };
+    if document.contains_key(name) {
+        return Err(CliError::PrinterAlreadyConfigured(name.to_owned()));
+    }
+
+    // Serialize only the new table, then append it to the original text. This
+    // keeps comments, field order, and formatting chosen by developers.
+    let mut printer = toml::Table::new();
+    printer.insert(
+        "transport".to_owned(),
+        toml::Value::String("network".to_owned()),
+    );
+    printer.insert("host".to_owned(), toml::Value::String(host.to_owned()));
+    printer.insert("port".to_owned(), toml::Value::Integer(i64::from(port)));
+    if let Some(profile) = profile {
+        printer.insert(
+            "profile".to_owned(),
+            toml::Value::String(profile.to_owned()),
+        );
+    }
+    let mut addition = toml::Table::new();
+    addition.insert(name.to_owned(), toml::Value::Table(printer));
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|source| {
+            CliError::CreatePrinterConfigurationDirectory {
+                path: parent.to_owned(),
+                source,
+            }
+        })?;
+    }
+    let addition = toml::to_string_pretty(&addition)
+        .map_err(|error| CliError::SerializePrinterConfiguration(error.to_string()))?;
+    let mut content = existing;
+    if !content.is_empty() {
+        if !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push('\n');
+    }
+    content.push_str(&addition);
+    write_atomically(&path, content.as_bytes()).map_err(|source| {
+        CliError::WritePrinterConfiguration {
+            path: path.clone(),
+            source,
+        }
+    })?;
+    Ok(path)
+}
+
+/// Replace a configuration only after its complete new contents are written.
+///
+/// The temporary file lives beside the destination, so the final rename stays
+/// on one filesystem. An interrupted process may leave an unused temporary
+/// file, but the destination remains either the old or complete new document.
+fn write_atomically(path: &Path, content: &[u8]) -> Result<(), std::io::Error> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let file_name = path
+        .file_name()
+        .unwrap_or_else(|| std::ffi::OsStr::new(PRINTERS_FILE))
+        .to_string_lossy();
+    let sequence = TEMPORARY_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let temporary = parent.join(format!(
+        ".{file_name}.{}.{}.tmp",
+        std::process::id(),
+        sequence
+    ));
+
+    let result = (|| {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+
+        let mut file = options.open(&temporary)?;
+        file.write_all(content)?;
+        file.sync_all()?;
+        drop(file);
+
+        if let Ok(metadata) = fs::metadata(path) {
+            fs::set_permissions(&temporary, metadata.permissions())?;
+        }
+        fs::rename(&temporary, path)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn resolve_path(explicit_path: Option<&Path>) -> Result<(PathBuf, bool), CliError> {
+    match explicit_path {
+        Some(path) => Ok((path.to_owned(), true)),
+        None => match config_directory_override() {
+            Some(directory) => Ok((directory.join(PRINTERS_FILE), false)),
+            None => Ok((platform_config_directory()?.join(PRINTERS_FILE), false)),
+        },
+    }
+}
+
 fn config_directory_override() -> Option<PathBuf> {
     env::var_os(CONFIG_DIRECTORY_ENV)
         .filter(|value| !value.is_empty())
@@ -95,6 +247,25 @@ fn platform_config_directory() -> Result<PathBuf, CliError> {
     directories::ProjectDirs::from("io", "receiptful", "escpost")
         .map(|directories| directories.config_dir().to_owned())
         .ok_or(CliError::NoUserConfigDirectory)
+}
+
+fn parse_network_printer(
+    table: &toml::Table,
+    name: String,
+) -> Result<ConfiguredNetworkPrinter, String> {
+    let host = required_string(table, "host", &name)?.to_owned();
+    let port = required_integer::<u16>(table, "port", &name)?;
+    if port == 0 {
+        return Err(format!(
+            "printer {name:?} field \"port\" must be between 1 and 65535"
+        ));
+    }
+    Ok(ConfiguredNetworkPrinter {
+        profile: optional_string(table, "profile", &name)?,
+        name,
+        host,
+        port,
+    })
 }
 
 fn required_string<'a>(

@@ -113,7 +113,50 @@ pub(crate) struct PrintersArgs {
 #[derive(Debug, Subcommand)]
 pub(crate) enum PrintersCommand {
     /// List currently usable printers.
-    List,
+    List(ListPrintersArgs),
+
+    /// Register a printer in the local configuration.
+    Add(AddPrinterArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ListPrintersArgs {
+    /// Show only one connection transport.
+    #[arg(long, value_enum)]
+    pub(crate) transport: Option<InventoryTransport>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum InventoryTransport {
+    Usb,
+    Network,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct AddPrinterArgs {
+    /// Developer-assigned printer name.
+    pub(crate) name: Option<String>,
+
+    /// Connection transport.
+    #[arg(long, value_enum)]
+    pub(crate) transport: Option<PrinterTransport>,
+
+    /// Network hostname or IP address.
+    #[arg(long)]
+    pub(crate) host: Option<String>,
+
+    /// Raw TCP port.
+    #[arg(long, default_value_t = 9100)]
+    pub(crate) port: u16,
+
+    /// Optional rendering profile.
+    #[arg(long)]
+    pub(crate) profile: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum PrinterTransport {
+    Network,
 }
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]

@@ -342,16 +342,22 @@ rules are specified in `CLI.md`.
       transport. (`CLI-M01`, `CLI-M03`)
 - [x] Resolve `printers.toml` from an explicit file, `ESCPOST_CONFIG_DIR`, or
       the platform-native user configuration directory. (`CLI-M08`)
-- [x] Show configured USB names and profiles in passive inventory without
-      creating configuration files. (`CLI-M09`)
+- [x] Show matched USB names and an explicit assigned or unassigned profile
+      for every inventory result without creating configuration files.
+      (`CLI-M09`)
 - [x] Merge connected and configured records, retain unavailable printers, and
       apply the stable status-first display-name order. (`CLI-M10`)
 - [x] Isolate Docker checkout configuration at `local/config/printers.toml`
       instead of mounting a host installation's potentially different data.
-- [ ] Extend `printers list` to Bluetooth, network, and operating-system
-      spooler transports as their backends are implemented. (`CLI-M02`)
-- [ ] Add `--transport` filtering and versioned `--json` output.
-      (`CLI-M02`, `CLI-M04`)
+- [x] Add safe manual RAW network registration through `printers add`, with
+      terminal prompts, strict non-interactive behavior, and atomic TOML
+      updates. (`CLI-M11`, `CLI-M12`, `CLI-M13`)
+- [x] List configured RAW network targets with concurrent, one-second,
+      zero-byte reachability probes. (`CLI-M14`)
+- [x] Add `--transport usb|network` filtering. (`CLI-M02`)
+- [ ] Extend `printers list` to Bluetooth and operating-system spooler
+      transports as their backends are implemented. (`CLI-M02`)
+- [ ] Add versioned `--json` inventory output. (`CLI-M04`)
 - [ ] Add `--status connected|unavailable` filtering when inventories become
       large enough to need it; keep sorting non-configurable.
 - [x] Keep the existing Python configuration workflow on the same resolved
@@ -363,8 +369,8 @@ rules are specified in `CLI.md`.
 - [ ] Add `printers pair` with the first transport that needs explicit
       connection setup, delegating to the operating system where required.
       (`CLI-M06`, `CLI-M07`)
-- [ ] Add configured RAW network-printer targets.
-- [ ] Add a safe direct host-and-port reachability check.
+- [ ] Use configured RAW network-printer targets from `print --printer`.
+- [x] Add a safe direct host-and-port reachability check to `printers list`.
 - [ ] Add profile-controlled status and identity probes that do not print.
 - [ ] Explain USB device permissions and container group access in `doctor`.
 - [ ] Avoid broad network scanning or vendor discovery protocols until a

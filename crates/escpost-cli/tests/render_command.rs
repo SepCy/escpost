@@ -292,6 +292,90 @@ fn stdin_to_stdout_contains_only_one_png() {
 }
 
 #[test]
+fn empty_job_cannot_be_written_to_stdout_as_a_png() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            "-",
+            "--format",
+            "binary",
+            "--profile",
+            "REFERENCE",
+            "--output",
+            "-",
+            "--non-interactive",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the escpost command should start");
+    drop(child.stdin.take());
+
+    let output = child
+        .wait_with_output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("single-PNG output requires exactly one sheet")
+    );
+}
+
+#[test]
+fn multi_sheet_job_cannot_be_concatenated_on_stdout() {
+    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            case_directory
+                .to_str()
+                .expect("the case path should be UTF-8"),
+            "--output",
+            "-",
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("single-PNG output requires exactly one sheet")
+    );
+}
+
+#[test]
+fn stdout_png_cannot_be_combined_with_web_mode() {
+    let input_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/cases/text/ascii-fonts-and-styles");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            input_path.to_str().expect("the input path should be UTF-8"),
+            "--output",
+            "-",
+            "--web",
+            "--non-interactive",
+        ])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("PNG stdout cannot be combined with a long-running web viewer")
+    );
+}
+
+#[test]
 fn output_directory_writes_every_sheet_and_ordered_manifest() {
     let temporary_directory = temporary_directory("all-sheets");
     let output_directory = temporary_directory.join("rendered");

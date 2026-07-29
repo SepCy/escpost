@@ -8,7 +8,7 @@ Python and Rust command families.
 
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
-be reviewed. `render`, direct-USB `print`, USB and configured-network
+be reviewed. `render`, named USB and RAW-network `print`, USB and configured-network
 `printers list`, and manual network registration through `printers add` are
 implemented; the other top-level commands remain planned or temporarily
 available through the Python hardware workflow.
@@ -305,51 +305,61 @@ interpretations, not several rewritten inputs.
 
 ## `escpost print`
 
-`print` sends one known ESC/POS source unchanged to an explicitly identified
-physical USB interface:
+`print` sends one known ESC/POS source unchanged to a named configured printer:
 
 ```text
 escpost print <SOURCE>
     [--format auto|binary|hex]
-    --usb-vendor-id <ID>
-    --usb-product-id <ID>
-    --usb-interface <NUMBER>
-    --usb-out-endpoint <ADDRESS>
+    [--printer <NAME>]
+    [--config <FILE>]
 ```
 
 The source rules are the same as for `render`. A conformance-case directory
 supplies its immutable `input.hex`, but its profile metadata does not select or
 alter the physical target. `print` does not require a renderer profile.
 
-All four USB values are required. IDs and endpoint addresses accept decimal or
-`0x`-prefixed notation. The first implementation deliberately provides:
+`--printer` is the only target option. The selected name resolves through the
+same `printers.toml` precedence used by printer management. USB coordinates,
+network hosts, and ports cannot be supplied to `print`; one-off targets must be
+registered first. The profile associated with the name is deliberately not
+used because `print` forwards an already encoded stream.
 
-- no printer-name or local-configuration lookup;
-- no USB interface or endpoint discovery;
-- no profile inference;
-- no default USB values; and
-- no automatic choice when several devices share the requested vendor and
-  product IDs.
+At an interactive terminal, omitting `--printer` opens a selection containing
+every configured name, its transport and profile state, followed by
+“Add a printer…”. Selecting an existing name prints to it. Selecting the add
+action runs the shared `printers add` workflow, reloads configuration, and
+prints to the newly created name in the same invocation. Cancelling the prompt
+does not print. Effective non-interactive mode never prompts and requires
+`--printer <NAME>`.
 
-When no matching device exists, or when several devices match, the command
-fails without sending data. A later explicit disambiguator or discovery
-workflow may make several identical devices addressable.
-
-The command invocation itself authorizes the physical write; it does not ask
-for another confirmation. It claims exactly the supplied interface and opens
-the supplied bulk OUT endpoint. On Linux, claiming may temporarily detach the
-kernel printer driver for that interface. The interface is released when the
-command ends.
+The selected name and the interactive selection itself authorize the physical
+write; there is no second confirmation. An unknown name fails before a
+connection is attempted.
 
 The transport sends exactly the bytes loaded from `SOURCE`. It must not prepend
 initialization, append feeds or cuts, render content, normalize line endings,
-or call high-level printer helpers. Success reports the USB target and byte
-count on stderr. Failures return nonzero and distinguish enumeration, missing
-or ambiguous devices, open/claim/endpoint failures, and incomplete transfers.
+or call high-level printer helpers.
 
-Automated tests substitute only at the physical USB boundary. Ordinary test
-commands must never send bytes to connected printers; hardware output happens
-only through an explicit `escpost print` invocation.
+For USB, the configured VID/PID and optional serial identify the device; the
+configured interface and bulk OUT endpoint determine the write. A serial
+number disambiguates otherwise identical devices. Without one, zero or several
+matches fail before claiming an interface. On Linux, claiming may temporarily
+detach the kernel printer driver until the interface is released.
+
+For network printers, `print` opens one RAW TCP connection to the configured
+host and port, writes the complete stream, then closes the write side. It does
+not perform a separate reachability probe or send framing bytes. Connection
+and write operations have bounded timeouts. A successful socket write cannot
+prove that paper was physically produced.
+
+Success reports the printer name, transport, resolved target, and byte count
+on stderr without logging receipt contents. Failures return nonzero and
+distinguish configuration, selection, connection, USB, and transfer errors.
+
+Automated USB tests substitute only at the physical boundary. Network tests
+use loopback listeners. Ordinary test commands must never address configured
+physical printers; hardware output happens only through an explicit
+`escpost print` invocation.
 
 ## `escpost printers`
 
@@ -435,9 +445,8 @@ Adding a printer:
 - reports the resolved configuration path.
 
 Registration does not connect to the host, send bytes, infer a profile, or
-prove that the printer is online. Manual editing remains supported. Printing
-through a saved network name and active network discovery are separate planned
-capabilities.
+prove that the printer is online. Manual editing remains supported. Active
+network discovery remains a separate planned capability.
 
 ### `printers list`
 
@@ -605,13 +614,14 @@ the completed implementation must satisfy.
 | ID | Requirement |
 |---|---|
 | CLI-P01 | Accept the same file, hexadecimal, stdin, and recognized-directory sources as `render`. |
-| CLI-P02 | Require explicit USB vendor ID, product ID, interface, and bulk OUT endpoint. |
-| CLI-P03 | Never infer a printer alias, profile, interface, endpoint, or other USB default. |
+| CLI-P02 | Address physical output only through a configured printer name, never transport options on `print`. |
+| CLI-P03 | Select a configured name interactively when allowed, offer the shared add-printer workflow, and print to the selected or newly added name. |
 | CLI-P04 | Send the loaded bytes unchanged without adding ESC/POS commands. |
-| CLI-P05 | Fail without printing when zero or several devices match the requested IDs. |
-| CLI-P06 | Report the selected USB target and transferred byte count without logging receipt contents. |
+| CLI-P05 | Resolve USB and RAW TCP details from configuration and fail before printing for unknown or ambiguous targets. |
+| CLI-P06 | Report the selected name, transport, resolved target, and transferred byte count without logging receipt contents. |
 | CLI-P07 | Return typed, actionable errors and nonzero status for every failed physical operation. |
-| CLI-P08 | Keep automated tests physically inert by substituting only at the USB boundary. |
+| CLI-P08 | Keep automated tests physically inert by substituting USB and using loopback-only network listeners. |
+| CLI-P09 | Bound RAW TCP connection and write operations and send no probe, framing, or other extra bytes. |
 
 ### Printer-management requirements
 

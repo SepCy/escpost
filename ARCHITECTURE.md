@@ -30,8 +30,8 @@ The Rust workspace contains four crates:
 - `escpost` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
 - `escpost-cli` provides the native `escpost` executable, PNG destinations,
-  embedded local web viewer, direct USB output, passive USB printer inventory,
-  and platform-native machine configuration.
+  embedded local web viewer, named USB and RAW TCP output, passive printer
+  inventory, and platform-native machine configuration.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
 
 Python calls into Rust once per job. The binding releases the Python
@@ -44,35 +44,39 @@ hardware commands to that package, keeping one public command name during
 migration. Hardware inventory and printing are not part of the Rust rendering
 library.
 
-## Rust direct USB printing
+## Rust named-printer output
 
 `escpost-cli` loads a `print` source through the same immutable source loader
-as `render`, then hands those decoded bytes directly to a USB transport. It
-does not invoke the renderer or require a printer profile.
+as `render`, resolves one configured printer name, then hands those decoded
+bytes directly to its USB or RAW TCP transport. It does not invoke the renderer
+or require a printer profile.
 
 ```text
-Known ESC/POS source → decode once → nusb bulk OUT transfer
-                                          │
-                     explicit VID, PID, interface, endpoint
+Known ESC/POS source → decode once → configured printer name
+                                         ├── nusb bulk OUT
+                                         └── RAW TCP socket
 ```
 
-The initial command requires all four USB coordinates. It does not consult
-printer names or local configuration, infer values from profiles, discover
-endpoints, or choose among identical devices. This keeps the physical target
-reviewable at the call site while the printer-management workflow is still
-being designed.
+Transport details live only in `printers.toml`. This keeps `print` independent
+of transport-specific flags and gives calibration, inventory, and direct output
+the same printer identity. Interactive output selection may call the shared
+add-printer workflow; configuration is reloaded before the new name is used.
 
 The USB implementation uses `nusb`. On Linux it detaches a kernel driver such
-as `usblp` only while claiming the requested interface and reattaches it when
-the interface is released. A buffered bulk writer waits for every submitted
-transfer to complete and applies a ten-second timeout to each blocking
-transfer. It deliberately uses a normal flush rather than adding a USB
-zero-length packet, matching ordinary raw USB writes and leaving the ESC/POS
-payload unchanged.
+as `usblp` only while claiming the configured interface and reattaches it when
+the interface is released. The optional configured serial number distinguishes
+devices with equal VID/PID values. A buffered bulk writer waits for every
+submitted transfer to complete and applies a ten-second timeout to each
+blocking transfer.
 
-Automated tests replace only the `UsbTransport` boundary. Source loading,
-target validation, and byte preservation remain real; ordinary tests cannot
-open or write to connected hardware.
+The RAW TCP implementation connects directly to the configured host and port,
+writes the source bytes once, and shuts down the connection without a separate
+probe or protocol framing. Connection and write timeouts keep failures bounded.
+
+Automated tests replace only the `UsbTransport` boundary and use loopback
+listeners for network output. Source loading, name resolution, target
+validation, and byte preservation remain real; ordinary tests cannot open or
+write to configured physical hardware.
 
 `printers list` uses the same `nusb` dependency but remains a separate passive
 inventory path. It first selects USB printer-class devices, opens them only to

@@ -157,6 +157,30 @@ pub(crate) enum CliError {
         source: std::io::Error,
     },
 
+    #[error("printer is required; pass --printer <NAME>")]
+    MissingPrintPrinter,
+
+    #[error("printer {0:?} is not configured; use `escpost printers list` to see available names")]
+    UnknownConfiguredPrinter(String),
+
+    #[error("timed out while connecting to network printer {0}")]
+    ConnectNetworkPrinterTimeout(String),
+
+    #[error("could not connect to network printer {target}: {source}")]
+    ConnectNetworkPrinter {
+        target: String,
+        source: std::io::Error,
+    },
+
+    #[error("timed out while writing to network printer {0}")]
+    WriteNetworkPrinterTimeout(String),
+
+    #[error("could not write to network printer {target}: {source}")]
+    WriteNetworkPrinter {
+        target: String,
+        source: std::io::Error,
+    },
+
     #[error("could not write command output: {0}")]
     WriteHumanOutput(std::io::Error),
 

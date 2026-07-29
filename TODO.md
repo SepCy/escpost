@@ -138,27 +138,32 @@ input.
 - [x] Update the root wrapper, Compose configuration, README examples, and
       architecture after the Rust path becomes authoritative.
 
-## Rust direct USB printing
+## Rust named-printer output
 
 This is the physical-output primitive later used by profile calibration.
 `print` consumes the same immutable source loader as `render`, but it does not
 render and does not require a profile.
 
 - [x] Add `escpost print <SOURCE>` to the Rust CLI. (`CLI-P01`)
-- [x] Require explicit USB vendor ID, product ID, interface, and bulk OUT
-      endpoint with decimal and `0x` notation. (`CLI-P02`, `CLI-P03`)
-- [x] Send the decoded source bytes unchanged and report the target and byte
-      count without logging receipt contents. (`CLI-P04`, `CLI-P06`)
-- [x] Refuse missing and ambiguous devices before claiming an interface or
-      writing data. (`CLI-P05`)
+- [x] Resolve physical targets only through configured names and remove
+      transport-specific options from `print`. (`CLI-P02`)
+- [x] Select existing printers interactively or run the shared add workflow
+      and print to the newly added target. (`CLI-P03`)
+- [x] Send the decoded source bytes unchanged and report the name, target, and
+      byte count without logging receipt contents. (`CLI-P04`, `CLI-P06`)
+- [x] Print through configured USB or RAW TCP details and refuse unknown or
+      ambiguous targets before writing data. (`CLI-P05`, `CLI-P09`)
 - [x] Add typed enumeration, open, claim, endpoint, and transfer failures.
       (`CLI-P07`)
-- [x] Put only the physical USB boundary behind a test transport and keep
-      ordinary automated runs incapable of printing. (`CLI-P08`)
+- [x] Put the physical USB boundary behind a test transport, use loopback
+      network receivers, and keep ordinary automated runs incapable of
+      physical printing. (`CLI-P08`)
 - [x] Route `./escpost print` to Rust while leaving legacy Python
       configuration and calibration commands reachable during migration.
 - [x] Verify the exact command through Docker against the connected NT-5890K
       using a small, reviewable ESC/POS smoke stream.
+- [x] Verify named RAW TCP output through Docker against the connected Munbyn
+      ITPP047 using the shared smoke stream.
 - [x] Update README, architecture, platform, and testing documentation after
       the Rust path is verified.
 
@@ -369,7 +374,7 @@ rules are specified in `CLI.md`.
 - [ ] Add `printers pair` with the first transport that needs explicit
       connection setup, delegating to the operating system where required.
       (`CLI-M06`, `CLI-M07`)
-- [ ] Use configured RAW network-printer targets from `print --printer`.
+- [x] Use configured RAW network-printer targets from `print --printer`.
 - [x] Add a safe direct host-and-port reachability check to `printers list`.
 - [ ] Add profile-controlled status and identity probes that do not print.
 - [ ] Explain USB device permissions and container group access in `doctor`.

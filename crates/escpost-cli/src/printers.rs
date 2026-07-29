@@ -115,17 +115,41 @@ fn add_printer(
 ) -> Result<(), CliError> {
     let can_prompt = !non_interactive && io::stdin().is_terminal() && io::stderr().is_terminal();
     let resolved = resolve_add(arguments, can_prompt, &mut InquireAddPrompter)?;
-    let path = match resolved.transport {
+    save_and_report_printer(config_path, &resolved)?;
+    Ok(())
+}
+
+pub(crate) fn add_interactively(config_path: Option<&std::path::Path>) -> Result<String, CliError> {
+    let resolved = resolve_add(
+        AddPrinterArgs {
+            name: None,
+            transport: None,
+            host: None,
+            port: 9100,
+            profile: None,
+        },
+        true,
+        &mut InquireAddPrompter,
+    )?;
+    save_and_report_printer(config_path, &resolved)?;
+    Ok(resolved.name)
+}
+
+fn save_and_report_printer(
+    config_path: Option<&std::path::Path>,
+    printer: &ResolvedAddPrinter,
+) -> Result<(), CliError> {
+    let path = match printer.transport {
         PrinterTransport::Network => configuration::add_network_printer(
             config_path,
-            &resolved.name,
-            &resolved.host,
-            resolved.port,
-            resolved.profile.as_deref(),
+            &printer.name,
+            &printer.host,
+            printer.port,
+            printer.profile.as_deref(),
         ),
     }?;
-    eprintln!("Printer: {}", resolved.name);
-    eprintln!("Transport: {}", resolved.transport);
+    eprintln!("Printer: {}", printer.name);
+    eprintln!("Transport: {}", printer.transport);
     eprintln!("Configuration: {}", path.display());
     Ok(())
 }
@@ -515,8 +539,12 @@ fn write_printer(
     writeln!(output, "    status: connected").map_err(CliError::WriteHumanOutput)?;
     if let Some(configured) = configured {
         writeln!(output, "    model: {model}").map_err(CliError::WriteHumanOutput)?;
-        writeln!(output, "    profile: {}", configured.profile)
-            .map_err(CliError::WriteHumanOutput)?;
+        writeln!(
+            output,
+            "    profile: {}",
+            configured.profile.as_deref().unwrap_or(UNASSIGNED_PROFILE)
+        )
+        .map_err(CliError::WriteHumanOutput)?;
     } else {
         writeln!(output, "    profile: {UNASSIGNED_PROFILE}")
             .map_err(CliError::WriteHumanOutput)?;
@@ -556,7 +584,12 @@ fn write_unavailable_printer(
 ) -> Result<(), CliError> {
     writeln!(output, "[{number}] {}", printer.name).map_err(CliError::WriteHumanOutput)?;
     writeln!(output, "    status: unavailable").map_err(CliError::WriteHumanOutput)?;
-    writeln!(output, "    profile: {}", printer.profile).map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "    profile: {}",
+        printer.profile.as_deref().unwrap_or(UNASSIGNED_PROFILE)
+    )
+    .map_err(CliError::WriteHumanOutput)?;
     writeln!(output, "    transport: usb").map_err(CliError::WriteHumanOutput)?;
     writeln!(
         output,
@@ -842,6 +875,34 @@ in_endpoint = \"0x81\"
     endpoints: out 0x01; in 0x81
     serial: B120300001
 "
+        );
+    }
+
+    #[test]
+    fn configured_usb_printer_can_remain_unprofiled() {
+        let mut inventory = FixedInventory {
+            printers: Vec::new(),
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[uncalibrated-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("an unprofiled USB printer should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        assert!(
+            String::from_utf8(output)
+                .expect("the listing should be UTF-8")
+                .contains("profile: unassigned")
         );
     }
 

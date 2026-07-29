@@ -34,10 +34,10 @@ misleading replacement glyph.
 The Rust `escpost render` command accepts raw bytes, readable hexadecimal
 input, stdin, or a conformance-case directory. It can write PNGs, stream one
 PNG to stdout, or host an embedded browser workbench. The Rust `print` command
-sends the same source types unchanged to an explicitly addressed USB printer,
-and Rust `printers list` reports attached USB printer-class interfaces,
-including matching configured names. The Python binding remains available to
-applications, while the existing Python hardware commands continue to provide
+sends the same source types unchanged to a named USB or RAW TCP printer, and
+Rust `printers list` reports connected or configured targets across those
+transports. The Python binding remains available to applications, while the
+existing Python hardware commands continue to provide
 legacy configuration writing and higher-level physical calibration during
 their migration to Rust.
 
@@ -132,8 +132,7 @@ At a terminal, the name, transport, and host may be omitted and ESCPost asks
 for the missing values, followed by an optional profile. Port `9100` is used by
 default. Pass `--non-interactive` to make missing required values fail instead.
 The command updates the same developer-editable `printers.toml` used by
-`printers list`; it does not probe the address or send print data. Printing
-through the saved network name is planned separately.
+`printers list`; it does not probe the address or send print data.
 
 The temporary Python command for saving one selected device to the ignored
 local configuration remains available until calibration configuration moves
@@ -150,21 +149,24 @@ The Compose service joins host group GID `7`, the conventional `lp` group on
 Debian-derived systems. Set `USB_GROUP_ID` when the USB printer device belongs
 to a different host group.
 
-Send a raw or hexadecimal ESC/POS stream unchanged to a USB printer:
+Send a raw or hexadecimal ESC/POS stream unchanged to a configured printer:
 
 ```bash
 ./escpost print receipt.hex \
-  --usb-vendor-id 0x0416 \
-  --usb-product-id 0x5011 \
-  --usb-interface 0 \
-  --usb-out-endpoint 0x01 \
+  --printer netum-usb \
   --non-interactive
 ```
 
-All four USB values are required. `print` does not read a printer alias,
-infer values from a profile, or discover an interface or endpoint. Use
-`printers list` to inspect a connected device, then pass the selected values
-explicitly. The invocation itself authorizes the physical write.
+The name resolves every transport detail from `printers.toml`; `print` has no
+USB, host, or port options. A USB entry supplies its VID/PID, optional serial
+number, interface, and endpoint. A network entry supplies its RAW TCP host and
+port. A rendering profile is not required because the bytes are already
+ESC/POS.
+
+At a terminal, `--printer` may be omitted. ESCPost offers the configured
+printers plus “Add a printer…”. Selecting that action runs the same workflow
+as `printers add` and then prints to the new target. Without a terminal, or
+with `--non-interactive`, `--printer <NAME>` is required.
 
 Render a raw byte stream to one PNG:
 

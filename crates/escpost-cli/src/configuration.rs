@@ -22,7 +22,7 @@ pub(crate) struct PrinterConfiguration {
 #[derive(Debug)]
 pub(crate) struct ConfiguredUsbPrinter {
     pub(crate) name: String,
-    pub(crate) profile: String,
+    pub(crate) profile: Option<String>,
     pub(crate) vendor_id: u16,
     pub(crate) product_id: u16,
     pub(crate) serial_number: Option<String>,
@@ -37,6 +37,12 @@ pub(crate) struct ConfiguredNetworkPrinter {
     pub(crate) profile: Option<String>,
     pub(crate) host: String,
     pub(crate) port: u16,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ConfiguredPrinter<'a> {
+    Usb(&'a ConfiguredUsbPrinter),
+    Network(&'a ConfiguredNetworkPrinter),
 }
 
 impl PrinterConfiguration {
@@ -56,7 +62,7 @@ impl PrinterConfiguration {
             }
             if transport == "usb" {
                 usb_printers.push(ConfiguredUsbPrinter {
-                    profile: required_string(table, "profile", &name)?.to_owned(),
+                    profile: optional_string(table, "profile", &name)?,
                     vendor_id: required_integer(table, "vendor_id", &name)?,
                     product_id: required_integer(table, "product_id", &name)?,
                     serial_number: optional_string(table, "serial_number", &name)?,
@@ -80,6 +86,49 @@ impl PrinterConfiguration {
 
     pub(crate) fn network_printers(&self) -> &[ConfiguredNetworkPrinter] {
         &self.network_printers
+    }
+
+    pub(crate) fn printer(&self, name: &str) -> Option<ConfiguredPrinter<'_>> {
+        self.usb_printers
+            .iter()
+            .find(|printer| printer.name == name)
+            .map(ConfiguredPrinter::Usb)
+            .or_else(|| {
+                self.network_printers
+                    .iter()
+                    .find(|printer| printer.name == name)
+                    .map(ConfiguredPrinter::Network)
+            })
+    }
+
+    pub(crate) fn printers(&self) -> impl Iterator<Item = ConfiguredPrinter<'_>> {
+        self.usb_printers
+            .iter()
+            .map(ConfiguredPrinter::Usb)
+            .chain(self.network_printers.iter().map(ConfiguredPrinter::Network))
+    }
+}
+
+impl ConfiguredPrinter<'_> {
+    pub(crate) fn name(&self) -> &str {
+        match self {
+            Self::Usb(printer) => &printer.name,
+            Self::Network(printer) => &printer.name,
+        }
+    }
+
+    pub(crate) fn transport(&self) -> &'static str {
+        match self {
+            Self::Usb(_) => "usb",
+            Self::Network(_) => "network",
+        }
+    }
+
+    pub(crate) fn profile(&self) -> Option<&str> {
+        match self {
+            Self::Usb(printer) => printer.profile.as_deref(),
+            Self::Network(printer) => printer.profile.as_deref(),
+        }
     }
 }
 

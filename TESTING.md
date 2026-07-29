@@ -370,16 +370,12 @@ display-name ordering, and the absence of filesystem writes during listing.
 
 ## Rust direct-print smoke tests
 
-Use `escpost print` when only an exact byte stream and explicit USB target are
-needed. Unlike the Python calibration commands, this low-level command does
-not use a configured printer name or renderer profile:
+Use `escpost print` when an exact byte stream should be sent to a named
+configured printer. Unlike rendering, this does not require or apply a profile:
 
 ```bash
-./escpost print examples/rust-usb-print-smoke.hex \
-  --usb-vendor-id 0x0416 \
-  --usb-product-id 0x5011 \
-  --usb-interface 0 \
-  --usb-out-endpoint 0x01 \
+./escpost print examples/rust-print-smoke.hex \
+  --printer netum-usb \
   --non-interactive
 ```
 
@@ -388,12 +384,12 @@ itself in plain text, and contains no cut command so it is safe for printers
 without a cutter. The command reports the selected target and transferred byte
 count, but never logs the receipt payload.
 
-Automated `print` tests use a recording transport at the USB boundary. They
-exercise real source decoding and target validation, then assert that the
-transport received the same bytes. CLI subprocess tests stop at argument or
-endpoint validation before the transport boundary. Device-selection tests
-call the pure selection helper with zero or several synthetic matches. Never
-add an automated test that can match and write to ordinary connected hardware.
+Automated `print` tests use a recording transport at the USB boundary and real
+loopback TCP listeners for network output. They exercise source decoding,
+configuration lookup, interactive selection and addition, target validation,
+and exact byte preservation. Device-selection tests call the pure selection
+helper with zero or several synthetic matches. Never add an automated test
+that can resolve and write to a developer's configured physical printer.
 
 ## Local printer configuration
 

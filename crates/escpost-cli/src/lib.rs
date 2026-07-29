@@ -33,7 +33,7 @@ pub async fn main() -> ExitCode {
 async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Render(arguments) => render::run(arguments, cli.non_interactive).await,
-        Command::Print(arguments) => print::run(arguments),
+        Command::Print(arguments) => print::run(arguments, cli.non_interactive).await,
         Command::Printers(arguments) => printers::run(arguments, cli.non_interactive).await,
     }
 }

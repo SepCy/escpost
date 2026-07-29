@@ -49,8 +49,10 @@ performed on Linux x86-64:
   `nusb` without claiming its interface;
 - the Python binding and Click CLI pass their automated suites;
 - Docker Compose exposes the Linux host's `/dev/bus/usb` tree to the CLI; and
-- both the Python calibration path and the Rust direct-USB `print` command
-  have been exercised with the connected NT-5890K printer.
+- both the Python calibration path and named Rust USB output through `print`
+  have been exercised with the connected NT-5890K printer; and
+- named Rust RAW TCP output has been exercised through the interactive Docker
+  workflow and physically confirmed on paper with a connected Munbyn ITPP047.
 
 macOS and Windows builds have not yet been verified by ESCPost. The virtual RAW
 printer and native Windows spooler are planned work. The Rust CLI, embedded
@@ -218,7 +220,7 @@ Known caveats:
 - A udev rule or membership in the device's owning group is preferable to
   running ESCPost as root.
 - The `usblp` kernel driver may already own the printer interface.
-- The Rust direct-USB backend detaches that driver while claiming the selected
+- The Rust direct-USB backend detaches that driver while claiming the configured
   interface and asks the kernel to reattach it when the claim is dropped.
 - Only one process should own a direct interface unless the driver and backend
   explicitly support sharing.
@@ -321,10 +323,11 @@ belong in the issue tracker.
 |---|---|---|---|
 | Linux direct USB | Verified with Rust/nusb and Python/libusb | Device permissions and `usblp` ownership vary by host | Add diagnostics for permissions and interface ownership |
 | Linux Docker USB | Verified on the development host | Requires `/dev/bus/usb` plus the correct group | Keep explicit Compose device access |
+| Linux RAW TCP | Verified through Docker with physical Munbyn ITPP047 output | Generic TCP success alone cannot confirm paper output | Add optional model-specific status checks separately from printing |
 | macOS direct USB | Unverified | Backend packaging and interface claiming need hardware evidence | Test the host-native Rust binary |
 | macOS Docker USB | Unsupported for the physical workflow | Docker Desktop does not mirror Linux host USB access | Use the host-native binary |
 | Windows spooler | Planned | RAW byte preservation and completion semantics need tests | Make this the default Windows print path |
-| Windows direct USB | Implemented, unverified | May require replacing the printer driver with WinUSB | Verify the native Rust executable and retain explicit targeting |
+| Windows direct USB | Implemented, unverified | May require replacing the printer driver with WinUSB | Verify named USB output through the native Rust executable |
 | Windows direct USB status | Unverified | Driver and exclusive-access behavior vary | Test replies on representative printers |
 | Windows Docker USB | Unsupported for the physical workflow | Printer is outside the Linux VM | Use the host-native binary |
 | Classic Bluetooth serial | Planned | OS pairing and RFCOMM naming vary | Treat an exposed port as serial |

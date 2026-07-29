@@ -8,10 +8,10 @@ Python and Rust command families.
 
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
-be reviewed. `render`, named USB and RAW-network `print`, USB and configured-network
-`printers list`, and manual network registration through `printers add` are
-implemented; the other top-level commands remain planned or temporarily
-available through the Python hardware workflow.
+be reviewed. `render`, named USB and RAW-network `print`, USB and
+configured-network `printers list`, and USB/network registration through
+`printers add` are implemented; the other top-level commands remain planned
+or temporarily available through the Python hardware workflow.
 `README.md` describes what works today, while `TODO.md` is the single
 implementation checklist.
 
@@ -368,7 +368,7 @@ setup:
 
 ```text
 escpost printers [--config <FILE>] add [<NAME>]
-    [--transport network]
+    [--transport usb|network]
     [--host <HOST>]
     [--port <PORT>]
     [--profile <PROFILE>]
@@ -393,11 +393,12 @@ printers. Read-only commands do not create the directory or file.
 
 ### `printers add`
 
-`add` registers a printer whose connection information is already known. It is
-the manual counterpart to the future `scan` workflow and does not require
-discovery:
+`add` registers a connected USB printer or a network printer whose address is
+already known:
 
 ```bash
+escpost printers add
+
 escpost printers add kitchen \
   --transport network \
   --host 10.42.0.71 \
@@ -405,18 +406,31 @@ escpost printers add kitchen \
   --profile REFERENCE
 ```
 
-The first implementation supports RAW TCP network targets. The name,
-transport, and host are required. At an interactive terminal, omitted required
-values are requested in that order. When this interactive wizard is active, it
-also offers an optional profile field; an empty answer leaves the printer
-unprofiled. Port `9100` is the default and is always stored explicitly. The
-rendering profile remains optional because sending an existing ESC/POS stream
-does not require one and an unknown printer may need calibration before a
-truthful profile exists.
+At an interactive terminal, selecting `usb` reads attached USB printer-class
+descriptors and offers every unconfigured interface with a bulk OUT endpoint.
+The developer selects a concrete route, supplies a local name, and may assign
+a profile. ESCPost stores VID/PID, an available serial number, interface, bulk
+OUT endpoint, and the bulk IN endpoint only when exactly one exists. A device
+with several OUT endpoints appears once per endpoint so the route is never
+guessed. USB bus and address appear in the menu only; they are unstable across
+reconnections and are not stored.
+
+Already configured USB identities are omitted. When otherwise identical
+connected devices expose no serial numbers, registration warns that later
+printing is ambiguous while both remain connected. This is preferable to
+persisting a temporary USB address or silently selecting the first device.
+
+For a network printer, host is required and port `9100` is the default. Omitted
+interactive values are prompted. In both transports an empty optional profile
+answer leaves the printer unprofiled. Sending an existing ESC/POS stream does
+not require a rendering profile, and no profile—including `REFERENCE`—is
+inferred for an unknown printer.
 
 `--non-interactive` disables all questions and reports the first missing
-required value. ESCPost behaves the same way when no terminal is attached, so
-pipelines and CI jobs cannot wait indefinitely for input. For example:
+required value. USB registration is initially interactive-only because it
+requires a deliberate device/endpoint selection. ESCPost behaves the same way
+when no terminal is attached, so pipelines and CI jobs cannot wait
+indefinitely for input. Network registration remains fully scriptable:
 
 ```bash
 escpost --non-interactive printers add kitchen \
@@ -444,9 +458,10 @@ Adding a printer:
 - creates a new file with mode `0600` on Unix; and
 - reports the resolved configuration path.
 
-Registration does not connect to the host, send bytes, infer a profile, or
-prove that the printer is online. Manual editing remains supported. Active
-network discovery remains a separate planned capability.
+Registration reads USB descriptors or records the supplied network endpoint.
+It does not send bytes, infer a profile, or prove that paper can be printed.
+Manual editing remains supported. Active Bluetooth and network discovery
+remain separate planned capabilities.
 
 ### `printers list`
 
@@ -637,10 +652,11 @@ the completed implementation must satisfy.
 | CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
 | CLI-M09 | Keep passive listing free of configuration writes while showing matched names and an explicit assigned or unassigned profile for every printer. |
 | CLI-M10 | Merge discovered and configured printers once, list connected before unavailable, and sort each status group by display name. |
-| CLI-M11 | Register a known network target with `printers add`, prompting for missing required values only at an interactive terminal. |
+| CLI-M11 | Register USB or known network targets with `printers add`, selecting USB descriptors and prompting for missing values only at an interactive terminal. |
 | CLI-M12 | Make non-interactive registration deterministic, default RAW TCP to port 9100, and keep the profile optional. |
 | CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |
 | CLI-M14 | List configured network targets as connected or unavailable using concurrent, bounded TCP handshakes that send zero bytes. |
+| CLI-M15 | Exclude configured USB identities, never persist temporary bus/address values, and require explicit selection when endpoint or device identity is ambiguous. |
 
 ### Web requirements
 

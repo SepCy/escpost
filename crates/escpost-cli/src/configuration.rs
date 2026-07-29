@@ -39,6 +39,16 @@ pub(crate) struct ConfiguredNetworkPrinter {
     pub(crate) port: u16,
 }
 
+pub(crate) struct UsbPrinterRegistration<'a> {
+    pub(crate) vendor_id: u16,
+    pub(crate) product_id: u16,
+    pub(crate) serial_number: Option<&'a str>,
+    pub(crate) interface_number: u8,
+    pub(crate) out_endpoint: u8,
+    pub(crate) in_endpoint: Option<u8>,
+    pub(crate) profile: Option<&'a str>,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ConfiguredPrinter<'a> {
     Usb(&'a ConfiguredUsbPrinter),
@@ -153,12 +163,96 @@ pub(crate) fn load(explicit_path: Option<&Path>) -> Result<PrinterConfiguration,
         .map_err(|message| CliError::InvalidPrinterConfiguration { path, message })
 }
 
+/// Load configuration before a command which may create the selected file.
+pub(crate) fn load_for_update(
+    explicit_path: Option<&Path>,
+) -> Result<PrinterConfiguration, CliError> {
+    let (path, _) = resolve_path(explicit_path)?;
+    let content = match fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(PrinterConfiguration::default());
+        }
+        Err(source) => return Err(CliError::ReadPrinterConfiguration { path, source }),
+    };
+    PrinterConfiguration::parse(&content)
+        .map_err(|message| CliError::InvalidPrinterConfiguration { path, message })
+}
+
 pub(crate) fn add_network_printer(
     explicit_path: Option<&Path>,
     name: &str,
     host: &str,
     port: u16,
     profile: Option<&str>,
+) -> Result<PathBuf, CliError> {
+    let mut printer = toml::Table::new();
+    printer.insert(
+        "transport".to_owned(),
+        toml::Value::String("network".to_owned()),
+    );
+    printer.insert("host".to_owned(), toml::Value::String(host.to_owned()));
+    printer.insert("port".to_owned(), toml::Value::Integer(i64::from(port)));
+    if let Some(profile) = profile {
+        printer.insert(
+            "profile".to_owned(),
+            toml::Value::String(profile.to_owned()),
+        );
+    }
+    add_printer_table(explicit_path, name, printer)
+}
+
+pub(crate) fn add_usb_printer(
+    explicit_path: Option<&Path>,
+    name: &str,
+    registration: &UsbPrinterRegistration<'_>,
+) -> Result<PathBuf, CliError> {
+    let mut printer = toml::Table::new();
+    printer.insert(
+        "transport".to_owned(),
+        toml::Value::String("usb".to_owned()),
+    );
+    printer.insert(
+        "vendor_id".to_owned(),
+        toml::Value::String(format!("{:#06x}", registration.vendor_id)),
+    );
+    printer.insert(
+        "product_id".to_owned(),
+        toml::Value::String(format!("{:#06x}", registration.product_id)),
+    );
+    if let Some(serial_number) = registration.serial_number {
+        printer.insert(
+            "serial_number".to_owned(),
+            toml::Value::String(serial_number.to_owned()),
+        );
+    }
+    printer.insert(
+        "interface_number".to_owned(),
+        toml::Value::Integer(i64::from(registration.interface_number)),
+    );
+    printer.insert(
+        "out_endpoint".to_owned(),
+        toml::Value::String(format!("{:#04x}", registration.out_endpoint)),
+    );
+    if let Some(in_endpoint) = registration.in_endpoint {
+        printer.insert(
+            "in_endpoint".to_owned(),
+            toml::Value::String(format!("{in_endpoint:#04x}")),
+        );
+    }
+    if let Some(profile) = registration.profile {
+        printer.insert(
+            "profile".to_owned(),
+            toml::Value::String(profile.to_owned()),
+        );
+    }
+    add_printer_table(explicit_path, name, printer)
+}
+
+fn add_printer_table(
+    explicit_path: Option<&Path>,
+    name: &str,
+    printer: toml::Table,
 ) -> Result<PathBuf, CliError> {
     let (path, _) = resolve_path(explicit_path)?;
     let existing = match fs::read_to_string(&path) {
@@ -190,19 +284,6 @@ pub(crate) fn add_network_printer(
 
     // Serialize only the new table, then append it to the original text. This
     // keeps comments, field order, and formatting chosen by developers.
-    let mut printer = toml::Table::new();
-    printer.insert(
-        "transport".to_owned(),
-        toml::Value::String("network".to_owned()),
-    );
-    printer.insert("host".to_owned(), toml::Value::String(host.to_owned()));
-    printer.insert("port".to_owned(), toml::Value::Integer(i64::from(port)));
-    if let Some(profile) = profile {
-        printer.insert(
-            "profile".to_owned(),
-            toml::Value::String(profile.to_owned()),
-        );
-    }
     let mut addition = toml::Table::new();
     addition.insert(name.to_owned(), toml::Value::Table(printer));
 

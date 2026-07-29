@@ -202,6 +202,15 @@ pub(crate) enum CliError {
     #[error("printer transport is required")]
     MissingPrinterTransport,
 
+    #[error("USB printer registration requires an interactive terminal")]
+    UsbRegistrationRequiresInteractive,
+
+    #[error("--host is only valid for network printers")]
+    NetworkHostForUsbPrinter,
+
+    #[error("no unconfigured connected USB printers were found")]
+    NoUnconfiguredUsbPrinters,
+
     #[error("network printer host is required")]
     MissingPrinterHost,
 

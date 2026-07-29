@@ -357,6 +357,9 @@ rules are specified in `CLI.md`.
 - [x] Add safe manual RAW network registration through `printers add`, with
       terminal prompts, strict non-interactive behavior, and atomic TOML
       updates. (`CLI-M11`, `CLI-M12`, `CLI-M13`)
+- [x] Register connected USB printers through the same interactive add
+      workflow used by `printers add` and `print`, deriving stable descriptor
+      coordinates without inferring a profile. (`CLI-M11`, `CLI-M15`)
 - [x] List configured RAW network targets with concurrent, one-second,
       zero-byte reachability probes. (`CLI-M14`)
 - [x] Add `--transport usb|network` filtering. (`CLI-M02`)
@@ -365,8 +368,8 @@ rules are specified in `CLI.md`.
 - [ ] Add versioned `--json` inventory output. (`CLI-M04`)
 - [ ] Add `--status connected|unavailable` filtering when inventories become
       large enough to need it; keep sorting non-configurable.
-- [x] Keep the existing Python configuration workflow on the same resolved
-      `printers.toml` until calibration no longer depends on it.
+- [x] Keep the legacy Python calibration workflow on the same resolved
+      `printers.toml` until the remaining calibration commands move to Rust.
 - [ ] Retire the temporary Python `printers discover` configuration writer
       after its remaining calibration use is migrated.
 - [ ] Add `printers scan` only with the first concrete active Bluetooth or

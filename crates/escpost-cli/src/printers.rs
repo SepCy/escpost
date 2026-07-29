@@ -7,6 +7,7 @@ use crate::cli::{
 };
 use crate::configuration::{
     self, ConfiguredNetworkPrinter, ConfiguredUsbPrinter, PrinterConfiguration,
+    UsbPrinterRegistration,
 };
 use crate::error::CliError;
 use inquire::{Select, Text};
@@ -35,6 +36,21 @@ struct UsbPrinter {
     in_endpoints: Vec<u8>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct UsbAddTarget {
+    vendor_id: u16,
+    product_id: u16,
+    bus: String,
+    address: u8,
+    manufacturer: Option<String>,
+    product: Option<String>,
+    serial_number: Option<String>,
+    interface_number: u8,
+    out_endpoint: u8,
+    in_endpoint: Option<u8>,
+    ambiguous_without_serial: bool,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 struct UsbPrinterInterface {
     interface_number: u8,
@@ -55,10 +71,23 @@ struct ConnectedUsbPrinter {
 #[derive(Debug, PartialEq, Eq)]
 struct ResolvedAddPrinter {
     name: String,
-    transport: PrinterTransport,
-    host: String,
-    port: u16,
+    connection: ResolvedAddConnection,
     profile: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ResolvedAddConnection {
+    Usb(UsbAddTarget),
+    Network { host: String, port: u16 },
+}
+
+impl ResolvedAddPrinter {
+    fn transport(&self) -> PrinterTransport {
+        match self.connection {
+            ResolvedAddConnection::Usb(_) => PrinterTransport::Usb,
+            ResolvedAddConnection::Network { .. } => PrinterTransport::Network,
+        }
+    }
 }
 
 struct ListedPrinter<'a> {
@@ -82,6 +111,7 @@ trait UsbInventory {
 trait AddPrompter {
     fn name(&mut self) -> Result<String, CliError>;
     fn transport(&mut self) -> Result<PrinterTransport, CliError>;
+    fn usb_printer(&mut self, printers: Vec<UsbAddTarget>) -> Result<UsbAddTarget, CliError>;
     fn host(&mut self) -> Result<String, CliError>;
     fn profile(&mut self) -> Result<Option<String>, CliError>;
 }
@@ -114,13 +144,19 @@ fn add_printer(
     non_interactive: bool,
 ) -> Result<(), CliError> {
     let can_prompt = !non_interactive && io::stdin().is_terminal() && io::stderr().is_terminal();
-    let resolved = resolve_add(arguments, can_prompt, &mut InquireAddPrompter)?;
-    save_and_report_printer(config_path, &resolved)?;
+    execute_add(
+        config_path,
+        arguments,
+        can_prompt,
+        &mut InquireAddPrompter,
+        &mut NusbInventory,
+    )?;
     Ok(())
 }
 
 pub(crate) fn add_interactively(config_path: Option<&std::path::Path>) -> Result<String, CliError> {
-    let resolved = resolve_add(
+    execute_add(
+        config_path,
         AddPrinterArgs {
             name: None,
             transport: None,
@@ -130,7 +166,19 @@ pub(crate) fn add_interactively(config_path: Option<&std::path::Path>) -> Result
         },
         true,
         &mut InquireAddPrompter,
-    )?;
+        &mut NusbInventory,
+    )
+}
+
+fn execute_add(
+    config_path: Option<&std::path::Path>,
+    arguments: AddPrinterArgs,
+    can_prompt: bool,
+    prompter: &mut impl AddPrompter,
+    inventory: &mut impl UsbInventory,
+) -> Result<String, CliError> {
+    let configuration = configuration::load_for_update(config_path)?;
+    let resolved = resolve_add(arguments, can_prompt, prompter, inventory, &configuration)?;
     save_and_report_printer(config_path, &resolved)?;
     Ok(resolved.name)
 }
@@ -139,18 +187,38 @@ fn save_and_report_printer(
     config_path: Option<&std::path::Path>,
     printer: &ResolvedAddPrinter,
 ) -> Result<(), CliError> {
-    let path = match printer.transport {
-        PrinterTransport::Network => configuration::add_network_printer(
+    let path = match &printer.connection {
+        ResolvedAddConnection::Network { host, port } => configuration::add_network_printer(
             config_path,
             &printer.name,
-            &printer.host,
-            printer.port,
+            host,
+            *port,
             printer.profile.as_deref(),
+        ),
+        ResolvedAddConnection::Usb(target) => configuration::add_usb_printer(
+            config_path,
+            &printer.name,
+            &UsbPrinterRegistration {
+                vendor_id: target.vendor_id,
+                product_id: target.product_id,
+                serial_number: target.serial_number.as_deref(),
+                interface_number: target.interface_number,
+                out_endpoint: target.out_endpoint,
+                in_endpoint: target.in_endpoint,
+                profile: printer.profile.as_deref(),
+            },
         ),
     }?;
     eprintln!("Printer: {}", printer.name);
-    eprintln!("Transport: {}", printer.transport);
+    eprintln!("Transport: {}", printer.transport());
     eprintln!("Configuration: {}", path.display());
+    if let ResolvedAddConnection::Usb(target) = &printer.connection
+        && target.ambiguous_without_serial
+    {
+        eprintln!(
+            "Warning: this USB printer has no serial number; printing will be ambiguous while another device with the same USB identity is connected."
+        );
+    }
     Ok(())
 }
 
@@ -158,10 +226,56 @@ fn resolve_add(
     arguments: AddPrinterArgs,
     can_prompt: bool,
     prompter: &mut impl AddPrompter,
+    inventory: &mut impl UsbInventory,
+    configuration: &PrinterConfiguration,
 ) -> Result<ResolvedAddPrinter, CliError> {
-    let interactive_wizard = can_prompt
-        && (arguments.name.is_none() || arguments.transport.is_none() || arguments.host.is_none());
-    let name = match arguments.name {
+    let AddPrinterArgs {
+        name,
+        transport,
+        host,
+        port,
+        profile,
+    } = arguments;
+    if !can_prompt && name.is_none() {
+        return Err(CliError::MissingPrinterName);
+    }
+    let interactive_wizard =
+        can_prompt && (name.is_none() || transport.is_none() || host.is_none());
+    let transport = match transport {
+        Some(transport) => transport,
+        None if can_prompt => prompter.transport()?,
+        None => return Err(CliError::MissingPrinterTransport),
+    };
+    let connection = match transport {
+        PrinterTransport::Usb => {
+            if !can_prompt {
+                return Err(CliError::UsbRegistrationRequiresInteractive);
+            }
+            if host.is_some() {
+                return Err(CliError::NetworkHostForUsbPrinter);
+            }
+            let candidates = usb_add_targets(inventory.list()?, configuration);
+            if candidates.is_empty() {
+                return Err(CliError::NoUnconfiguredUsbPrinters);
+            }
+            ResolvedAddConnection::Usb(prompter.usb_printer(candidates)?)
+        }
+        PrinterTransport::Network => {
+            let host = match host {
+                Some(host) => host,
+                None if can_prompt => prompter.host()?,
+                None => return Err(CliError::MissingPrinterHost),
+            };
+            if host.trim().is_empty() {
+                return Err(CliError::BlankPrinterHost);
+            }
+            if port == 0 {
+                return Err(CliError::InvalidPrinterPort);
+            }
+            ResolvedAddConnection::Network { host, port }
+        }
+    };
+    let name = match name {
         Some(name) => name,
         None if can_prompt => prompter.name()?,
         None => return Err(CliError::MissingPrinterName),
@@ -169,25 +283,9 @@ fn resolve_add(
     if name.trim().is_empty() {
         return Err(CliError::BlankPrinterName);
     }
-    let transport = match arguments.transport {
-        Some(transport) => transport,
-        None if can_prompt => prompter.transport()?,
-        None => return Err(CliError::MissingPrinterTransport),
-    };
-    let host = match arguments.host {
-        Some(host) => host,
-        None if can_prompt => prompter.host()?,
-        None => return Err(CliError::MissingPrinterHost),
-    };
-    if host.trim().is_empty() {
-        return Err(CliError::BlankPrinterHost);
-    }
-    if arguments.port == 0 {
-        return Err(CliError::InvalidPrinterPort);
-    }
-    let profile = match arguments.profile {
+    let profile = match profile {
         Some(profile) => Some(profile),
-        None if interactive_wizard => prompter.profile()?,
+        None if interactive_wizard || transport == PrinterTransport::Usb => prompter.profile()?,
         None => None,
     };
     if profile
@@ -199,9 +297,7 @@ fn resolve_add(
 
     Ok(ResolvedAddPrinter {
         name,
-        transport,
-        host,
-        port: arguments.port,
+        connection,
         profile,
     })
 }
@@ -216,7 +312,16 @@ impl AddPrompter for InquireAddPrompter {
     }
 
     fn transport(&mut self) -> Result<PrinterTransport, CliError> {
-        Select::new("Transport", vec![PrinterTransport::Network])
+        Select::new(
+            "Transport",
+            vec![PrinterTransport::Usb, PrinterTransport::Network],
+        )
+        .prompt()
+        .map_err(|error| CliError::PrinterPrompt(error.to_string()))
+    }
+
+    fn usb_printer(&mut self, printers: Vec<UsbAddTarget>) -> Result<UsbAddTarget, CliError> {
+        Select::new("USB printer", printers)
             .prompt()
             .map_err(|error| CliError::PrinterPrompt(error.to_string()))
     }
@@ -239,8 +344,30 @@ impl AddPrompter for InquireAddPrompter {
 impl fmt::Display for PrinterTransport {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Usb => formatter.write_str("usb"),
             Self::Network => formatter.write_str("network"),
         }
+    }
+}
+
+impl fmt::Display for UsbAddTarget {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let model = usb_printer_label_parts(self.product.as_deref(), self.manufacturer.as_deref());
+        write!(
+            formatter,
+            "{model} ({:04x}:{:04x};",
+            self.vendor_id, self.product_id
+        )?;
+        if let Some(serial_number) = &self.serial_number {
+            write!(formatter, " serial {serial_number};")?;
+        } else {
+            formatter.write_str(" no serial;")?;
+        }
+        write!(
+            formatter,
+            " bus {} address {}; interface {}; OUT {:#04x})",
+            self.bus, self.address, self.interface_number, self.out_endpoint
+        )
     }
 }
 
@@ -467,6 +594,68 @@ fn merge_usb_inventory(
     }
 }
 
+fn usb_add_targets(
+    printers: Vec<UsbPrinter>,
+    configuration: &PrinterConfiguration,
+) -> Vec<UsbAddTarget> {
+    let unconfigured = printers
+        .into_iter()
+        .filter(|printer| {
+            !configuration
+                .usb_printers()
+                .iter()
+                .any(|configured| configuration_matches(printer, configured))
+        })
+        .collect::<Vec<_>>();
+    let mut targets = Vec::new();
+
+    for printer in &unconfigured {
+        // Bus and address are useful for distinguishing devices in this
+        // one-time menu, but the operating system may assign new values after
+        // reconnecting. The saved identity therefore uses stable descriptors.
+        let ambiguous_without_serial = printer.serial_number.is_none()
+            && unconfigured.iter().any(|other| {
+                other.vendor_id == printer.vendor_id
+                    && other.product_id == printer.product_id
+                    && (other.bus != printer.bus || other.address != printer.address)
+            });
+        let in_endpoint = (printer.in_endpoints.len() == 1).then(|| printer.in_endpoints[0]);
+
+        // Most printers expose one bulk OUT endpoint. If firmware exposes
+        // several, present each as a separate explicit choice rather than
+        // silently choosing a route that may not carry print data.
+        for out_endpoint in &printer.out_endpoints {
+            targets.push(UsbAddTarget {
+                vendor_id: printer.vendor_id,
+                product_id: printer.product_id,
+                bus: printer.bus.clone(),
+                address: printer.address,
+                manufacturer: printer.manufacturer.clone(),
+                product: printer.product.clone(),
+                serial_number: printer.serial_number.clone(),
+                interface_number: printer.interface_number,
+                out_endpoint: *out_endpoint,
+                in_endpoint,
+                ambiguous_without_serial,
+            });
+        }
+    }
+
+    targets.sort_by_cached_key(|target| {
+        let label =
+            usb_printer_label_parts(target.product.as_deref(), target.manufacturer.as_deref());
+        (
+            label.to_lowercase(),
+            label,
+            target.bus.clone(),
+            target.address,
+            target.interface_number,
+            target.out_endpoint,
+        )
+    });
+    targets
+}
+
 struct NusbInventory;
 
 impl UsbInventory for NusbInventory {
@@ -677,8 +866,12 @@ fn compare_display_names(left: &str, right: &str) -> std::cmp::Ordering {
 }
 
 fn usb_printer_label(printer: &UsbPrinter) -> String {
-    let product = printer.product.as_deref().unwrap_or("USB printer");
-    printer.manufacturer.as_deref().map_or_else(
+    usb_printer_label_parts(printer.product.as_deref(), printer.manufacturer.as_deref())
+}
+
+fn usb_printer_label_parts(product: Option<&str>, manufacturer: Option<&str>) -> String {
+    let product = product.unwrap_or("USB printer");
+    manufacturer.map_or_else(
         || product.to_owned(),
         |value| format!("{product} ({value})"),
     )
@@ -727,9 +920,13 @@ fn printer_interfaces(configuration: ConfigurationDescriptor<'_>) -> Vec<UsbPrin
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::{
-        AddPrompter, ResolvedAddPrinter, UsbInventory, UsbPrinter, UsbPrinterInterface, execute,
-        printer_interfaces, resolve_add,
+        AddPrompter, ResolvedAddConnection, ResolvedAddPrinter, UsbAddTarget, UsbInventory,
+        UsbPrinter, UsbPrinterInterface, execute, execute_add, printer_interfaces, resolve_add,
+        usb_add_targets,
     };
     use crate::cli::{AddPrinterArgs, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
@@ -746,16 +943,25 @@ mod tests {
         };
         let mut prompter = FixedAddPrompter;
 
-        let resolved =
-            resolve_add(arguments, true, &mut prompter).expect("interactive values should resolve");
+        let resolved = resolve_add(
+            arguments,
+            true,
+            &mut prompter,
+            &mut FixedInventory {
+                printers: Vec::new(),
+            },
+            &PrinterConfiguration::default(),
+        )
+        .expect("interactive values should resolve");
 
         assert_eq!(
             resolved,
             ResolvedAddPrinter {
                 name: "kitchen".to_owned(),
-                transport: PrinterTransport::Network,
-                host: "10.42.0.71".to_owned(),
-                port: 9100,
+                connection: ResolvedAddConnection::Network {
+                    host: "10.42.0.71".to_owned(),
+                    port: 9100,
+                },
                 profile: Some("REFERENCE".to_owned()),
             }
         );
@@ -771,10 +977,145 @@ mod tests {
             profile: None,
         };
 
-        let resolved = resolve_add(arguments, true, &mut UnexpectedAddPrompter)
-            .expect("complete explicit values should resolve");
+        let resolved = resolve_add(
+            arguments,
+            true,
+            &mut UnexpectedAddPrompter,
+            &mut FixedInventory {
+                printers: Vec::new(),
+            },
+            &PrinterConfiguration::default(),
+        )
+        .expect("complete explicit values should resolve");
 
         assert_eq!(resolved.profile, None);
+    }
+
+    #[test]
+    fn interactive_usb_add_saves_the_selected_descriptor_coordinates() {
+        let directory = temporary_directory("add-usb");
+        let configuration = directory.join("printers.toml");
+        let arguments = AddPrinterArgs {
+            name: None,
+            transport: None,
+            host: None,
+            port: 9100,
+            profile: None,
+        };
+        let mut inventory = FixedInventory {
+            printers: vec![UsbPrinter {
+                vendor_id: 0x0416,
+                product_id: 0x5011,
+                bus: "003".to_owned(),
+                address: 60,
+                manufacturer: Some("YICHIP3121".to_owned()),
+                product: Some("USB Portable Printer".to_owned()),
+                serial_number: Some("B120300001".to_owned()),
+                interface_number: 0,
+                out_endpoints: vec![0x01],
+                in_endpoints: vec![0x81],
+            }],
+        };
+
+        let name = execute_add(
+            Some(&configuration),
+            arguments,
+            true,
+            &mut UsbAddPrompter,
+            &mut inventory,
+        )
+        .expect("the selected USB printer should be saved");
+
+        assert_eq!(name, "counter-usb");
+        let document = fs::read_to_string(&configuration)
+            .expect("the printer configuration should be readable");
+        let table =
+            toml::from_str::<toml::Table>(&document).expect("the configuration should be TOML");
+        let printer = table["counter-usb"]
+            .as_table()
+            .expect("the configured printer should be a table");
+        assert_eq!(printer["transport"].as_str(), Some("usb"));
+        assert_eq!(printer["profile"].as_str(), Some("REFERENCE"));
+        assert_eq!(printer["vendor_id"].as_str(), Some("0x0416"));
+        assert_eq!(printer["product_id"].as_str(), Some("0x5011"));
+        assert_eq!(printer["serial_number"].as_str(), Some("B120300001"));
+        assert_eq!(printer["interface_number"].as_integer(), Some(0));
+        assert_eq!(printer["out_endpoint"].as_str(), Some("0x01"));
+        assert_eq!(printer["in_endpoint"].as_str(), Some("0x81"));
+        fs::remove_dir_all(directory).expect("the test directory should be removable");
+    }
+
+    #[test]
+    fn configured_usb_printers_are_not_offered_for_addition() {
+        let configuration = PrinterConfiguration::parse(
+            r#"
+[counter]
+transport = "usb"
+vendor_id = "0x0416"
+product_id = "0x5011"
+serial_number = "B120300001"
+interface_number = 0
+out_endpoint = "0x01"
+"#,
+        )
+        .expect("the saved printer should parse");
+
+        let targets = usb_add_targets(
+            vec![netum_usb_printer(vec![0x01], vec![0x81])],
+            &configuration,
+        );
+
+        assert!(
+            targets.is_empty(),
+            "a connected printer already represented by the configuration must not be offered again"
+        );
+    }
+
+    #[test]
+    fn every_bulk_out_endpoint_is_an_explicit_usb_add_choice() {
+        let targets = usb_add_targets(
+            vec![netum_usb_printer(vec![0x01, 0x02], vec![0x81, 0x82])],
+            &PrinterConfiguration::default(),
+        );
+
+        assert_eq!(targets.len(), 2);
+        assert_eq!(targets[0].out_endpoint, 0x01);
+        assert_eq!(targets[1].out_endpoint, 0x02);
+        assert_eq!(
+            targets[0].in_endpoint, None,
+            "several IN endpoints must not be reduced to an arbitrary guess"
+        );
+        assert_eq!(targets[1].in_endpoint, None);
+    }
+
+    #[test]
+    fn identical_usb_devices_without_serials_are_marked_ambiguous() {
+        let mut first = netum_usb_printer(vec![0x01], vec![0x81]);
+        first.serial_number = None;
+        let mut second = first.clone();
+        second.address = 61;
+
+        let targets = usb_add_targets(vec![first, second], &PrinterConfiguration::default());
+
+        assert_eq!(targets.len(), 2);
+        assert!(
+            targets.iter().all(|target| target.ambiguous_without_serial),
+            "both saved identities would match both connected physical devices"
+        );
+    }
+
+    #[test]
+    fn usb_add_choice_explains_the_descriptor_and_route_being_saved() {
+        let target = usb_add_targets(
+            vec![netum_usb_printer(vec![0x01], vec![0x81])],
+            &PrinterConfiguration::default(),
+        )
+        .remove(0);
+
+        assert_eq!(
+            target.to_string(),
+            "USB Portable Printer (YICHIP3121) (0416:5011; serial B120300001; bus 003 address 60; interface 0; OUT 0x01)"
+        );
     }
 
     #[test]
@@ -1117,6 +1458,8 @@ out_endpoint = \"0x01\"
 
     struct FixedAddPrompter;
 
+    struct UsbAddPrompter;
+
     struct UnexpectedAddPrompter;
 
     impl AddPrompter for FixedAddPrompter {
@@ -1128,8 +1471,38 @@ out_endpoint = \"0x01\"
             Ok(PrinterTransport::Network)
         }
 
+        fn usb_printer(&mut self, _printers: Vec<UsbAddTarget>) -> Result<UsbAddTarget, CliError> {
+            panic!("a network printer must not ask for a USB device")
+        }
+
         fn host(&mut self) -> Result<String, CliError> {
             Ok("10.42.0.71".to_owned())
+        }
+
+        fn profile(&mut self) -> Result<Option<String>, CliError> {
+            Ok(Some("REFERENCE".to_owned()))
+        }
+    }
+
+    impl AddPrompter for UsbAddPrompter {
+        fn name(&mut self) -> Result<String, CliError> {
+            Ok("counter-usb".to_owned())
+        }
+
+        fn transport(&mut self) -> Result<PrinterTransport, CliError> {
+            Ok(PrinterTransport::Usb)
+        }
+
+        fn usb_printer(
+            &mut self,
+            mut printers: Vec<UsbAddTarget>,
+        ) -> Result<UsbAddTarget, CliError> {
+            assert_eq!(printers.len(), 1);
+            Ok(printers.remove(0))
+        }
+
+        fn host(&mut self) -> Result<String, CliError> {
+            panic!("a USB printer must not ask for a network host")
         }
 
         fn profile(&mut self) -> Result<Option<String>, CliError> {
@@ -1146,6 +1519,10 @@ out_endpoint = \"0x01\"
             panic!("transport prompt was not expected")
         }
 
+        fn usb_printer(&mut self, _printers: Vec<UsbAddTarget>) -> Result<UsbAddTarget, CliError> {
+            panic!("USB printer prompt was not expected")
+        }
+
         fn host(&mut self) -> Result<String, CliError> {
             panic!("host prompt was not expected")
         }
@@ -1159,5 +1536,33 @@ out_endpoint = \"0x01\"
         fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError> {
             Ok(self.printers.clone())
         }
+    }
+
+    fn netum_usb_printer(out_endpoints: Vec<u8>, in_endpoints: Vec<u8>) -> UsbPrinter {
+        UsbPrinter {
+            vendor_id: 0x0416,
+            product_id: 0x5011,
+            bus: "003".to_owned(),
+            address: 60,
+            manufacturer: Some("YICHIP3121".to_owned()),
+            product: Some("USB Portable Printer".to_owned()),
+            serial_number: Some("B120300001".to_owned()),
+            interface_number: 0,
+            out_endpoints,
+            in_endpoints,
+        }
+    }
+
+    fn temporary_directory(case: &str) -> std::path::PathBuf {
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("the clock should be after the Unix epoch")
+            .as_nanos();
+        let path = std::env::temp_dir().join(format!(
+            "escpost-printers-{case}-{}-{unique}",
+            std::process::id()
+        ));
+        fs::create_dir(&path).expect("the test directory should be creatable");
+        path
     }
 }

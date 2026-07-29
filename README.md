@@ -36,10 +36,11 @@ input, stdin, or a conformance-case directory. It can write PNGs, stream one
 PNG to stdout, or host an embedded browser workbench. The Rust `print` command
 sends the same source types unchanged to a named USB or RAW TCP printer, and
 Rust `printers list` reports connected or configured targets across those
-transports. The Python binding remains available to applications, while the
-existing Python hardware commands continue to provide
-legacy configuration writing and higher-level physical calibration during
-their migration to Rust.
+transports. Rust `printers add` registers either transport, including
+descriptor-based interactive USB selection. The Python binding remains
+available to applications, while the existing Python hardware commands
+continue to provide higher-level physical calibration during their migration
+to Rust.
 
 The virtual `REFERENCE` profile enables every capability currently represented
 by the renderer without inheriting limitations or quirks from a physical
@@ -87,7 +88,7 @@ docker compose run --rm test cargo run --quiet \
 ```
 
 `./escpost` is the stable development entry point. It runs `render`, `print`,
-and `printers list` through the Rust CLI and keeps the existing Python
+and `printers list|add` through the Rust CLI and keeps the existing Python
 configuration and calibration commands reachable during migration. The CLI
 service has USB access for physical workflows; its Python environment lives in
 a named Docker volume and is created or updated only when a legacy command
@@ -120,6 +121,20 @@ another directory in a native installation, or pass
 `printers --config <FILE>` for one invocation. With the Docker wrapper, set
 `ESCPOST_CONFIG_HOST_DIR` to deliberately mount another host directory.
 
+Register a connected USB printer interactively:
+
+```bash
+./escpost printers add
+```
+
+Choose `usb`, select one of the unconfigured printer-class devices, then give
+it a local name and optionally assign a rendering profile. ESCPost reads and
+stores the VID/PID, available serial number, interface, and selected bulk OUT
+endpoint. USB bus and address are shown only to distinguish devices during
+selection because they can change after reconnecting. If a device exposes
+several bulk OUT endpoints, each route is a separate choice instead of an
+implicit guess.
+
 Register a network printer when its address is already known:
 
 ```bash
@@ -128,22 +143,12 @@ Register a network printer when its address is already known:
   --host 10.42.0.71
 ```
 
-At a terminal, the name, transport, and host may be omitted and ESCPost asks
-for the missing values, followed by an optional profile. Port `9100` is used by
-default. Pass `--non-interactive` to make missing required values fail instead.
-The command updates the same developer-editable `printers.toml` used by
-`printers list`; it does not probe the address or send print data.
-
-The temporary Python command for saving one selected device to the ignored
-local configuration remains available until calibration configuration moves
-to Rust:
-
-```bash
-./escpost printers discover \
-  --serial B120300001 \
-  --name netum-usb \
-  --profile NT-5890K
-```
+At a terminal, network values may also be omitted and ESCPost asks for them.
+Port `9100` is used by default. Pass `--non-interactive` to make missing
+required values fail; USB registration is currently interactive-only because
+the developer must select a concrete descriptor and endpoint. The command
+updates the same developer-editable `printers.toml` used by `printers list`.
+It never sends print data.
 
 The Compose service joins host group GID `7`, the conventional `lp` group on
 Debian-derived systems. Set `USB_GROUP_ID` when the USB printer device belongs
@@ -161,7 +166,7 @@ The name resolves every transport detail from `printers.toml`; `print` has no
 USB, host, or port options. A USB entry supplies its VID/PID, optional serial
 number, interface, and endpoint. A network entry supplies its RAW TCP host and
 port. A rendering profile is not required because the bytes are already
-ESC/POS.
+ESC/POS. An unassigned profile does not implicitly select `REFERENCE`.
 
 At a terminal, `--printer` may be omitted. ESCPost offers the configured
 printers plus “Add a printer…”. Selecting that action runs the same workflow

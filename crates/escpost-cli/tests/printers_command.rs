@@ -32,7 +32,7 @@ fn printers_list_is_a_rust_cli_command() {
 }
 
 #[test]
-fn printers_add_documents_its_network_registration_options() {
+fn printers_add_documents_its_registration_options() {
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args(["printers", "add", "--help"])
         .output()
@@ -43,9 +43,27 @@ fn printers_add_documents_its_network_registration_options() {
     assert!(stdout.contains("Register a printer in the local configuration"));
     assert!(stdout.contains("Usage: escpost printers add [OPTIONS] [NAME]"));
     assert!(stdout.contains("--transport <TRANSPORT>"));
+    assert!(stdout.contains("usb"));
+    assert!(stdout.contains("network"));
     assert!(stdout.contains("--host <HOST>"));
     assert!(stdout.contains("--port <PORT>"));
     assert!(stdout.contains("--profile <PROFILE>"));
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_requires_a_terminal_for_usb_registration() {
+    let directory = temporary_directory("non-interactive-usb");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(&config, &["counter", "--transport", "usb"]);
+
+    assert_failed_without_configuration(
+        &output,
+        &config,
+        "USB printer registration requires an interactive terminal",
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
 
 #[cfg(unix)]

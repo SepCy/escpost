@@ -163,7 +163,10 @@ fn resolve_printer_name(
         return Err(CliError::MissingPrintPrinter);
     }
 
-    let configuration = configuration::load(config_path)?;
+    // Selecting "Add a printer…" must also work on a fresh installation,
+    // where the explicit configuration path does not exist until the add
+    // workflow creates it.
+    let configuration = configuration::load_for_update(config_path)?;
     let mut choices: Vec<_> = configuration
         .printers()
         .map(|printer| PrinterChoice::Printer {
@@ -472,7 +475,6 @@ out_endpoint = \"0x01\"
         let configuration = directory.join("printers.toml");
         let expected = b"\x1b@New printer\n";
         fs::write(&source, expected).expect("the source should be writable");
-        fs::write(&configuration, "").expect("the empty configuration should be writable");
         let listener =
             TcpListener::bind(("127.0.0.1", 0)).expect("the loopback printer should bind");
         let port = listener

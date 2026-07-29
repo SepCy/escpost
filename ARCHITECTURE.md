@@ -37,12 +37,12 @@ The Rust workspace contains four crates:
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 
-The Python package still contains the legacy USB configuration writer and the
-higher-level calibration commands. The root development wrapper routes
-`render`, `print`, and `printers list` to the Rust executable and the remaining
-hardware commands to that package, keeping one public command name during
-migration. Hardware inventory and printing are not part of the Rust rendering
-library.
+The Python package still contains the legacy discovery/configuration writer
+and higher-level calibration commands. The root development wrapper routes
+`render`, `print`, and `printers list|add` to the Rust executable and the
+remaining calibration commands to that package, keeping one public command
+name during migration. Hardware inventory and printing are not part of the
+Rust rendering library.
 
 ## Rust named-printer output
 
@@ -96,6 +96,14 @@ unavailable entries. Connected entries sort first, then unavailable entries,
 and each group sorts case-insensitively by display name with stable USB
 tie-breakers. Descriptor parsing, configuration matching, merging, ordering,
 and human output are tested behind the USB inventory boundary.
+
+The interactive add workflow reuses that passive inventory. It removes
+already configured identities, presents each bulk OUT endpoint explicitly,
+and stores stable descriptor coordinates. Bus and address are diagnostic
+selection labels only because operating systems may change them after a
+reconnection. A serial number is stored when available; without one,
+simultaneously connected devices with equal VID/PID cannot be distinguished
+reliably and are reported as ambiguous.
 
 The Docker wrapper creates and mounts `local/config` at the container user's
 normal ESCPost configuration path. This isolates configuration used by a

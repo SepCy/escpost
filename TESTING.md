@@ -367,6 +367,10 @@ zero bytes. Configuration tests verify explicit-path and environment
 precedence, Linux/XDG platform resolution, configured-name matching,
 unavailable saved printers, connected/configured de-duplication, status-first
 display-name ordering, and the absence of filesystem writes during listing.
+USB registration tests use the same synthetic inventory to prove that
+configured devices are excluded, multiple bulk OUT endpoints stay explicit,
+and the selected stable descriptor coordinates are serialized. They never
+claim an interface or write bytes.
 
 ## Rust direct-print smoke tests
 
@@ -409,12 +413,11 @@ in_endpoint = "0x81"
 ```
 
 [`examples/printers.toml`](examples/printers.toml) is the committed template.
-The temporary Python `printers discover` command writes or updates the
-selected table while preserving comments and other printer entries. It shares
-the native CLI's resolved configuration path. The wrapper creates the local
-directory before Compose mounts it, preventing Docker from creating a
-root-owned bind source. Real machine configuration and local captures remain
-ignored.
+Use native `escpost printers add` for new USB and network entries. It preserves
+comments and other printer entries and shares the legacy calibration CLI's
+resolved configuration path. The wrapper creates the local directory before
+Compose mounts it, preventing Docker from creating a root-owned bind source.
+Real machine configuration and local captures remain ignored.
 
 An installed native CLI instead uses the platform user-configuration
 directory. Tests and automation can select an isolated directory with

@@ -144,13 +144,14 @@ Register a network printer when its address is already known:
 ```
 
 At a terminal, network values may also be omitted and ESCPost asks for them.
-Port `9100` is used by default. Pass `--non-interactive` to make missing
-required values fail; USB registration is currently interactive-only because
-the developer must select a concrete descriptor and endpoint. The command
-updates the same developer-editable `printers.toml` used by `printers list`.
-If a name already exists, an interactive command asks for another; a
-non-interactive command fails without changing the file. Registration never
-sends print data.
+The port prompt defaults to `9100`, so Enter accepts the usual RAW TCP port;
+an explicit `--port` skips that prompt. Non-interactive omission silently uses
+`9100`. Pass `--non-interactive` to make missing required values fail; USB
+registration is currently interactive-only because the developer must select
+a concrete descriptor and endpoint. The command updates the same
+developer-editable `printers.toml` used by `printers list`. If a name already
+exists, an interactive command asks for another; a non-interactive command
+fails without changing the file. Registration never sends print data.
 
 The Compose service joins host group GID `7`, the conventional `lp` group on
 Debian-derived systems. Set `USB_GROUP_ID` when the USB printer device belongs

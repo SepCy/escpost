@@ -420,11 +420,14 @@ connected devices expose no serial numbers, registration warns that later
 printing is ambiguous while both remain connected. This is preferable to
 persisting a temporary USB address or silently selecting the first device.
 
-For a network printer, host is required and port `9100` is the default. Omitted
-interactive values are prompted. In both transports an empty optional profile
-answer leaves the printer unprofiled. Sending an existing ESC/POS stream does
-not require a rendering profile, and no profile—including `REFERENCE`—is
-inferred for an unknown printer.
+For a network printer, host is required. When `--port` is omitted at an
+interactive terminal, ESCPost prompts for it with `9100` as the default;
+pressing Enter accepts that value. An explicit `--port` skips the prompt.
+Non-interactive registration silently uses `9100` when the option is omitted.
+In both transports an empty optional profile answer leaves the printer
+unprofiled. Sending an existing ESC/POS stream does not require a rendering
+profile, and no profile—including `REFERENCE`—is inferred for an unknown
+printer.
 
 `--non-interactive` disables all questions and reports the first missing
 required value. USB registration is initially interactive-only because it

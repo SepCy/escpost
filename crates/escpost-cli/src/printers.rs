@@ -10,7 +10,8 @@ use crate::configuration::{
     UsbPrinterRegistration,
 };
 use crate::error::CliError;
-use inquire::{Select, Text};
+use inquire::validator::Validation;
+use inquire::{CustomType, Select, Text};
 use nusb::MaybeFuture;
 use nusb::descriptors::{ConfigurationDescriptor, TransferType};
 use nusb::transfer::Direction;
@@ -116,6 +117,7 @@ trait AddPrompter {
     fn transport(&mut self) -> Result<PrinterTransport, CliError>;
     fn usb_printer(&mut self, printers: Vec<UsbAddTarget>) -> Result<UsbAddTarget, CliError>;
     fn host(&mut self) -> Result<String, CliError>;
+    fn port(&mut self) -> Result<u16, CliError>;
     fn profile(&mut self) -> Result<Option<String>, CliError>;
 }
 
@@ -164,7 +166,7 @@ pub(crate) fn add_interactively(config_path: Option<&std::path::Path>) -> Result
             name: None,
             transport: None,
             host: None,
-            port: 9100,
+            port: None,
             profile: None,
         },
         true,
@@ -243,7 +245,7 @@ fn resolve_add(
         return Err(CliError::MissingPrinterName);
     }
     let interactive_wizard =
-        can_prompt && (name.is_none() || transport.is_none() || host.is_none());
+        can_prompt && (name.is_none() || transport.is_none() || host.is_none() || port.is_none());
     let transport = match transport {
         Some(transport) => transport,
         None if can_prompt => prompter.transport()?,
@@ -256,6 +258,9 @@ fn resolve_add(
             }
             if host.is_some() {
                 return Err(CliError::NetworkHostForUsbPrinter);
+            }
+            if port.is_some() {
+                return Err(CliError::NetworkPortForUsbPrinter);
             }
             let candidates = usb_add_targets(inventory.list()?, configuration);
             if candidates.is_empty() {
@@ -272,6 +277,11 @@ fn resolve_add(
             if host.trim().is_empty() {
                 return Err(CliError::BlankPrinterHost);
             }
+            let port = match port {
+                Some(port) => port,
+                None if can_prompt => prompter.port()?,
+                None => 9100,
+            };
             if port == 0 {
                 return Err(CliError::InvalidPrinterPort);
             }
@@ -359,6 +369,21 @@ impl AddPrompter for InquireAddPrompter {
 
     fn host(&mut self) -> Result<String, CliError> {
         Text::new("Network host")
+            .prompt()
+            .map_err(|error| CliError::PrinterPrompt(error.to_string()))
+    }
+
+    fn port(&mut self) -> Result<u16, CliError> {
+        CustomType::<u16>::new("Network port")
+            .with_default(9100)
+            .with_error_message("Enter a port between 1 and 65535")
+            .with_validator(|port: &u16| {
+                Ok(if *port == 0 {
+                    Validation::Invalid("Port must be between 1 and 65535".into())
+                } else {
+                    Validation::Valid
+                })
+            })
             .prompt()
             .map_err(|error| CliError::PrinterPrompt(error.to_string()))
     }
@@ -965,12 +990,12 @@ mod tests {
     use crate::error::CliError;
 
     #[test]
-    fn add_prompts_for_missing_required_network_values() {
+    fn interactive_network_add_prompts_for_the_port() {
         let arguments = AddPrinterArgs {
             name: None,
             transport: None,
             host: None,
-            port: 9100,
+            port: None,
             profile: None,
         };
         let mut prompter = FixedAddPrompter::with_names(["kitchen"]);
@@ -992,20 +1017,21 @@ mod tests {
                 name: "kitchen".to_owned(),
                 connection: ResolvedAddConnection::Network {
                     host: "10.42.0.71".to_owned(),
-                    port: 9100,
+                    port: 9200,
                 },
                 profile: Some("REFERENCE".to_owned()),
             }
         );
+        assert_eq!(prompter.port_prompts, 1);
     }
 
     #[test]
-    fn add_does_not_prompt_for_an_optional_profile_when_required_values_are_complete() {
+    fn explicit_network_port_skips_port_and_profile_prompts() {
         let arguments = AddPrinterArgs {
             name: Some("kitchen".to_owned()),
             transport: Some(PrinterTransport::Network),
             host: Some("10.42.0.71".to_owned()),
-            port: 9100,
+            port: Some(9100),
             profile: None,
         };
 
@@ -1024,6 +1050,30 @@ mod tests {
     }
 
     #[test]
+    fn usb_add_rejects_an_explicit_network_port() {
+        let arguments = AddPrinterArgs {
+            name: Some("counter".to_owned()),
+            transport: Some(PrinterTransport::Usb),
+            host: None,
+            port: Some(9100),
+            profile: None,
+        };
+
+        let error = resolve_add(
+            arguments,
+            true,
+            &mut UnexpectedAddPrompter,
+            &mut FixedInventory {
+                printers: Vec::new(),
+            },
+            &PrinterConfiguration::default(),
+        )
+        .expect_err("a USB configuration must not accept network coordinates");
+
+        assert!(matches!(error, CliError::NetworkPortForUsbPrinter));
+    }
+
+    #[test]
     fn interactive_add_reprompts_when_its_explicit_name_already_exists() {
         let configuration = PrinterConfiguration::parse(
             r#"
@@ -1038,7 +1088,7 @@ port = 9100
             name: Some("kitchen".to_owned()),
             transport: Some(PrinterTransport::Network),
             host: Some("10.42.0.71".to_owned()),
-            port: 9100,
+            port: Some(9100),
             profile: Some("REFERENCE".to_owned()),
         };
         let mut prompter = FixedAddPrompter::with_names(["counter"]);
@@ -1059,6 +1109,7 @@ port = 9100
             prompter.rejected_names,
             vec!["printer \"kitchen\" is already configured"]
         );
+        assert_eq!(prompter.port_prompts, 0);
     }
 
     #[test]
@@ -1069,7 +1120,7 @@ port = 9100
             name: None,
             transport: None,
             host: None,
-            port: 9100,
+            port: None,
             profile: None,
         };
         let mut inventory = FixedInventory {
@@ -1529,6 +1580,7 @@ out_endpoint = \"0x01\"
     struct FixedAddPrompter {
         names: VecDeque<String>,
         rejected_names: Vec<String>,
+        port_prompts: usize,
     }
 
     struct UsbAddPrompter;
@@ -1540,6 +1592,7 @@ out_endpoint = \"0x01\"
             Self {
                 names: names.map(str::to_owned).into(),
                 rejected_names: Vec::new(),
+                port_prompts: 0,
             }
         }
     }
@@ -1568,6 +1621,11 @@ out_endpoint = \"0x01\"
             Ok("10.42.0.71".to_owned())
         }
 
+        fn port(&mut self) -> Result<u16, CliError> {
+            self.port_prompts += 1;
+            Ok(9200)
+        }
+
         fn profile(&mut self) -> Result<Option<String>, CliError> {
             Ok(Some("REFERENCE".to_owned()))
         }
@@ -1594,6 +1652,10 @@ out_endpoint = \"0x01\"
             panic!("a USB printer must not ask for a network host")
         }
 
+        fn port(&mut self) -> Result<u16, CliError> {
+            panic!("a USB printer must not ask for a network port")
+        }
+
         fn profile(&mut self) -> Result<Option<String>, CliError> {
             Ok(Some("REFERENCE".to_owned()))
         }
@@ -1614,6 +1676,10 @@ out_endpoint = \"0x01\"
 
         fn host(&mut self) -> Result<String, CliError> {
             panic!("host prompt was not expected")
+        }
+
+        fn port(&mut self) -> Result<u16, CliError> {
+            panic!("port prompt was not expected")
         }
 
         fn profile(&mut self) -> Result<Option<String>, CliError> {

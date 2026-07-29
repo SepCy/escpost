@@ -208,6 +208,9 @@ pub(crate) enum CliError {
     #[error("--host is only valid for network printers")]
     NetworkHostForUsbPrinter,
 
+    #[error("--port is only valid for network printers")]
+    NetworkPortForUsbPrinter,
+
     #[error("no unconfigured connected USB printers were found")]
     NoUnconfiguredUsbPrinters,
 

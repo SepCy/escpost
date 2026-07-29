@@ -137,9 +137,9 @@ pub(crate) struct AddPrinterArgs {
     #[arg(long)]
     pub(crate) host: Option<String>,
 
-    /// Raw TCP port.
-    #[arg(long, default_value_t = 9100)]
-    pub(crate) port: u16,
+    /// Raw TCP port. Defaults to 9100.
+    #[arg(long)]
+    pub(crate) port: Option<u16>,
 
     /// Optional rendering profile.
     #[arg(long)]

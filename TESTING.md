@@ -372,7 +372,9 @@ configured devices are excluded, multiple bulk OUT endpoints stay explicit,
 and the selected stable descriptor coordinates are serialized. They never
 claim an interface or write bytes. Name-conflict tests prove that interactive
 registration accepts a replacement while non-interactive registration fails
-without modifying the existing configuration.
+without modifying the existing configuration. Network-registration tests
+cover an interactive port answer, bypassing the prompt with `--port`, and the
+silent non-interactive `9100` default.
 
 ## Rust direct-print smoke tests
 

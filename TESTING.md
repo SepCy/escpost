@@ -370,7 +370,9 @@ display-name ordering, and the absence of filesystem writes during listing.
 USB registration tests use the same synthetic inventory to prove that
 configured devices are excluded, multiple bulk OUT endpoints stay explicit,
 and the selected stable descriptor coordinates are serialized. They never
-claim an interface or write bytes.
+claim an interface or write bytes. Name-conflict tests prove that interactive
+registration accepts a replacement while non-interactive registration fails
+without modifying the existing configuration.
 
 ## Rust direct-print smoke tests
 

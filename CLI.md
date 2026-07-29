@@ -451,7 +451,8 @@ Adding a printer:
 
 - creates the selected configuration directory and file when needed;
 - preserves existing comments, field order, and formatting;
-- refuses to replace an existing name;
+- reports an existing name and asks for another in interactive mode;
+- refuses to replace an existing name in non-interactive mode;
 - validates existing configuration before changing it;
 - writes a complete temporary file before atomically replacing the
   destination;

@@ -110,6 +110,9 @@ trait UsbInventory {
 
 trait AddPrompter {
     fn name(&mut self) -> Result<String, CliError>;
+    fn reject_name(&mut self, error: &CliError) {
+        eprintln!("Error: {error}. Choose another printer name.");
+    }
     fn transport(&mut self) -> Result<PrinterTransport, CliError>;
     fn usb_printer(&mut self, printers: Vec<UsbAddTarget>) -> Result<UsbAddTarget, CliError>;
     fn host(&mut self) -> Result<String, CliError>;
@@ -275,14 +278,7 @@ fn resolve_add(
             ResolvedAddConnection::Network { host, port }
         }
     };
-    let name = match name {
-        Some(name) => name,
-        None if can_prompt => prompter.name()?,
-        None => return Err(CliError::MissingPrinterName),
-    };
-    if name.trim().is_empty() {
-        return Err(CliError::BlankPrinterName);
-    }
+    let name = resolve_name(name, can_prompt, prompter, configuration)?;
     let profile = match profile {
         Some(profile) => Some(profile),
         None if interactive_wizard || transport == PrinterTransport::Usb => prompter.profile()?,
@@ -300,6 +296,41 @@ fn resolve_add(
         connection,
         profile,
     })
+}
+
+fn resolve_name(
+    explicit_name: Option<String>,
+    can_prompt: bool,
+    prompter: &mut impl AddPrompter,
+    configuration: &PrinterConfiguration,
+) -> Result<String, CliError> {
+    if !can_prompt {
+        let name = explicit_name.ok_or(CliError::MissingPrinterName)?;
+        validate_name(&name, configuration)?;
+        return Ok(name);
+    }
+
+    let mut candidate = explicit_name;
+    loop {
+        let name = match candidate.take() {
+            Some(name) => name,
+            None => prompter.name()?,
+        };
+        match validate_name(&name, configuration) {
+            Ok(()) => return Ok(name),
+            Err(error) => prompter.reject_name(&error),
+        }
+    }
+}
+
+fn validate_name(name: &str, configuration: &PrinterConfiguration) -> Result<(), CliError> {
+    if name.trim().is_empty() {
+        return Err(CliError::BlankPrinterName);
+    }
+    if configuration.printer(name).is_some() {
+        return Err(CliError::PrinterAlreadyConfigured(name.to_owned()));
+    }
+    Ok(())
 }
 
 struct InquireAddPrompter;
@@ -920,6 +951,7 @@ fn printer_interfaces(configuration: ConfigurationDescriptor<'_>) -> Vec<UsbPrin
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -941,7 +973,7 @@ mod tests {
             port: 9100,
             profile: None,
         };
-        let mut prompter = FixedAddPrompter;
+        let mut prompter = FixedAddPrompter::with_names(["kitchen"]);
 
         let resolved = resolve_add(
             arguments,
@@ -989,6 +1021,44 @@ mod tests {
         .expect("complete explicit values should resolve");
 
         assert_eq!(resolved.profile, None);
+    }
+
+    #[test]
+    fn interactive_add_reprompts_when_its_explicit_name_already_exists() {
+        let configuration = PrinterConfiguration::parse(
+            r#"
+[kitchen]
+transport = "network"
+host = "10.42.0.20"
+port = 9100
+"#,
+        )
+        .expect("the existing printer should parse");
+        let arguments = AddPrinterArgs {
+            name: Some("kitchen".to_owned()),
+            transport: Some(PrinterTransport::Network),
+            host: Some("10.42.0.71".to_owned()),
+            port: 9100,
+            profile: Some("REFERENCE".to_owned()),
+        };
+        let mut prompter = FixedAddPrompter::with_names(["counter"]);
+
+        let resolved = resolve_add(
+            arguments,
+            true,
+            &mut prompter,
+            &mut FixedInventory {
+                printers: Vec::new(),
+            },
+            &configuration,
+        )
+        .expect("a second unique name should continue registration");
+
+        assert_eq!(resolved.name, "counter");
+        assert_eq!(
+            prompter.rejected_names,
+            vec!["printer \"kitchen\" is already configured"]
+        );
     }
 
     #[test]
@@ -1456,15 +1526,34 @@ out_endpoint = \"0x01\"
         printers: Vec<UsbPrinter>,
     }
 
-    struct FixedAddPrompter;
+    struct FixedAddPrompter {
+        names: VecDeque<String>,
+        rejected_names: Vec<String>,
+    }
 
     struct UsbAddPrompter;
 
     struct UnexpectedAddPrompter;
 
+    impl FixedAddPrompter {
+        fn with_names<const N: usize>(names: [&str; N]) -> Self {
+            Self {
+                names: names.map(str::to_owned).into(),
+                rejected_names: Vec::new(),
+            }
+        }
+    }
+
     impl AddPrompter for FixedAddPrompter {
         fn name(&mut self) -> Result<String, CliError> {
-            Ok("kitchen".to_owned())
+            Ok(self
+                .names
+                .pop_front()
+                .expect("the resolver should not exhaust test names"))
+        }
+
+        fn reject_name(&mut self, error: &CliError) {
+            self.rejected_names.push(error.to_string());
         }
 
         fn transport(&mut self) -> Result<PrinterTransport, CliError> {

@@ -442,6 +442,29 @@ escpost lint receipt.bin \
 - [ ] Do not infer permanent capabilities merely because one undocumented
       probe happened to print.
 
+## Renderer performance
+
+A receipt surface is small (about 576 dots wide by a few thousand tall) and a
+full render completes in milliseconds, so none of this is urgent. Profile
+before starting any item. Ordered by expected win:
+
+- [ ] Cache rasterized glyphs. `print_character` calls fontdue's `rasterize`
+      for every character occurrence, re-rasterizing identical glyphs each
+      time. A cache keyed by character and pixel size removes the dominant
+      per-character cost on text-heavy receipts.
+- [ ] Paint runs instead of dots. Reversed cells, underlines, and scaled
+      image rows call `print_dot` once per dot, paying a bounds check and a
+      possible surface resize on every call. Filling whole horizontal spans
+      row by row removes that overhead and gives the compiler loops it can
+      auto-vectorize.
+- [x] Store the surface bit-packed. `MonoSurface` stores eight MSB-first dots
+      per byte in PNG's 1-bit row layout, shrinking the surface eightfold and
+      reducing PNG encoding to a per-byte polarity inversion.
+
+Explicit SIMD is deliberately absent: the workspace forbids `unsafe`,
+`std::simd` is nightly-only, and the items above eliminate the hot loops SIMD
+would target.
+
 ## Security and resource safety
 
 - [ ] Default both RAW TCP and HTTP listeners to loopback.

@@ -118,7 +118,11 @@ pub struct RenderedSheet {
 pub struct MonoSurface {
     width: u32,
     height: u32,
-    dots: Vec<bool>,
+    // Row-major, eight dots per byte, most-significant bit first, rows padded
+    // to a whole byte: the same layout as PNG 1-bit grayscale, with inverted
+    // polarity (1 = ink here, 0 = black in PNG). Padding bits stay zero so
+    // derived equality cannot be confused by unused bits.
+    rows: Vec<u8>,
 }
 
 impl MonoSurface {
@@ -138,7 +142,11 @@ impl MonoSurface {
             return false;
         }
 
-        self.dots[(y * self.width + x) as usize]
+        self.rows[(y * self.row_bytes() + x / 8) as usize] & (0x80 >> (x % 8)) != 0
+    }
+
+    fn row_bytes(&self) -> u32 {
+        self.width.div_ceil(8)
     }
 }
 
@@ -386,19 +394,10 @@ fn validate_initial_limits(
 }
 
 fn encode_png(surface: &MonoSurface) -> Result<Vec<u8>, png::EncodingError> {
-    let row_bytes = surface.width.div_ceil(8);
-    let mut pixels = vec![0xff; (row_bytes * surface.height) as usize];
-
-    // PNG grayscale-1 stores eight left-to-right pixels per byte, with zero
-    // representing black. MonoSurface uses the more convenient `true = ink`.
-    for y in 0..surface.height {
-        for x in 0..surface.width {
-            if surface.is_printed(x, y) {
-                let index = (y * row_bytes + x / 8) as usize;
-                pixels[index] &= !(0x80 >> (x % 8));
-            }
-        }
-    }
+    // MonoSurface already stores rows in PNG's 1-bit layout; only the polarity
+    // differs (1 = ink on the surface, 0 = black in PNG), so encoding inverts
+    // each byte. Inverted row padding becomes ones, which PNG ignores.
+    let pixels: Vec<u8> = surface.rows.iter().map(|byte| !byte).collect();
 
     let mut encoded = Vec::new();
     {
@@ -2971,7 +2970,7 @@ impl MonoSurface {
         Self {
             width,
             height: 0,
-            dots: Vec::new(),
+            rows: Vec::new(),
         }
     }
 
@@ -2981,7 +2980,8 @@ impl MonoSurface {
         }
 
         self.ensure_height(y + 1);
-        self.dots[(y * self.width + x) as usize] = true;
+        let index = (y * self.row_bytes() + x / 8) as usize;
+        self.rows[index] |= 0x80 >> (x % 8);
     }
 
     fn clear_dot(&mut self, x: u32, y: u32) {
@@ -2989,7 +2989,8 @@ impl MonoSurface {
             return;
         }
 
-        self.dots[(y * self.width + x) as usize] = false;
+        let index = (y * self.row_bytes() + x / 8) as usize;
+        self.rows[index] &= !(0x80 >> (x % 8));
     }
 
     fn composite_at(&mut self, source: &Self, left: u32, top: u32) {
@@ -3012,12 +3013,12 @@ impl MonoSurface {
             return;
         }
 
-        self.dots.resize((height * self.width) as usize, false);
+        self.rows.resize((height * self.row_bytes()) as usize, 0);
         self.height = height;
     }
 
     fn clear(&mut self) {
         self.height = 0;
-        self.dots.clear();
+        self.rows.clear();
     }
 }

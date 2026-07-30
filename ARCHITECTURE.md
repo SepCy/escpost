@@ -183,6 +183,30 @@ searched for command prefixes.
 Malformed, truncated, unknown, or unsupported input returns a `RenderError`.
 V1 does not return a speculative partial preview after a parser error.
 
+### Renderer modules
+
+Each rendering domain owns one module in `crates/escpost/src/`:
+
+```text
+lib.rs            public API types and the render entry point
+command.rs        sequential ESC/POS parsing and dispatch
+state.rs          printer state, line composition, cuts, and limits
+text.rs           code-page decoding and glyph rasterization
+graphics.rs       bit-image and raster graphics painting
+symbols.rs        barcode and QR placement and painting
+barcode.rs        one-dimensional barcode encoders
+databar.rs        GS1 DataBar encoding
+qr.rs             QR matrix adapter
+international.rs  ESC R character substitutions
+surface.rs        bit-packed dot surface and PNG encoding
+error.rs          renderer error types
+```
+
+`PrinterState` and its lifecycle live in `state.rs`; the text, graphics, and
+symbols modules extend it with their own `impl` blocks so each painting
+domain stays readable on its own. The public API is re-exported from the
+crate root, so module boundaries are not visible to embedders.
+
 ## Printer state
 
 The mutable state contains only behavior required by implemented commands:
@@ -277,8 +301,10 @@ render receipt content.
 
 ## Dot surfaces and sheets
 
-`MonoSurface` stores one printed/not-printed value per printer dot. All current
-commands compose into this monochrome representation.
+`MonoSurface` stores one printed/not-printed value per printer dot, packed
+eight dots per byte in PNG's one-bit row layout so encoding a sheet is a
+per-byte polarity inversion. All current commands compose into this
+monochrome representation.
 
 A cut finalizes the active surface. Later output starts another sheet. Without
 a cut, final sheet height follows painted content and paper-feed position.

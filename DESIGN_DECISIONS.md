@@ -563,6 +563,47 @@ available.
   known, while a real print preview should still select the actual device
   profile whenever possible.
 
+## DD-027 — Keep the rendering crate free of I/O and platform dependencies
+
+**Status:** Accepted
+
+### Context
+
+The `escpost` crate is embedded by the CLI and the Python binding today, and
+the roadmap adds more consumers: replay, proxying, linting, and integration
+into other projects. Some future hosts may not be developer-machine processes
+at all; rendering inside a browser through WebAssembly is a realistic option
+for the web viewer. Hardware access, networking, and terminal interaction
+each narrow the set of environments the crate can run in and enlarge the
+surface that must be audited and tested.
+
+### Decision
+
+The `escpost` crate performs pure computation: ESC/POS bytes and a profile
+in, dot surfaces and PNG bytes out. It must not depend on networking,
+hardware transports, filesystem access, system clocks, or any other
+operating-system interface. Its dependency tree stays pure-Rust computation
+(font rasterization, PNG encoding, symbol generation, text encodings), which
+keeps the crate portable to any target Rust compiles to, including
+WebAssembly.
+
+Applications own I/O. USB and RAW TCP printing, the web server, and file
+handling live in `escpost-cli`. When a second consumer needs physical
+output, extract the transports into a sibling crate such as `escpost-print`
+instead of moving them into the renderer.
+
+### Consequences
+
+- Rendering stays deterministic and trivially testable: no renderer test
+  needs a network, a device, or a clock.
+- The renderer can be embedded in any host — PyO3 today, WebAssembly or
+  other bindings later — without dragging transport dependencies along.
+- New rendering features must express environmental needs as explicit inputs
+  such as options, profiles, and byte streams instead of reaching for the
+  operating system.
+- Reusable physical printing becomes its own crate with its own dependency
+  profile, extracted only when a second consumer exists.
+
 ## Open questions
 
 The following are intentionally not decided yet:

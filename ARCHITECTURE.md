@@ -34,6 +34,12 @@ The Rust workspace contains four crates:
   inventory, and platform-native machine configuration.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
 
+The rendering crate performs pure computation and depends on no
+operating-system interface — no networking, hardware, filesystem, or clock
+access. This keeps it deterministic and embeddable in any host, including
+WebAssembly targets, and is a deliberate boundary documented in
+`DESIGN_DECISIONS.md`.
+
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 

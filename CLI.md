@@ -577,13 +577,15 @@ authentication or encryption and receipt contents may be sensitive.
 
 The initial implementation is narrower than the contract above. `--profile`
 defaults to `REFERENCE`, and both listeners auto-select a free loopback port
-when no address is given. It frames one job per connection using connection
-close and previews only the most recent job — replacing the previous one rather
-than keeping a history. A job's `GS V` cuts appear as its ordered sheets. The
-web server answers `GET /health` with `200 ok` for container and test probes.
-Before the first job the viewer shows where to send data. Standard-mode `FF`
-job boundaries, persistent-connection jobs, an idle timeout, retention limits,
-and raw-input download are planned.
+when no address is given. A job ends when the connection closes or, so a
+held-open connection still finishes, after `--idle-timeout` seconds of silence
+(default 20; `0` waits only for close). Idle-completed jobs are flagged in the
+viewer because they may be incomplete. It previews only the most recent job —
+replacing the previous one rather than keeping a history. A job's `GS V` cuts
+appear as its ordered sheets. The web server answers `GET /health` with
+`200 ok` for container and test probes. Before the first job the viewer shows
+where to send data. Standard-mode `FF` job boundaries, multiple explicit jobs
+per connection, retention limits, and raw-input download are planned.
 
 ## Other commands
 

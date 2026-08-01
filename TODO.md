@@ -205,10 +205,12 @@ They must not be conflated.
       renderer already splits `GS V` cuts into separate sheets, so a captured
       job's cuts appear as its ordered sheets without extra serve handling.
 - [ ] Support multiple explicitly completed jobs on one persistent connection.
-- [ ] Offer an optional idle timeout for clients that keep a connection open
-      without sending an explicit job terminator.
-- [ ] Make timeout-completed jobs visibly distinguishable from explicitly
-      completed jobs.
+- [x] Offer an optional idle timeout for clients that keep a connection open
+      without sending an explicit job terminator. Defaults to 20 seconds; `0`
+      disables it and waits for the connection to close.
+- [x] Make timeout-completed jobs visibly distinguishable from explicitly
+      completed jobs. The API reports each job's completion ("closed" or
+      "timeout") and the viewer flags idle-completed jobs.
 - [ ] Test one-byte TCP chunks, commands split across chunks, several commands
       in one chunk, persistent connections, disconnects, and truncated jobs.
 

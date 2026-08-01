@@ -23,9 +23,50 @@ fn serve_captures_a_raw_job_and_previews_its_sheets() {
     assert!(!sheets.is_empty(), "the captured job should render a sheet");
     assert_eq!(metadata["profile"], "REFERENCE");
 
+    // A job ended by the client closing the connection is labelled "closed".
+    assert_eq!(metadata["completion"], "closed");
+
     let png = response_body(&http_get_bytes(web_port, "/sheets/1.png")).to_vec();
     stop(&mut child);
     assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+}
+
+#[test]
+fn serve_finalizes_a_held_open_connection_after_the_idle_timeout() {
+    let mut child = start_serve(&[
+        "--profile",
+        "REFERENCE",
+        "--idle-timeout",
+        "0.3",
+        "--listen",
+        "127.0.0.1:0",
+        "--web-listen",
+        "127.0.0.1:0",
+    ]);
+    let (raw_port, web_port) = read_listen_ports(&mut child);
+    wait_until_listening(&mut child, raw_port);
+    wait_until_listening(&mut child, web_port);
+
+    // Send a receipt but deliberately keep the connection open. The idle timeout
+    // must finalize the job anyway.
+    let mut stream = open_raw_connection(raw_port);
+    stream
+        .write_all(b"Held-open receipt\n")
+        .expect("the receipt should be writable");
+    stream.flush().expect("the receipt should flush");
+
+    let metadata = wait_for_first_job(web_port);
+    assert!(
+        !metadata["sheets"]
+            .as_array()
+            .expect("sheets should be an array")
+            .is_empty(),
+        "the held-open job should render once the idle timeout elapses"
+    );
+    assert_eq!(metadata["completion"], "timeout");
+
+    drop(stream);
+    stop(&mut child);
 }
 
 #[test]
@@ -212,6 +253,22 @@ fn raw_send_once(port: u16, bytes: &[u8]) -> std::io::Result<()> {
     stream.write_all(bytes)?;
     // Dropping the stream closes the connection, completing the job.
     Ok(())
+}
+
+fn open_raw_connection(port: u16) -> TcpStream {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match TcpStream::connect((Ipv4Addr::LOCALHOST, port)) {
+            Ok(stream) => return stream,
+            Err(error) => {
+                assert!(
+                    Instant::now() < deadline,
+                    "the RAW printer never accepted a connection: {error}"
+                );
+                thread::sleep(Duration::from_millis(25));
+            }
+        }
+    }
 }
 
 fn send_raw_job_one_byte_at_a_time(port: u16, bytes: &[u8]) {

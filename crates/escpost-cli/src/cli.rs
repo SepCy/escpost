@@ -51,6 +51,11 @@ pub(crate) struct ServeArgs {
     #[arg(long)]
     pub(crate) web_listen: Option<SocketAddr>,
 
+    /// Complete a held-open connection's job after this many seconds of silence.
+    /// Use 0 to disable and end a job only when the connection closes.
+    #[arg(long, value_name = "SECONDS", default_value_t = 20.0)]
+    pub(crate) idle_timeout: f64,
+
     /// Open the web viewer in the default browser.
     #[arg(long)]
     pub(crate) browser: bool,

@@ -62,6 +62,22 @@
         color: #6b6b6b;
       }
 
+      /* A caution shown when a job was completed by the idle timeout rather
+         than an explicit connection close, so it may be incomplete. */
+      #completion:empty {
+        display: none;
+      }
+
+      #completion {
+        color: #ffb454;
+      }
+
+      #completion::before {
+        content: "·";
+        margin-right: 10px;
+        color: #6b6b6b;
+      }
+
       #connection {
         display: inline-flex;
         align-items: center;
@@ -204,6 +220,7 @@
         <div id="serverStatus">
           <span id="connection">Connecting…</span>
           <span id="profile"></span>
+          <span id="completion"></span>
         </div>
       </div>
       <div class="toolbar">
@@ -236,6 +253,7 @@
       const zoom = document.querySelector("#zoom");
       const margin = document.querySelector("#margin");
       const profile = document.querySelector("#profile");
+      const completionLabel = document.querySelector("#completion");
       const connection = document.querySelector("#connection");
       const serverAddress = window.location.host;
       let currentRendering = "";
@@ -302,6 +320,7 @@
           waiting.textContent = rendering.hint;
           waiting.style.display = "block";
           profile.textContent = "";
+          completionLabel.textContent = "";
           return;
         }
         waiting.style.display = "none";
@@ -314,6 +333,9 @@
         // The profile is shown with the server status; the sheet count is
         // obvious from the rendered sheets themselves.
         profile.textContent = rendering.profile;
+        // Flag a job that ended on the idle timeout, since it may be incomplete.
+        completionLabel.textContent =
+          rendering.completion === "timeout" ? "idle-timeout" : "";
       }
 
       function createSheet(sheet, sheetCount, cacheKey) {

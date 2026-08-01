@@ -105,6 +105,9 @@ pub(crate) enum CliError {
     #[error("RAW printer failed: {0}")]
     ServeRawPrinter(std::io::Error),
 
+    #[error("idle timeout must be a positive number of seconds")]
+    InvalidIdleTimeout,
+
     #[error("could not open the default browser: {0}")]
     OpenBrowser(String),
 

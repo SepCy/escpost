@@ -235,7 +235,9 @@ The profile defaults to `REFERENCE`; pass `--profile` to preview through a
 specific printer's profile. Pass `--listen` or `--web-listen` to pin an exact
 address, which is then bound strictly. The viewer shows where to send data
 until the first job arrives, then previews the most recent captured job. A job
-ends when the connection closes.
+ends when the connection closes, or after `--idle-timeout` seconds of silence
+(default 20, `0` to disable) so a client that holds the connection open still
+finishes; idle-completed jobs are flagged in the viewer as possibly incomplete.
 
 For focused physical calibration, first register the printer with
 `printers add` to populate `local/config/printers.toml` through the Docker

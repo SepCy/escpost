@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use escpost::render;
 use escpost_profiles::PrinterProfile;
 use tokio::io::AsyncReadExt;
@@ -19,6 +21,15 @@ pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
     let profile = profiles::load(&arguments.profile)?;
     eprintln!("Profile: {}", arguments.profile);
 
+    // Zero disables the idle timeout; a negative or non-finite value is invalid.
+    let idle_timeout = if arguments.idle_timeout == 0.0 {
+        None
+    } else if arguments.idle_timeout.is_finite() && arguments.idle_timeout > 0.0 {
+        Some(Duration::from_secs_f64(arguments.idle_timeout))
+    } else {
+        return Err(CliError::InvalidIdleTimeout);
+    };
+
     let raw = net::bind_loopback(arguments.listen, FIRST_RAW_PORT..=LAST_RAW_PORT)
         .await
         .map_err(|failure| match failure {
@@ -32,6 +43,10 @@ pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
         eprintln!("warning: the RAW printer accepts receipt data beyond loopback on {raw_address}");
     }
     eprintln!("RAW printer: {raw_address}");
+    match idle_timeout {
+        Some(timeout) => eprintln!("Idle timeout: {timeout:?}"),
+        None => eprintln!("Idle timeout: disabled (jobs end when the connection closes)"),
+    }
 
     let web_listener = web::bind(arguments.web_listen).await?;
     let jobs = web::JobStore::awaiting_jobs(format!(
@@ -40,38 +55,75 @@ pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
 
     // Accept jobs while the web viewer runs. The viewer owns the foreground and
     // returns on Ctrl+C; stop accepting once it does.
-    let acceptor = tokio::spawn(accept_jobs(raw, jobs.clone(), profile));
+    let acceptor = tokio::spawn(accept_jobs(raw, jobs.clone(), profile, idle_timeout));
     let result = web::serve(web_listener, jobs, arguments.browser).await;
     acceptor.abort();
     result
 }
 
-async fn accept_jobs(listener: TcpListener, jobs: web::JobStore, profile: &'static PrinterProfile) {
+async fn accept_jobs(
+    listener: TcpListener,
+    jobs: web::JobStore,
+    profile: &'static PrinterProfile,
+    idle_timeout: Option<Duration>,
+) {
     loop {
         match listener.accept().await {
             // A transient accept error must not tear down the listener; the next
             // client can still connect.
             Ok((stream, _peer)) => {
-                tokio::spawn(capture_job(stream, jobs.clone(), profile));
+                tokio::spawn(capture_job(stream, jobs.clone(), profile, idle_timeout));
             }
             Err(_) => continue,
         }
     }
 }
 
-async fn capture_job(mut stream: TcpStream, jobs: web::JobStore, profile: &'static PrinterProfile) {
-    let mut bytes = Vec::new();
-    if stream.read_to_end(&mut bytes).await.is_err() {
-        return;
+async fn capture_job(
+    mut stream: TcpStream,
+    jobs: web::JobStore,
+    profile: &'static PrinterProfile,
+    idle_timeout: Option<Duration>,
+) {
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 8192];
+    loop {
+        let read = match idle_timeout {
+            Some(timeout) => match tokio::time::timeout(timeout, stream.read(&mut chunk)).await {
+                Ok(result) => result,
+                // Silence for the idle interval completes whatever has arrived.
+                Err(_elapsed) => {
+                    if !buffer.is_empty() {
+                        finalize(&jobs, std::mem::take(&mut buffer), profile, "timeout").await;
+                    }
+                    continue;
+                }
+            },
+            None => stream.read(&mut chunk).await,
+        };
+        match read {
+            Ok(0) => break,
+            Ok(read) => buffer.extend_from_slice(&chunk[..read]),
+            // A read error abandons whatever was buffered.
+            Err(_) => return,
+        }
     }
-    // A connection that closes without sending anything is not a job.
-    if bytes.is_empty() {
-        return;
+    // The connection closed: any remaining bytes are an explicitly completed job.
+    if !buffer.is_empty() {
+        finalize(&jobs, buffer, profile, "closed").await;
     }
+}
+
+async fn finalize(
+    jobs: &web::JobStore,
+    bytes: Vec<u8>,
+    profile: &'static PrinterProfile,
+    completion: &'static str,
+) {
     // Rendering is synchronous and CPU-bound; run it off the async workers so a
     // job in flight cannot stall the web viewer's responses.
     match tokio::task::spawn_blocking(move || render(&bytes, profile)).await {
-        Ok(Ok(rendered)) => jobs.replace_render(rendered).await,
+        Ok(Ok(rendered)) => jobs.replace_captured(rendered, completion).await,
         Ok(Err(error)) => {
             eprintln!("warning: could not render captured job: {error}");
             jobs.set_error(error.to_string()).await;

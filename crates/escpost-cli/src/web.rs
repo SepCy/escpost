@@ -28,6 +28,7 @@ struct JobStoreState {
     error: Option<String>,
     generation: u64,
     waiting_hint: Option<String>,
+    completion: Option<&'static str>,
 }
 
 struct RenderedJob {
@@ -50,6 +51,9 @@ struct RenderResponse {
     /// Guidance shown while no job has been captured yet, e.g. by `serve`.
     #[serde(skip_serializing_if = "Option::is_none")]
     hint: Option<String>,
+    /// How a captured job ended: "closed" or "timeout". Absent for renders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completion: Option<&'static str>,
     sheets: Vec<SheetResponse>,
 }
 
@@ -70,6 +74,7 @@ impl JobStore {
                 error: None,
                 generation: 1,
                 waiting_hint: None,
+                completion: None,
             })),
         }
     }
@@ -83,15 +88,29 @@ impl JobStore {
                 error: None,
                 generation: 0,
                 waiting_hint: Some(hint),
+                completion: None,
             })),
         }
     }
 
+    /// Replace the preview with a render that has no capture semantics, such as
+    /// `render --web`.
     pub(crate) async fn replace_render(&self, rendered: RenderResult) {
+        self.store_render(rendered, None).await;
+    }
+
+    /// Replace the preview with a captured job, recording how it ended so the
+    /// viewer can distinguish a closed connection from an idle timeout.
+    pub(crate) async fn replace_captured(&self, rendered: RenderResult, completion: &'static str) {
+        self.store_render(rendered, Some(completion)).await;
+    }
+
+    async fn store_render(&self, rendered: RenderResult, completion: Option<&'static str>) {
         let mut state = self.state.write().await;
         state.jobs = VecDeque::from([Arc::new(RenderedJob::from(rendered))]);
         state.error = None;
         state.generation += 1;
+        state.completion = completion;
     }
 
     pub(crate) async fn set_error(&self, error: String) {
@@ -117,6 +136,7 @@ impl JobStore {
                 generation: state.generation,
                 error: state.error.clone(),
                 hint: state.waiting_hint.clone(),
+                completion: None,
                 sheets: Vec::new(),
             };
         };
@@ -137,6 +157,7 @@ impl JobStore {
             generation: state.generation,
             error: state.error.clone(),
             hint: None,
+            completion: state.completion,
             sheets,
         }
     }

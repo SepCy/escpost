@@ -270,6 +270,24 @@
         display: none;
         color: #ff9d9d;
       }
+
+      /* Non-fatal render diagnostics (e.g. a cut dropped on a cutter-less
+         profile). Amber to set them apart from the red render-error banner. */
+      #warnings {
+        display: none;
+        margin: 16px 0 0;
+        color: #ffb454;
+        font-size: 13px;
+      }
+
+      #warnings .warning {
+        display: flex;
+        gap: 6px;
+      }
+
+      #warnings .warning::before {
+        content: "⚠";
+      }
     </style>
   </head>
   <body>
@@ -309,6 +327,7 @@
         <span id="receiving">Receiving a job…</span>
       </div>
       <div id="sheets" aria-live="polite"></div>
+      <div id="warnings" aria-live="polite"></div>
       <p id="waiting" aria-live="polite"></p>
       <p id="error"></p>
     </main>
@@ -317,6 +336,7 @@
       const sheets = document.querySelector("#sheets");
       const waiting = document.querySelector("#waiting");
       const error = document.querySelector("#error");
+      const warnings = document.querySelector("#warnings");
       const zoom = document.querySelector("#zoom");
       const margin = document.querySelector("#margin");
       const profile = document.querySelector("#profile");
@@ -378,6 +398,33 @@
         error.style.display = "none";
       }
 
+      let currentWarnings = "";
+
+      // Non-fatal diagnostics for the current render. Rebuilt only when the set
+      // changes, so the 0.75 s poll does not churn the DOM.
+      function showWarnings(list) {
+        const messages = list || [];
+        const key = messages.join("\n");
+        if (key === currentWarnings) {
+          return;
+        }
+        currentWarnings = key;
+        if (messages.length === 0) {
+          warnings.replaceChildren();
+          warnings.style.display = "none";
+          return;
+        }
+        warnings.replaceChildren(
+          ...messages.map((text) => {
+            const line = document.createElement("div");
+            line.className = "warning";
+            line.textContent = text;
+            return line;
+          })
+        );
+        warnings.style.display = "block";
+      }
+
       function showRendering(rendering, cacheKey) {
         // A render error (e.g. malformed ESC/POS) is distinct from the server
         // being unreachable, which refresh() reports separately.
@@ -398,9 +445,10 @@
         // Vary by generation so a new job's bytes are not served from cache.
         download.href = `/job?g=${rendering.generation}`;
 
-        // The status line updates every poll: a render error or an in-progress
-        // capture changes it without advancing the generation.
+        // The status line and warnings update every poll: a render error or an
+        // in-progress capture changes them without advancing the generation.
         updateStatus(rendering);
+        showWarnings(rendering.warnings);
 
         // Rebuilding the sheet images is expensive, so gate it on a new job.
         // Errors leave the generation unchanged and keep the last sheets shown.

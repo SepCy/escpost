@@ -49,6 +49,8 @@ fn epoch_millis() -> u64 {
 
 struct RenderedJob {
     profile: String,
+    /// Non-fatal render diagnostics, pre-formatted for display.
+    warnings: Vec<String>,
     sheets: Vec<RenderedWebSheet>,
 }
 
@@ -77,6 +79,8 @@ struct RenderResponse {
     completed_at: Option<u64>,
     /// True when the current job's raw bytes can be downloaded from /job.
     input_available: bool,
+    /// Non-fatal render diagnostics for the current job, ready to display.
+    warnings: Vec<String>,
     sheets: Vec<SheetResponse>,
 }
 
@@ -205,6 +209,7 @@ impl JobStore {
                 receiving: state.receiving > 0,
                 completed_at: None,
                 input_available: false,
+                warnings: Vec::new(),
                 sheets: Vec::new(),
             };
         };
@@ -229,6 +234,7 @@ impl JobStore {
             receiving: state.receiving > 0,
             completed_at: state.completed_at,
             input_available: state.raw_input.is_some(),
+            warnings: job.warnings.clone(),
             sheets,
         }
     }
@@ -238,6 +244,7 @@ impl From<RenderResult> for RenderedJob {
     fn from(rendered: RenderResult) -> Self {
         Self {
             profile: rendered.metadata.profile_id,
+            warnings: rendered.warnings.iter().map(ToString::to_string).collect(),
             sheets: rendered
                 .sheets
                 .into_iter()

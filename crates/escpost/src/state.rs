@@ -2,7 +2,7 @@
 
 use crate::surface::MonoSurface;
 use crate::symbols::barcode_system_command_name;
-use crate::{DeviceEvent, LimitKind, RenderError, RenderLimits, qr};
+use crate::{DeviceEvent, LimitKind, RenderError, RenderLimits, RenderWarning, qr};
 use escpost_profiles::{
     BarcodeSystem, CarriageReturnMode, FeedBehavior, Font as ProfileFont, PositioningBehavior,
     PrinterProfile,
@@ -44,6 +44,7 @@ pub(crate) struct PrinterState {
     pub(crate) profile_id: String,
     pub(crate) limits: RenderLimits,
     pub(crate) device_events: Vec<DeviceEvent>,
+    pub(crate) warnings: Vec<RenderWarning>,
     pub(crate) completed_sheets: Vec<MonoSurface>,
     // Subpixels per dot and whether glyph edges stay soft (grayscale preview).
     pub(crate) scale: u32,
@@ -141,6 +142,7 @@ impl PrinterState {
             profile_id: profile.id.clone(),
             limits,
             device_events: Vec::new(),
+            warnings: Vec::new(),
             completed_sheets: Vec::new(),
             scale,
             antialias,
@@ -570,9 +572,11 @@ impl PrinterState {
         }
 
         if !self.supports_full_cut && !self.supports_partial_cut {
-            // Epson Function B remains useful on mechanisms without a cutter:
-            // they perform only the explicit n-unit feed.
-            return self.print_and_feed_motion_units(feed);
+            // The mechanism has no cutter: it performs only the explicit n-unit
+            // feed and cannot cut. cut() still splits the preview at the boundary
+            // and records that no physical cut happened.
+            self.print_and_feed_motion_units(feed)?;
+            return self.cut(mode == 66, offset);
         }
 
         let Some(print_head_to_cutter_dots) = self.print_head_to_cutter_dots else {
@@ -598,7 +602,12 @@ impl PrinterState {
             self.supports_full_cut
         };
         if !supported {
-            return Err(RenderError::CommandUnsupportedByProfile {
+            // The printer has no matching cutter, so the paper is not physically
+            // cut. Still split the preview here — a cut marks a receipt boundary
+            // a POS relies on to separate jobs — but record that the cut did not
+            // happen, so callers can surface it rather than mistake the split for
+            // a real cut.
+            self.warnings.push(RenderWarning::UncuttableCut {
                 command: if partial {
                     "GS V partial cut"
                 } else {

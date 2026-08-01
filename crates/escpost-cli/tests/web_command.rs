@@ -29,6 +29,7 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("id=\"jobStatus\""));
     assert!(response.contains("id=\"receiving\""));
     assert!(response.contains("id=\"download\""));
+    assert!(response.contains("id=\"warnings\""));
     assert!(response.contains("fetch(\"/api/render\""));
 }
 

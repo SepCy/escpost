@@ -1,4 +1,4 @@
-use escpost::{RenderError, render};
+use escpost::{RenderWarning, render};
 use escpost_profiles::{CutterGeometry, FeedBehavior, compile_profile};
 
 const CAPABILITIES_JSON: &[u8] =
@@ -59,25 +59,41 @@ fn gs_v_partial_cut_uses_its_own_profile_capability() {
 }
 
 #[test]
-fn gs_v_reports_a_cut_that_the_profile_does_not_support() {
+fn gs_v_full_cut_splits_the_preview_and_warns_without_a_cutter() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
+    // The real NT-5890K has no cutter, so the full cut cannot be performed. The
+    // render still succeeds: the preview splits at the receipt boundary and a
+    // warning records that the paper was not physically cut.
+    let marker_line = [ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
+    let input = [
+        marker_line.as_slice(),
+        &[GS, b'V', 0],
+        marker_line.as_slice(),
+    ]
+    .concat();
 
-    let error =
-        render(&[GS, b'V', 0], &profile).expect_err("the NT-5890K has no full-cut capability");
+    let rendered =
+        render(&input, &profile).expect("an unsupported cut should warn, not fail the render");
 
+    assert_eq!(rendered.sheets.len(), 2);
+    for sheet in &rendered.sheets {
+        assert_eq!((sheet.surface.width(), sheet.surface.height()), (384, 30));
+    }
+    assert_eq!(rendered.warnings.len(), 1);
     assert!(matches!(
-        error,
-        RenderError::CommandUnsupportedByProfile {
+        rendered.warnings[0],
+        RenderWarning::UncuttableCut {
             command: "GS V full cut",
             ref profile,
-            offset: 0,
+            // The cut follows the seven-byte marker line.
+            offset: 7,
         } if profile == "NT-5890K"
     ));
 }
 
 #[test]
-fn epson_gs_v_function_b_feeds_both_modes_without_an_autocutter() {
+fn epson_gs_v_function_b_splits_and_warns_for_both_modes_without_an_autocutter() {
     let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
     profile.commands.gs_v_function_b_partial = FeedBehavior::Feed;
@@ -86,16 +102,20 @@ fn epson_gs_v_function_b_feeds_both_modes_without_an_autocutter() {
         GS, b'P', 203, 101, GS, b'V', 65, 5, GS, b'V', 66, 5,
     ];
 
-    let rendered = render(&input, &profile).expect("both Epson Function B modes should feed");
+    let rendered =
+        render(&input, &profile).expect("both Epson Function B modes should feed and split");
 
-    assert_eq!(rendered.sheets.len(), 1);
-    assert_eq!(
-        (
-            rendered.sheets[0].surface.width(),
-            rendered.sheets[0].surface.height(),
-        ),
-        (384, 20)
-    );
+    // Without a cutter each fed Function B cut performs its five-unit feed, then
+    // splits the preview at the boundary and warns that no physical cut happened.
+    assert_eq!(rendered.sheets.len(), 2);
+    for sheet in &rendered.sheets {
+        assert_eq!((sheet.surface.width(), sheet.surface.height()), (384, 10));
+    }
+    assert_eq!(rendered.warnings.len(), 2);
+    assert!(rendered.warnings.iter().all(|warning| matches!(
+        warning,
+        RenderWarning::UncuttableCut { profile, .. } if profile == "NT-5890K"
+    )));
 }
 
 #[test]
@@ -157,7 +177,7 @@ fn gs_v_function_b_partial_cut_uses_the_same_cutter_geometry() {
 }
 
 #[test]
-fn nt_5890k_feeds_for_gs_v_65_but_ignores_gs_v_66() {
+fn nt_5890k_splits_for_gs_v_65_but_ignores_gs_v_66() {
     let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
         .expect("the test profile should compile");
     let input = [
@@ -167,8 +187,9 @@ fn nt_5890k_feeds_for_gs_v_65_but_ignores_gs_v_66() {
 
     let rendered = render(&input, &profile).expect("both Function B forms should be consumed");
 
-    // This firmware feeds for the full-cut form but consumes the partial-cut
-    // form without feeding. The profile preserves that material layout quirk.
+    // This firmware acts on the full-cut form (feed then split, with a warning)
+    // but consumes the partial-cut form as a no-op. The single fed sheet and the
+    // lone warning show GS V 66 produced neither a boundary nor a diagnostic.
     assert_eq!(rendered.sheets.len(), 1);
     assert_eq!(
         (
@@ -177,4 +198,12 @@ fn nt_5890k_feeds_for_gs_v_65_but_ignores_gs_v_66() {
         ),
         (384, 10)
     );
+    assert_eq!(rendered.warnings.len(), 1);
+    assert!(matches!(
+        rendered.warnings[0],
+        RenderWarning::UncuttableCut {
+            command: "GS V full cut",
+            ..
+        }
+    ));
 }

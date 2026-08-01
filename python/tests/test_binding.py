@@ -32,6 +32,7 @@ class RenderBindingTest(unittest.TestCase):
 
         self.assertEqual(len(rendered["sheets"]), 1)
         self.assertEqual(rendered["device_events"], [])
+        self.assertEqual(rendered["warnings"], [])
         self.assertTrue(
             any(
                 approximation["field"] == "fonts.resident_glyph_shapes"
@@ -43,6 +44,19 @@ class RenderBindingTest(unittest.TestCase):
             len(rendered["metadata"]["canonical_profile_sha256"]),
             64,
         )
+
+    def test_render_result_warns_on_a_cut_without_a_cutter(self):
+        # NT-5890K has no cutter: the full cut still splits the preview into two
+        # receipts and reports a non-fatal warning rather than failing.
+        rendered = render_result(b"\n\x1d\x56\x00\n", profile="NT-5890K")
+
+        self.assertEqual(len(rendered["sheets"]), 2)
+        self.assertEqual(len(rendered["warnings"]), 1)
+        warning = rendered["warnings"][0]
+        self.assertEqual(warning["type"], "uncuttable_cut")
+        self.assertEqual(warning["command"], "GS V full cut")
+        self.assertEqual(warning["profile"], "NT-5890K")
+        self.assertIn("not physically", warning["message"])
 
 
 class CaseLoaderTest(unittest.TestCase):

@@ -730,6 +730,46 @@ the box), and either can be overridden.
 - The grayscale sheet is a cosmetic presentation output; it is never compared
   against goldens and carries no fidelity guarantee.
 
+## DD-030 — Render every cut as a receipt boundary, warning when the paper cannot be cut
+
+**Status:** Accepted
+
+### Context
+
+A cut command (`GS V 0`/`1`, or Epson Function B `GS V 65`/`66 n`) carries two
+meanings: a boundary between receipts, and a physical severing of the paper.
+Many supported printers — the NT-5890K among them — have no cutter and tear at a
+manual bar instead, so they honour the first meaning and ignore the second. A
+render must not fail over a cut the printer itself would simply feed past.
+
+### Decision
+
+An acted-upon cut always marks a receipt boundary and splits the preview into
+separate sheets, whether or not the printer can physically cut. When the profile
+has a matching cutter the split is silent. When it does not, the render still
+succeeds and records a non-fatal `RenderWarning::UncuttableCut` (carrying the
+command, profile, and byte offset) so callers can report that the paper was not
+severed.
+
+`RenderResult` carries a `warnings: Vec<RenderWarning>` channel alongside
+`device_events` and `approximations` — for diagnostics that do not fail a render
+but note where the preview diverges from the printer's physical behaviour.
+
+"Acted-upon" is the qualifier: a firmware quirk that discards a cut outright (the
+NT-5890K ignores Function B `GS V 66`) is a true no-op — no split, no warning —
+because the printer never acts on it. Only cuts the firmware performs (Function A,
+and fed Function B) split and warn.
+
+### Consequences
+
+- A cutter-less profile previews multi-receipt jobs correctly, and no input a
+  physical printer would tolerate fails to render.
+- Callers choose how loud to be: the `render` CLI prints warnings to stderr, the
+  `serve` viewer shows an amber non-fatal notice, and the Python binding exposes
+  a `warnings` list — the render itself is unaffected.
+- The split is a preview convenience, not a claim that the paper was cut; the
+  warning is what distinguishes the two.
+
 ## Open questions
 
 The following are intentionally not decided yet:

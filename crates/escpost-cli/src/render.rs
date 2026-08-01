@@ -41,6 +41,11 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
     if !binary_stdout {
         eprintln!("Profile: {profile_id}");
     }
+    // Non-fatal diagnostics (e.g. a cut dropped on a profile with no cutter) go
+    // to stderr so they surface even when the rendered bytes are piped to stdout.
+    for warning in &rendered.warnings {
+        eprintln!("warning: {warning}");
+    }
 
     if let Some(output_path) = &arguments.output {
         output::write_single(&rendered, output_path, arguments.sheet)?;

@@ -169,3 +169,24 @@ pub enum RenderError {
     #[error("could not encode the rendered sheet as PNG")]
     EncodePng(#[from] png::EncodingError),
 }
+
+/// A non-fatal diagnostic recorded during an otherwise successful render. The
+/// sheet is still produced; a warning reports where the preview diverges from
+/// what the printer physically does, so callers can surface it without failing.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum RenderWarning {
+    /// A cut command reached a profile whose printer has no matching cutter. The
+    /// preview still splits into separate sheets at the boundary — a cut marks a
+    /// receipt boundary a POS relies on — but the paper is not physically cut;
+    /// the printer feeds one continuous roll.
+    #[error(
+        "{command} is not physically performed by printer profile {profile:?} \
+         (no cutter): the preview splits here but the paper is not cut, \
+         at byte offset {offset}"
+    )]
+    UncuttableCut {
+        command: &'static str,
+        profile: String,
+        offset: usize,
+    },
+}

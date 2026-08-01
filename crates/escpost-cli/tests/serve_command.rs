@@ -238,23 +238,16 @@ fn serve_defaults_the_profile_to_reference() {
 
 #[test]
 fn serve_reports_a_render_error_without_a_sheet() {
-    // NT-5890K tears paper at a manual bar, so a GS V full cut is unsupported
-    // and the job fails to render. The viewer reads `error` with no sheets and
-    // must report the failure rather than keep waiting for the first job.
-    let mut child = start_serve(&[
-        "--profile",
-        "NT-5890K",
-        "--listen",
-        "127.0.0.1:0",
-        "--web-listen",
-        "127.0.0.1:0",
-    ]);
+    // A byte the parser cannot handle (FS, 0x1c) fails the render outright. The
+    // viewer reads `error` with no sheets and must report the failure rather
+    // than keep waiting for the first job.
+    let mut child = start_serve_on_ephemeral_ports();
     let (raw_port, web_port) = read_listen_ports(&mut child);
     wait_until_listening(&mut child, raw_port);
     wait_until_listening(&mut child, web_port);
 
-    // GS V 0 is a full cut, which this profile cannot perform.
-    send_raw_job(raw_port, b"Uncuttable\n\x1dV\x00");
+    // 0x1c (FS) is not a supported ESC/POS data byte.
+    send_raw_job(raw_port, b"Broken\n\x1c");
 
     let metadata = wait_for_render_error(web_port);
     stop(&mut child);
@@ -271,8 +264,56 @@ fn serve_reports_a_render_error_without_a_sheet() {
         .as_str()
         .expect("the render error should be reported");
     assert!(
-        error.contains("full cut"),
-        "the error should explain the unsupported cut:\n{error}"
+        error.contains("unsupported"),
+        "the error should explain the unsupported byte:\n{error}"
+    );
+}
+
+#[test]
+fn serve_splits_and_warns_on_a_cut_without_a_cutter() {
+    // NT-5890K has no cutter, so a full cut cannot be performed. The job still
+    // renders — split at the boundary — and the API surfaces a warning rather
+    // than failing the render.
+    let mut child = start_serve(&[
+        "--profile",
+        "NT-5890K",
+        "--listen",
+        "127.0.0.1:0",
+        "--web-listen",
+        "127.0.0.1:0",
+    ]);
+    let (raw_port, web_port) = read_listen_ports(&mut child);
+    wait_until_listening(&mut child, raw_port);
+    wait_until_listening(&mut child, web_port);
+
+    // Two receipts separated by a full cut the profile cannot perform.
+    send_raw_job(raw_port, b"First\n\x1dV\x00Second\n");
+
+    let metadata = wait_for_first_job(web_port);
+    stop(&mut child);
+
+    assert_eq!(
+        metadata["sheets"]
+            .as_array()
+            .expect("sheets should be an array")
+            .len(),
+        2,
+        "the cut should still split the preview into two receipts"
+    );
+    let warnings = metadata["warnings"]
+        .as_array()
+        .expect("warnings should be an array");
+    assert_eq!(
+        warnings.len(),
+        1,
+        "the uncuttable cut should record one warning"
+    );
+    assert!(
+        warnings[0]
+            .as_str()
+            .unwrap_or_default()
+            .contains("not physically"),
+        "the warning should explain the cut was not performed:\n{warnings:?}"
     );
 }
 

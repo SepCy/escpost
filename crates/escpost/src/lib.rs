@@ -13,7 +13,7 @@ mod surface;
 mod symbols;
 mod text;
 
-pub use error::{LimitKind, RenderError};
+pub use error::{LimitKind, RenderError, RenderWarning};
 pub use surface::MonoSurface;
 
 use command::{execute_esc_command, execute_gs_command};
@@ -71,6 +71,9 @@ impl Default for RenderLimits {
 pub struct RenderResult {
     pub sheets: Vec<RenderedSheet>,
     pub device_events: Vec<DeviceEvent>,
+    /// Non-fatal diagnostics from an otherwise successful render, such as a cut
+    /// requested on a profile whose printer has no cutter.
+    pub warnings: Vec<RenderWarning>,
     pub approximations: Vec<Approximation>,
     pub metadata: RenderMetadata,
 }
@@ -142,6 +145,7 @@ pub fn render_with_options(
     }
 
     let device_events = std::mem::take(&mut state.device_events);
+    let warnings = std::mem::take(&mut state.warnings);
     let mut sheets = Vec::new();
     for surface in state.into_surfaces()? {
         let png = encode_png(&surface)?;
@@ -151,6 +155,7 @@ pub fn render_with_options(
     Ok(RenderResult {
         sheets,
         device_events,
+        warnings,
         approximations: profile.approximations.clone(),
         metadata: RenderMetadata {
             renderer_version: env!("CARGO_PKG_VERSION"),

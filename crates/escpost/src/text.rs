@@ -74,19 +74,12 @@ impl PrinterState {
             }
         }
 
-        // The bundled font supplies stable glyph shapes; the profile cell stays
-        // authoritative for size, spacing, and advancement. The font module maps
-        // the glyph onto the cell's dot grid — fitting the size, condensing the
-        // width, placing the baseline, and supersampling — and returns the inked
-        // dots; placement below applies styling and multipliers.
-        let cell_width_dots = self.active_font.cell_width_dots;
-        let cell_height_dots = self.active_font.cell_height_dots;
-        let geometry = font::glyph_geometry(
-            cell_width_dots,
-            cell_height_dots,
+        self.draw_glyph(
+            character,
+            self.active_font.cell_width_dots,
+            self.active_font.cell_height_dots,
             self.active_font.baseline_dots,
         );
-        self.draw_glyph(character, &geometry, cell_width_dots, cell_height_dots);
 
         if !self.reversed {
             let underline_top = cell_height.saturating_sub(self.underline_thickness);
@@ -106,25 +99,36 @@ impl PrinterState {
 
     /// Blit one glyph into the line surface.
     ///
-    /// The font module returns the glyph's coverage at `scale ×` the cell
-    /// resolution. Without anti-aliasing each subpixel is thresholded to a hard
-    /// dot (the faithful path — identical to the printed dots); with it, the
-    /// coverage is kept for soft edges. Styling is applied uniformly: ink is
-    /// laid over paper or carved out of a reverse block, each subpixel is
-    /// replicated for the size multipliers, and emphasis smears one dot right.
+    /// Magnified glyphs (`GS !` / `ESC !`) are rasterized at their true magnified
+    /// size rather than block-doubling the base cell, so large text stays crisp:
+    /// the scalable substitute font renders each size at native quality, and the
+    /// condense mechanism handles anisotropic sizes (double-width stretches,
+    /// double-height narrows). Without anti-aliasing each subpixel is thresholded
+    /// to a hard dot (the faithful path — what prints); with it the soft coverage
+    /// is kept. Ink is laid over paper or carved out of a reverse block, and
+    /// emphasis smears one dot right.
     fn draw_glyph(
         &mut self,
         character: char,
-        geometry: &font::GlyphGeometry,
         cell_width_dots: u32,
         cell_height_dots: u32,
+        baseline_dots: u32,
     ) {
         let scale = self.scale;
+        // Rasterize into the magnified cell so the glyph is drawn at its real
+        // size, not an upscale of the base cell.
+        let glyph_width_dots = cell_width_dots.saturating_mul(self.character_width_multiplier);
+        let glyph_height_dots = cell_height_dots.saturating_mul(self.character_height_multiplier);
+        let geometry = font::glyph_geometry(
+            glyph_width_dots,
+            glyph_height_dots,
+            baseline_dots.saturating_mul(self.character_height_multiplier),
+        );
         let coverage = font::glyph_cell_coverage(
             character,
-            cell_width_dots,
-            cell_height_dots,
-            geometry,
+            glyph_width_dots,
+            glyph_height_dots,
+            &geometry,
             scale,
         );
         let hard = |sample: u8| sample >= font::GLYPH_ALPHA_THRESHOLD;
@@ -138,18 +142,17 @@ impl PrinterState {
         if !coverage.iter().copied().any(inked) {
             return;
         }
-        let source_width = (cell_width_dots * scale) as usize;
-        let source_height = (cell_height_dots * scale) as usize;
-        let width_multiplier = self.character_width_multiplier;
-        let height_multiplier = self.character_height_multiplier;
-        let cell_width = self.current_character_advance_width();
-        let cell_height = cell_height_dots.saturating_mul(height_multiplier);
+        let source_width = (glyph_width_dots * scale) as usize;
+        let source_height = (glyph_height_dots * scale) as usize;
         // Reserve the cell rows so subpixel blends land in-bounds.
-        self.line.ensure_height(cell_height);
+        self.line.ensure_height(glyph_height_dots);
         // Lay ink over paper for normal text; carve paper from a reverse block.
         let lay_ink = !self.reversed;
         let base_x = self.print_x * scale;
-        let cell_right = self.print_x.saturating_add(cell_width) * scale;
+        let cell_right = self
+            .print_x
+            .saturating_add(self.current_character_advance_width())
+            * scale;
         for source_y in 0..source_height {
             for source_x in 0..source_width {
                 let sample = coverage[source_y * source_width + source_x];
@@ -165,15 +168,12 @@ impl PrinterState {
                 if value == 0 {
                     continue;
                 }
-                for offset_y in 0..height_multiplier {
-                    let dy = source_y as u32 * height_multiplier + offset_y;
-                    for offset_x in 0..width_multiplier {
-                        let dx = base_x + source_x as u32 * width_multiplier + offset_x;
-                        self.line.blend_subpixel(dx, dy, value, lay_ink);
-                        if self.emphasized && dx + scale < cell_right {
-                            self.line.blend_subpixel(dx + scale, dy, value, lay_ink);
-                        }
-                    }
+                let dx = base_x + source_x as u32;
+                let dy = source_y as u32;
+                self.line.blend_subpixel(dx, dy, value, lay_ink);
+                // Emphasis double-strike: one dot to the right, staying in-cell.
+                if self.emphasized && dx + scale < cell_right {
+                    self.line.blend_subpixel(dx + scale, dy, value, lay_ink);
                 }
             }
         }

@@ -4,37 +4,50 @@
 # (`escpost serve`) over TCP, then close the connection so the job completes.
 #
 # Usage:
-#   scripts/send-receipt [PORT] [HOST]
+#   scripts/send-receipt [PORT] [HOST] [HOLD_SECONDS]
 #
-# With no piped input it sends a short demo receipt. To send your own, pipe
-# text on stdin; backslash escapes are decoded, so ESC/POS control codes work:
+# With no piped input it sends a short demo receipt. Otherwise it streams stdin
+# to the printer verbatim, so raw ESC/POS bytes survive unchanged:
 #
+#   scripts/send-receipt 9100 < receipt.bin
 #   printf 'Total: 5.00\n\x1dV\x00' | scripts/send-receipt 9100
+#
+# HOLD_SECONDS keeps the connection open after sending instead of closing right
+# away. Holding longer than the server's --idle-timeout makes the job complete
+# on the idle timeout rather than on close — useful for exercising that path:
+#
+#   scripts/send-receipt 9100 127.0.0.1 25
 #
 # Only bash and /dev/tcp are needed — no netcat, no extra tools.
 set -uo pipefail
 
 port="${1:-9100}"
 host="${2:-127.0.0.1}"
+hold="${3:-0}"
+
+# Open the TCP connection on fd 3 so it can be held open after sending.
+if ! exec 3<>"/dev/tcp/${host}/${port}" 2>/dev/null; then
+    echo "could not connect to ${host}:${port} — is 'escpost serve' listening there?" >&2
+    exit 1
+fi
 
 if [ -t 0 ]; then
     # No piped input: ESC @ initialize, some text, then a full cut (GS V 0).
-    payload='\x1b@ESCPost virtual printer\n\nHello from a fake POS terminal.\n'
-    payload+='================================\n'
-    payload+='Widget ................   4.20\n'
-    payload+='Gizmo  ................   1.30\n'
-    payload+='--------------------------------\n'
-    payload+='TOTAL  ................   5.50\n\n\n\n'
-    payload+='\x1dV\x00'
+    # printf %b decodes \n and \xNN into real bytes.
+    printf '%b' \
+        '\x1b@ESCPost virtual printer\n\nHello from a fake POS terminal.\n================================\nWidget ................   4.20\nGizmo  ................   1.30\n--------------------------------\nTOTAL  ................   5.50\n\n\n\n\x1dV\x00' \
+        >&3
 else
-    payload="$(cat)"
+    # Stream stdin straight to the socket so raw bytes (including NUL) are sent
+    # unchanged — a variable/command-substitution would drop NUL bytes.
+    cat >&3
+fi
+echo "sent receipt to ${host}:${port}" >&2
+
+if [ "$hold" != "0" ]; then
+    echo "holding the connection open for ${hold}s (exceed --idle-timeout to trip it)…" >&2
+    sleep "$hold"
 fi
 
-# printf %b decodes \n, \t, \xNN, ... into real bytes; the redirect opens the
-# TCP connection and closes it when printf finishes, completing the job.
-if printf '%b' "$payload" >"/dev/tcp/${host}/${port}" 2>/dev/null; then
-    echo "sent receipt to ${host}:${port}" >&2
-else
-    echo "could not send to ${host}:${port} — is 'escpost serve' listening there?" >&2
-    exit 1
-fi
+# Closing fd 3 ends the connection.
+exec 3>&-

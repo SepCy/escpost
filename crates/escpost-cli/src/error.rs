@@ -93,6 +93,18 @@ pub(crate) enum CliError {
     #[error("web viewer failed: {0}")]
     ServeWeb(std::io::Error),
 
+    #[error("could not bind RAW printer to {address}: {source}")]
+    BindRawPrinter {
+        address: std::net::SocketAddr,
+        source: std::io::Error,
+    },
+
+    #[error("no loopback RAW printer port from 9100 through 9109 is available")]
+    NoAutomaticRawPort,
+
+    #[error("RAW printer failed: {0}")]
+    ServeRawPrinter(std::io::Error),
+
     #[error("could not open the default browser: {0}")]
     OpenBrowser(String),
 

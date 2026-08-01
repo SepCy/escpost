@@ -168,15 +168,15 @@ render and does not require a profile.
 
 ## Virtual network printer
 
-- [ ] Add an `escpost serve` command.
-- [ ] Listen for RAW TCP print data on port 9100 by default.
-- [ ] Bind to `127.0.0.1` by default.
-- [ ] Require an explicit option to listen on LAN or public interfaces.
-- [ ] Select one printer profile for each listener.
-- [ ] Accept commands split across arbitrary TCP packet boundaries.
-- [ ] Render every completed job without modifying its input bytes.
-- [ ] Expose the captured job and its ordered PNG sheets in the web interface.
-- [ ] Allow separate configuration of the RAW printer port and HTTP port.
+- [x] Add an `escpost serve` command.
+- [x] Listen for RAW TCP print data on port 9100 by default.
+- [x] Bind to `127.0.0.1` by default.
+- [x] Require an explicit option to listen on LAN or public interfaces.
+- [x] Select one printer profile for each listener.
+- [x] Accept commands split across arbitrary TCP packet boundaries.
+- [x] Render every completed job without modifying its input bytes.
+- [x] Expose the captured job and its ordered PNG sheets in the web interface.
+- [x] Allow separate configuration of the RAW printer port and HTTP port.
 - [ ] Apply input, rendered-dot, sheet-count, connection, and retention limits.
 - [ ] Provide a health endpoint suitable for containers and automated tests.
 
@@ -199,7 +199,7 @@ escpost serve \
 Network connection boundaries and receipt cuts describe different things.
 They must not be conflated.
 
-- [ ] Treat a TCP connection close as the default end of the active job.
+- [x] Treat a TCP connection close as the default end of the active job.
 - [ ] Treat Standard-mode `FF` as an explicit ESC/POS job boundary.
 - [ ] Treat full and partial cuts as sheet boundaries within a job.
 - [ ] Support multiple explicitly completed jobs on one persistent connection.
@@ -496,10 +496,11 @@ would target.
 
 ### Phase 2: virtual printer
 
-- [ ] Add the RAW TCP listener and job framing.
-- [ ] Feed completed network jobs into the web job store shared with
+- [x] Add the RAW TCP listener and connection-close job framing.
+- [x] Feed completed network jobs into the web job store shared with
       `render --web`.
-- [ ] Show live ordered sheets and downloadable raw input.
+- [x] Show live ordered sheets, with a waiting hint before the first job.
+- [ ] Offer the captured job's raw input as a download.
 - [ ] Add container health and transport-fragmentation tests.
 
 ### Phase 3: inspection

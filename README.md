@@ -38,9 +38,11 @@ sends the same source types unchanged to a named USB or RAW TCP printer, and
 Rust `printers list` reports connected or configured targets across those
 transports. Rust `printers add` registers either transport, including
 descriptor-based interactive USB selection, and non-interactive selection by
-USB descriptor. The developer CLI is entirely Rust. The Python binding remains
-available to applications for embedding the renderer; physical calibration uses
-the same `render` and `print` commands against the shared calibration receipt.
+USB descriptor. Rust `serve` acts as a virtual RAW TCP printer: it captures a
+print job sent to it and previews the most recent one in the same web viewer.
+The developer CLI is entirely Rust. The Python binding remains available to
+applications for embedding the renderer; physical calibration uses the same
+`render` and `print` commands against the shared calibration receipt.
 
 The virtual `REFERENCE` profile enables every capability currently represented
 by the renderer without inheriting limitations or quirks from a physical
@@ -219,6 +221,21 @@ Add `--watch` to rerender a file or case when its input changes. Add
 `--browser` when running a host-native binary to open the URL automatically.
 The Docker wrapper cannot open a browser on the host, so use `--web` there and
 open the printed URL yourself.
+
+Run `serve` to act as a virtual RAW TCP printer. Point an application at the
+RAW port; each job it sends is rendered and shown in the web viewer. Both
+listeners bind loopback and pick a free port automatically — the RAW printer
+from 9100, the viewer from 9000 — and print the addresses they chose:
+
+```bash
+./escpost serve
+```
+
+The profile defaults to `REFERENCE`; pass `--profile` to preview through a
+specific printer's profile. Pass `--listen` or `--web-listen` to pin an exact
+address, which is then bound strictly. The viewer shows where to send data
+until the first job arrives, then previews the most recent captured job. A job
+ends when the connection closes.
 
 For focused physical calibration, first register the printer with
 `printers add` to populate `local/config/printers.toml` through the Docker

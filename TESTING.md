@@ -98,8 +98,10 @@ and the embedded viewer over real loopback sockets. These tests cover:
 - output replacement and manifest publication;
 - automatic, strict, and operating-system-selected web ports;
 - ordered HTTP metadata, PNG responses, missing routes, and path traversal;
-- simultaneous persisted and web output; and
-- successful and failed watched rerenders.
+- simultaneous persisted and web output;
+- successful and failed watched rerenders; and
+- `serve` capturing a RAW TCP job, previewing the most recent one, and showing
+  a waiting hint before the first job arrives.
 
 Run them with:
 

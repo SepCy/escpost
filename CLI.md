@@ -10,9 +10,11 @@ This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
 be reviewed. `render`, named USB and RAW-network `print`, USB and
 configured-network `printers list`, and USB/network registration through
-`printers add` are implemented; the other top-level commands remain planned.
-`README.md` describes what works today, while `TODO.md` is the single
-implementation checklist.
+`printers add` are implemented. An initial `serve` captures RAW TCP jobs framed
+by connection close and previews the most recent one; its job history,
+`FF`/cut boundary handling, and limits remain planned, as do the other
+top-level commands. `README.md` describes what works today, while `TODO.md` is
+the single implementation checklist.
 
 Stable requirement identifiers appear in the final section. Keep an identifier
 when wording is clarified so tests, issues, and roadmap items can continue to
@@ -572,6 +574,14 @@ Running `serve` already provides previews of its captured jobs. A second
 RAW TCP and HTTP listeners bind to loopback by default. Exposing either
 listener beyond the host must be explicit because RAW port 9100 has no
 authentication or encryption and receipt contents may be sensitive.
+
+The initial implementation is narrower than the contract above. `--profile`
+defaults to `REFERENCE`, and both listeners auto-select a free loopback port
+when no address is given. It frames one job per connection using connection
+close and previews only the most recent job — replacing the previous one rather
+than keeping a history. Before the first job the viewer shows where to send
+data. `FF`/cut boundaries, persistent-connection jobs, retention limits, a
+health endpoint, and raw-input download are planned.
 
 ## Other commands
 

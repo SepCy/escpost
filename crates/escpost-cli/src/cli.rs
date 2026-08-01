@@ -28,8 +28,32 @@ pub(crate) enum Command {
     /// Send a known ESC/POS byte stream unchanged to a configured printer.
     Print(PrintArgs),
 
+    /// Capture RAW TCP print jobs and preview them in the web viewer.
+    Serve(ServeArgs),
+
     /// List available printers and manage discovery or pairing.
     Printers(PrintersArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ServeArgs {
+    /// Printer profile used to render captured jobs.
+    #[arg(long, default_value = "REFERENCE")]
+    pub(crate) profile: String,
+
+    /// Address for the RAW TCP printer. When omitted, the first free loopback
+    /// port from 9100 through 9109 is used.
+    #[arg(long)]
+    pub(crate) listen: Option<SocketAddr>,
+
+    /// Address for the web viewer. When omitted, the first free loopback port
+    /// from 9000 through 9099 is used.
+    #[arg(long)]
+    pub(crate) web_listen: Option<SocketAddr>,
+
+    /// Open the web viewer in the default browser.
+    #[arg(long)]
+    pub(crate) browser: bool,
 }
 
 #[derive(Debug, Args)]

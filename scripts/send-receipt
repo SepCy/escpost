@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# Emulate a POS terminal: send a receipt to a virtual RAW printer
+# (`escpost serve`) over TCP, then close the connection so the job completes.
+#
+# Usage:
+#   scripts/send-receipt [PORT] [HOST]
+#
+# With no piped input it sends a short demo receipt. To send your own, pipe
+# text on stdin; backslash escapes are decoded, so ESC/POS control codes work:
+#
+#   printf 'Total: 5.00\n\x1dV\x00' | scripts/send-receipt 9100
+#
+# Only bash and /dev/tcp are needed — no netcat, no extra tools.
+set -uo pipefail
+
+port="${1:-9100}"
+host="${2:-127.0.0.1}"
+
+if [ -t 0 ]; then
+    # No piped input: ESC @ initialize, some text, then a full cut (GS V 0).
+    payload='\x1b@ESCPost virtual printer\n\nHello from a fake POS terminal.\n'
+    payload+='================================\n'
+    payload+='Widget ................   4.20\n'
+    payload+='Gizmo  ................   1.30\n'
+    payload+='--------------------------------\n'
+    payload+='TOTAL  ................   5.50\n\n\n\n'
+    payload+='\x1dV\x00'
+else
+    payload="$(cat)"
+fi
+
+# printf %b decodes \n, \t, \xNN, ... into real bytes; the redirect opens the
+# TCP connection and closes it when printf finishes, completing the job.
+if printf '%b' "$payload" >"/dev/tcp/${host}/${port}" 2>/dev/null; then
+    echo "sent receipt to ${host}:${port}" >&2
+else
+    echo "could not send to ${host}:${port} — is 'escpost serve' listening there?" >&2
+    exit 1
+fi

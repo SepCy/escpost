@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
-use std::io::ErrorKind;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -28,6 +27,7 @@ struct JobStoreState {
     jobs: VecDeque<Arc<RenderedJob>>,
     error: Option<String>,
     generation: u64,
+    waiting_hint: Option<String>,
 }
 
 struct RenderedJob {
@@ -47,6 +47,9 @@ struct RenderResponse {
     profile: String,
     generation: u64,
     error: Option<String>,
+    /// Guidance shown while no job has been captured yet, e.g. by `serve`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
     sheets: Vec<SheetResponse>,
 }
 
@@ -66,6 +69,20 @@ impl JobStore {
                 jobs: VecDeque::from([Arc::new(RenderedJob::from(rendered))]),
                 error: None,
                 generation: 1,
+                waiting_hint: None,
+            })),
+        }
+    }
+
+    /// Create a store with no job yet. The web viewer shows `hint` until the
+    /// first job arrives, which suits a listener that renders on demand.
+    pub(crate) fn awaiting_jobs(hint: String) -> Self {
+        Self {
+            state: Arc::new(RwLock::new(JobStoreState {
+                jobs: VecDeque::new(),
+                error: None,
+                generation: 0,
+                waiting_hint: Some(hint),
             })),
         }
     }
@@ -89,6 +106,40 @@ impl JobStore {
             .cloned()
             .map(|job| (job, state.generation, state.error.clone()))
     }
+
+    async fn render_response(&self) -> RenderResponse {
+        let state = self.state.read().await;
+        let Some(job) = state.jobs.front() else {
+            // No job yet: report a waiting state so the viewer can guide the
+            // developer rather than showing a bare error.
+            return RenderResponse {
+                profile: String::new(),
+                generation: state.generation,
+                error: state.error.clone(),
+                hint: state.waiting_hint.clone(),
+                sheets: Vec::new(),
+            };
+        };
+        let sheets = job
+            .sheets
+            .iter()
+            .enumerate()
+            .map(|(index, sheet)| SheetResponse {
+                name: sheet.name.clone(),
+                order: index + 1,
+                width_dots: sheet.width_dots,
+                height_dots: sheet.height_dots,
+                url: format!("/sheets/{}.png", index + 1),
+            })
+            .collect();
+        RenderResponse {
+            profile: job.profile.clone(),
+            generation: state.generation,
+            error: state.error.clone(),
+            hint: None,
+            sheets,
+        }
+    }
 }
 
 impl From<RenderResult> for RenderedJob {
@@ -111,21 +162,14 @@ impl From<RenderResult> for RenderedJob {
 }
 
 pub(crate) async fn bind(requested: Option<SocketAddr>) -> Result<TcpListener, CliError> {
-    if let Some(address) = requested {
-        return TcpListener::bind(address)
-            .await
-            .map_err(|source| CliError::BindWeb { address, source });
-    }
-
-    for port in FIRST_AUTOMATIC_PORT..=LAST_AUTOMATIC_PORT {
-        let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
-        match TcpListener::bind(address).await {
-            Ok(listener) => return Ok(listener),
-            Err(error) if error.kind() == ErrorKind::AddrInUse => {}
-            Err(source) => return Err(CliError::BindWeb { address, source }),
-        }
-    }
-    Err(CliError::NoAutomaticWebPort)
+    crate::net::bind_loopback(requested, FIRST_AUTOMATIC_PORT..=LAST_AUTOMATIC_PORT)
+        .await
+        .map_err(|failure| match failure {
+            crate::net::BindFailure::Address { address, source } => {
+                CliError::BindWeb { address, source }
+            }
+            crate::net::BindFailure::RangeExhausted => CliError::NoAutomaticWebPort,
+        })
 }
 
 pub(crate) async fn serve(
@@ -159,26 +203,8 @@ async fn index() -> Html<&'static str> {
     Html(INDEX_HTML)
 }
 
-async fn current_render(State(jobs): State<JobStore>) -> Result<Json<RenderResponse>, StatusCode> {
-    let (job, generation, error) = jobs.snapshot().await.ok_or(StatusCode::NOT_FOUND)?;
-    let sheets = job
-        .sheets
-        .iter()
-        .enumerate()
-        .map(|(index, sheet)| SheetResponse {
-            name: sheet.name.clone(),
-            order: index + 1,
-            width_dots: sheet.width_dots,
-            height_dots: sheet.height_dots,
-            url: format!("/sheets/{}.png", index + 1),
-        })
-        .collect();
-    Ok(Json(RenderResponse {
-        profile: job.profile.clone(),
-        generation,
-        error,
-        sheets,
-    }))
+async fn current_render(State(jobs): State<JobStore>) -> Json<RenderResponse> {
+    Json(jobs.render_response().await)
 }
 
 async fn sheet_png(Path(file): Path<String>, State(jobs): State<JobStore>) -> Response {

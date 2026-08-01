@@ -3,11 +3,13 @@
 mod cli;
 mod configuration;
 mod error;
+mod net;
 mod output;
 mod print;
 mod printers;
 mod profiles;
 mod render;
+mod serve;
 mod source;
 mod watch;
 mod web;
@@ -34,6 +36,7 @@ async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
         Command::Render(arguments) => render::run(arguments, cli.non_interactive).await,
         Command::Print(arguments) => print::run(arguments, cli.non_interactive).await,
+        Command::Serve(arguments) => serve::run(arguments).await,
         Command::Printers(arguments) => printers::run(arguments, cli.non_interactive).await,
     }
 }

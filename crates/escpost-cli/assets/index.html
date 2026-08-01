@@ -89,6 +89,12 @@
         box-shadow: 0 3px 16px rgb(0 0 0 / 45%);
       }
 
+      #waiting {
+        display: none;
+        margin: 0;
+        color: #b8b8b8;
+      }
+
       #error {
         display: none;
         color: #ff9d9d;
@@ -112,11 +118,13 @@
 
     <main id="viewport">
       <div id="sheets" aria-live="polite"></div>
+      <p id="waiting" aria-live="polite"></p>
       <p id="error">The rendering is currently unavailable.</p>
     </main>
 
     <script>
       const sheets = document.querySelector("#sheets");
+      const waiting = document.querySelector("#waiting");
       const error = document.querySelector("#error");
       const zoom = document.querySelector("#zoom");
       const status = document.querySelector("#status");
@@ -142,6 +150,17 @@
           return;
         }
         currentRendering = identity;
+
+        // No job captured yet: guide the developer instead of showing sheets.
+        if (rendering.sheets.length === 0 && rendering.hint) {
+          sheets.replaceChildren();
+          waiting.textContent = rendering.hint;
+          waiting.style.display = "block";
+          status.textContent = "Waiting";
+          return;
+        }
+        waiting.style.display = "none";
+
         sheets.replaceChildren(
           ...rendering.sheets.map((sheet) =>
             createSheet(sheet, rendering.sheets.length, cacheKey)

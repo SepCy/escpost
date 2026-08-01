@@ -26,6 +26,8 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("Paper margin"));
     assert!(response.contains("id=\"connection\""));
     assert!(response.contains("id=\"completion\""));
+    assert!(response.contains("id=\"jobStatus\""));
+    assert!(response.contains("id=\"receiving\""));
     assert!(response.contains("fetch(\"/api/render\""));
 }
 

@@ -51,15 +51,35 @@
         font-size: 13px;
       }
 
-      /* The profile is part of the server status: it is what we render as. */
+      /* The profile is what we render as; it sits in the server headline
+         between the address and the connection state. */
       #profile:empty {
         display: none;
       }
 
-      #profile:not(:empty)::before {
+      #profile:not(:empty)::before,
+      #connectionState::before {
         content: "·";
-        margin-right: 10px;
+        margin-right: 8px;
         color: #6b6b6b;
+      }
+
+      /* Print-status header inside the sheets box: everything about the latest
+         print (completion time, idle-timeout, receiving). Its first field
+         varies, so it is spaced with a gap rather than leading separators. */
+      #printStatus {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+        color: #b8b8b8;
+        font-size: 13px;
+      }
+
+      /* The job status: "Waiting for first job" or the completion time. */
+      #jobStatus:empty {
+        display: none;
       }
 
       /* A caution shown when a job was completed by the idle timeout rather
@@ -72,10 +92,33 @@
         color: #ffb454;
       }
 
-      #completion::before {
-        content: "·";
-        margin-right: 10px;
-        color: #6b6b6b;
+      /* While a job is still arriving, this replaces the job status and
+         completion and pulses to signal ongoing activity. The last render and
+         the profile stay visible. */
+      #receiving {
+        display: none;
+        align-items: center;
+        color: #7fd1ff;
+        animation: receiving-pulse 1.2s ease-in-out infinite;
+      }
+
+      #printStatus.receiving #jobStatus,
+      #printStatus.receiving #completion {
+        display: none;
+      }
+
+      #printStatus.receiving #receiving {
+        display: inline-flex;
+      }
+
+      @keyframes receiving-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.45;
+        }
       }
 
       #connection {
@@ -218,9 +261,11 @@
       <div class="bar">
         <h1>ESCPost render</h1>
         <div id="serverStatus">
-          <span id="connection">Connecting…</span>
-          <span id="profile"></span>
-          <span id="completion"></span>
+          <span id="connection">
+            <span id="serverAddress"></span>
+            <span id="profile"></span>
+            <span id="connectionState">Connecting…</span>
+          </span>
         </div>
       </div>
       <div class="toolbar">
@@ -241,6 +286,11 @@
     </header>
 
     <main id="viewport">
+      <div id="printStatus">
+        <span id="jobStatus"></span>
+        <span id="completion"></span>
+        <span id="receiving">Receiving a job…</span>
+      </div>
       <div id="sheets" aria-live="polite"></div>
       <p id="waiting" aria-live="polite"></p>
       <p id="error"></p>
@@ -253,16 +303,27 @@
       const zoom = document.querySelector("#zoom");
       const margin = document.querySelector("#margin");
       const profile = document.querySelector("#profile");
+      const jobStatus = document.querySelector("#jobStatus");
       const completionLabel = document.querySelector("#completion");
       const connection = document.querySelector("#connection");
-      const serverAddress = window.location.host;
+      const connectionState = document.querySelector("#connectionState");
+      const printStatus = document.querySelector("#printStatus");
+
+      function completionTime(millis) {
+        return typeof millis === "number"
+          ? new Date(millis).toLocaleTimeString()
+          : "";
+      }
+
+      // The address the viewer is talking to never changes for this page.
+      document.querySelector("#serverAddress").textContent = window.location.host;
       let currentRendering = "";
 
-      // Server-connection indicator: connected | error | offline. Always names
-      // the address the viewer is talking to.
+      // Server-connection indicator: connected | error | offline. The dot colour
+      // comes from the state class on #connection; this sets the state text.
       function setConnection(state, detail) {
         connection.className = state;
-        connection.textContent = `${serverAddress} · ${detail}`;
+        connectionState.textContent = detail;
       }
 
       let flashTimer;
@@ -308,6 +369,10 @@
           clearError();
         }
 
+        // Reflect an in-progress capture every poll, independent of generation:
+        // it replaces the job status while the last render and profile stay.
+        printStatus.classList.toggle("receiving", rendering.receiving === true);
+
         const identity = String(rendering.generation);
         if (identity === currentRendering) {
           return;
@@ -319,7 +384,9 @@
           sheets.replaceChildren();
           waiting.textContent = rendering.hint;
           waiting.style.display = "block";
-          profile.textContent = "";
+          // The profile is known before the first job, so show it right away.
+          profile.textContent = rendering.profile;
+          jobStatus.textContent = "Waiting for first job";
           completionLabel.textContent = "";
           return;
         }
@@ -333,6 +400,8 @@
         // The profile is shown with the server status; the sheet count is
         // obvious from the rendered sheets themselves.
         profile.textContent = rendering.profile;
+        // Always show a status: the time the job completed.
+        jobStatus.textContent = completionTime(rendering.completed_at);
         // Flag a job that ended on the idle timeout, since it may be incomplete.
         completionLabel.textContent =
           rendering.completion === "timeout" ? "idle-timeout" : "";

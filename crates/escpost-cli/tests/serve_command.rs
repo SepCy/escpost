@@ -25,6 +25,11 @@ fn serve_captures_a_raw_job_and_previews_its_sheets() {
 
     // A job ended by the client closing the connection is labelled "closed".
     assert_eq!(metadata["completion"], "closed");
+    // Its completion time is reported so the viewer always shows a status.
+    assert!(
+        metadata["completed_at"].as_u64().is_some(),
+        "a completed job should carry a completion timestamp"
+    );
 
     let png = response_body(&http_get_bytes(web_port, "/sheets/1.png")).to_vec();
     stop(&mut child);
@@ -67,6 +72,47 @@ fn serve_finalizes_a_held_open_connection_after_the_idle_timeout() {
 
     drop(stream);
     stop(&mut child);
+}
+
+#[test]
+fn serve_flags_a_connection_that_is_still_receiving() {
+    // Disable the idle timeout so the job stays in-progress until we close.
+    let mut child = start_serve(&[
+        "--profile",
+        "REFERENCE",
+        "--idle-timeout",
+        "0",
+        "--listen",
+        "127.0.0.1:0",
+        "--web-listen",
+        "127.0.0.1:0",
+    ]);
+    let (raw_port, web_port) = read_listen_ports(&mut child);
+    wait_until_listening(&mut child, raw_port);
+    wait_until_listening(&mut child, web_port);
+
+    let mut stream = open_raw_connection(raw_port);
+    stream
+        .write_all(b"Half a receipt so far\n")
+        .expect("the partial receipt should be writable");
+    stream.flush().expect("the partial receipt should flush");
+
+    // A connection holding buffered bytes is reported as receiving.
+    wait_until_receiving(web_port, true);
+
+    // Closing finalizes the job and clears the receiving flag.
+    drop(stream);
+    let metadata = wait_until_receiving(web_port, false);
+    stop(&mut child);
+
+    assert!(
+        !metadata["sheets"]
+            .as_array()
+            .expect("sheets should be an array")
+            .is_empty(),
+        "the finalized job should render"
+    );
+    assert_eq!(metadata["completion"], "closed");
 }
 
 #[test]
@@ -121,6 +167,8 @@ fn serve_viewer_shows_instructions_before_the_first_job() {
         hint.contains(&format!("127.0.0.1:{raw_port}")),
         "the hint should tell the developer where to send data:\n{hint}"
     );
+    // The profile is known at startup, so it is reported before any job.
+    assert_eq!(metadata["profile"], "REFERENCE");
 }
 
 #[test]
@@ -321,6 +369,21 @@ fn wait_for_first_job(web_port: u16) -> serde_json::Value {
 fn render_metadata(web_port: u16) -> serde_json::Value {
     let response = http_get_bytes(web_port, "/api/render");
     serde_json::from_slice(response_body(&response)).expect("the metadata response should be JSON")
+}
+
+fn wait_until_receiving(web_port: u16, expected: bool) -> serde_json::Value {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let metadata = render_metadata(web_port);
+        if metadata["receiving"].as_bool() == Some(expected) {
+            return metadata;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the receiving flag did not become {expected}"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
 }
 
 fn wait_until_listening(child: &mut Child, port: u16) {

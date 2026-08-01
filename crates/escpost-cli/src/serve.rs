@@ -49,9 +49,12 @@ pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
     }
 
     let web_listener = web::bind(arguments.web_listen).await?;
-    let jobs = web::JobStore::awaiting_jobs(format!(
-        "Waiting for the first job. Configure a local ERP or POS application to send its RAW ESC/POS print jobs to {raw_address}."
-    ));
+    let jobs = web::JobStore::awaiting_jobs(
+        arguments.profile.clone(),
+        format!(
+            "Waiting for the first job. Configure a local ERP or POS application to send its RAW ESC/POS print jobs to {raw_address}."
+        ),
+    );
 
     // Accept jobs while the web viewer runs. The viewer owns the foreground and
     // returns on Ctrl+C; stop accepting once it does.
@@ -87,6 +90,8 @@ async fn capture_job(
 ) {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 8192];
+    // Whether the viewer currently counts this connection as receiving a job.
+    let mut receiving = false;
     loop {
         let read = match idle_timeout {
             Some(timeout) => match tokio::time::timeout(timeout, stream.read(&mut chunk)).await {
@@ -95,6 +100,8 @@ async fn capture_job(
                 Err(_elapsed) => {
                     if !buffer.is_empty() {
                         finalize(&jobs, std::mem::take(&mut buffer), profile, "timeout").await;
+                        jobs.end_capture().await;
+                        receiving = false;
                     }
                     continue;
                 }
@@ -103,14 +110,28 @@ async fn capture_job(
         };
         match read {
             Ok(0) => break,
-            Ok(read) => buffer.extend_from_slice(&chunk[..read]),
+            Ok(read) => {
+                buffer.extend_from_slice(&chunk[..read]);
+                if !receiving {
+                    jobs.begin_capture().await;
+                    receiving = true;
+                }
+            }
             // A read error abandons whatever was buffered.
-            Err(_) => return,
+            Err(_) => {
+                if receiving {
+                    jobs.end_capture().await;
+                }
+                return;
+            }
         }
     }
     // The connection closed: any remaining bytes are an explicitly completed job.
     if !buffer.is_empty() {
         finalize(&jobs, buffer, profile, "closed").await;
+    }
+    if receiving {
+        jobs.end_capture().await;
     }
 }
 

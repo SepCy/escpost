@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
@@ -29,6 +30,19 @@ struct JobStoreState {
     generation: u64,
     waiting_hint: Option<String>,
     completion: Option<&'static str>,
+    receiving: usize,
+    /// Profile the server renders with, shown before the first job arrives.
+    session_profile: String,
+    /// Wall-clock time the current job completed, in Unix epoch milliseconds.
+    completed_at: Option<u64>,
+}
+
+/// Current wall-clock time in Unix epoch milliseconds, for job completion.
+fn epoch_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 struct RenderedJob {
@@ -54,6 +68,11 @@ struct RenderResponse {
     /// How a captured job ended: "closed" or "timeout". Absent for renders.
     #[serde(skip_serializing_if = "Option::is_none")]
     completion: Option<&'static str>,
+    /// True while a connection is still sending a job that has not completed.
+    receiving: bool,
+    /// When the current job completed, in Unix epoch milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    completed_at: Option<u64>,
     sheets: Vec<SheetResponse>,
 }
 
@@ -75,13 +94,17 @@ impl JobStore {
                 generation: 1,
                 waiting_hint: None,
                 completion: None,
+                receiving: 0,
+                session_profile: String::new(),
+                completed_at: Some(epoch_millis()),
             })),
         }
     }
 
-    /// Create a store with no job yet. The web viewer shows `hint` until the
-    /// first job arrives, which suits a listener that renders on demand.
-    pub(crate) fn awaiting_jobs(hint: String) -> Self {
+    /// Create a store with no job yet. The web viewer shows `hint` and the
+    /// `profile` until the first job arrives, which suits a listener that
+    /// renders on demand with a known profile.
+    pub(crate) fn awaiting_jobs(profile: String, hint: String) -> Self {
         Self {
             state: Arc::new(RwLock::new(JobStoreState {
                 jobs: VecDeque::new(),
@@ -89,8 +112,23 @@ impl JobStore {
                 generation: 0,
                 waiting_hint: Some(hint),
                 completion: None,
+                receiving: 0,
+                session_profile: profile,
+                completed_at: None,
             })),
         }
+    }
+
+    /// Mark that a connection has started sending a job. The viewer reports this
+    /// until the matching `end_capture`.
+    pub(crate) async fn begin_capture(&self) {
+        self.state.write().await.receiving += 1;
+    }
+
+    /// Mark that an in-progress job has finished sending (completed or dropped).
+    pub(crate) async fn end_capture(&self) {
+        let mut state = self.state.write().await;
+        state.receiving = state.receiving.saturating_sub(1);
     }
 
     /// Replace the preview with a render that has no capture semantics, such as
@@ -111,6 +149,7 @@ impl JobStore {
         state.error = None;
         state.generation += 1;
         state.completion = completion;
+        state.completed_at = Some(epoch_millis());
     }
 
     pub(crate) async fn set_error(&self, error: String) {
@@ -132,11 +171,13 @@ impl JobStore {
             // No job yet: report a waiting state so the viewer can guide the
             // developer rather than showing a bare error.
             return RenderResponse {
-                profile: String::new(),
+                profile: state.session_profile.clone(),
                 generation: state.generation,
                 error: state.error.clone(),
                 hint: state.waiting_hint.clone(),
                 completion: None,
+                receiving: state.receiving > 0,
+                completed_at: None,
                 sheets: Vec::new(),
             };
         };
@@ -158,6 +199,8 @@ impl JobStore {
             error: state.error.clone(),
             hint: None,
             completion: state.completion,
+            receiving: state.receiving > 0,
+            completed_at: state.completed_at,
             sheets,
         }
     }

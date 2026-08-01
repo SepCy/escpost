@@ -10,6 +10,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use crate::error::CliError;
 
 const CONFIG_DIRECTORY_ENV: &str = "ESCPOST_CONFIG_DIR";
+const CONFIG_DISPLAY_DIRECTORY_ENV: &str = "ESCPOST_CONFIG_DISPLAY_DIR";
 const PRINTERS_FILE: &str = "printers.toml";
 static TEMPORARY_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -357,6 +358,13 @@ fn write_atomically(path: &Path, content: &[u8]) -> Result<(), std::io::Error> {
     result
 }
 
+/// Report the configuration path a command reads or writes, without requiring
+/// the file to exist. Read-only commands use this to tell a developer where
+/// printers are configured.
+pub(crate) fn resolved_path(explicit_path: Option<&Path>) -> Result<PathBuf, CliError> {
+    resolve_path(explicit_path).map(|(path, _)| path)
+}
+
 fn resolve_path(explicit_path: Option<&Path>) -> Result<(PathBuf, bool), CliError> {
     match explicit_path {
         Some(path) => Ok((path.to_owned(), true)),
@@ -371,6 +379,40 @@ fn config_directory_override() -> Option<PathBuf> {
     env::var_os(CONFIG_DIRECTORY_ENV)
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
+}
+
+/// Render a configuration path for human output.
+///
+/// The development Docker wrapper mounts a host directory at the container's
+/// conventional configuration path, so a resolved path names a location that
+/// does not exist on the host. When the wrapper records the backing host
+/// directory, map the configuration directory back to it; otherwise show the
+/// path unchanged.
+pub(crate) fn display_path(path: &Path) -> String {
+    display_path_with(
+        path,
+        config_directory_override().as_deref(),
+        config_display_directory().as_deref(),
+    )
+}
+
+fn config_display_directory() -> Option<PathBuf> {
+    env::var_os(CONFIG_DISPLAY_DIRECTORY_ENV)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
+}
+
+fn display_path_with(
+    path: &Path,
+    config_directory: Option<&Path>,
+    display_directory: Option<&Path>,
+) -> String {
+    if let (Some(config_directory), Some(display_directory)) = (config_directory, display_directory)
+        && let Ok(relative) = path.strip_prefix(config_directory)
+    {
+        return display_directory.join(relative).display().to_string();
+    }
+    path.display().to_string()
 }
 
 fn platform_config_directory() -> Result<PathBuf, CliError> {
@@ -462,4 +504,44 @@ fn parse_integer_string(value: &str) -> Option<u64> {
             || value.parse().ok(),
             |digits| u64::from_str_radix(digits, 16).ok(),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::display_path_with;
+
+    #[test]
+    fn a_path_inside_the_config_directory_is_shown_under_the_host_directory() {
+        let display = display_path_with(
+            Path::new("/home/developer/.config/escpost/printers.toml"),
+            Some(Path::new("/home/developer/.config/escpost")),
+            Some(Path::new("/checkout/local/config")),
+        );
+
+        assert_eq!(display, "/checkout/local/config/printers.toml");
+    }
+
+    #[test]
+    fn a_path_outside_the_config_directory_is_shown_unchanged() {
+        let display = display_path_with(
+            Path::new("/tmp/explicit/printers.toml"),
+            Some(Path::new("/home/developer/.config/escpost")),
+            Some(Path::new("/checkout/local/config")),
+        );
+
+        assert_eq!(display, "/tmp/explicit/printers.toml");
+    }
+
+    #[test]
+    fn without_a_host_directory_the_path_is_shown_unchanged() {
+        let display = display_path_with(
+            Path::new("/home/developer/.config/escpost/printers.toml"),
+            Some(Path::new("/home/developer/.config/escpost")),
+            None,
+        );
+
+        assert_eq!(display, "/home/developer/.config/escpost/printers.toml");
+    }
 }

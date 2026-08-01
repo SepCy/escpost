@@ -492,7 +492,9 @@ attached USB printers with configured RAW TCP network printers. Bluetooth and
 operating-system spooler inventory remain planned.
 
 The default includes every supported transport. `--transport usb|network`
-narrows the result without changing its shape.
+narrows the result without changing its shape. The command also reports the
+configuration path it read on the status channel, so a developer knows where to
+register or edit printers.
 The human output identifies the transport and shows the connection fields
 needed by the corresponding print command. When a connected USB interface
 matches a saved entry, the two records merge into one connected result under

@@ -15,7 +15,7 @@ use std::process::Output;
 #[cfg(unix)]
 use std::thread;
 #[cfg(unix)]
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[test]
 fn printers_list_is_a_rust_cli_command() {
@@ -139,7 +139,7 @@ fn printers_add_registers_a_network_printer_in_an_explicit_configuration() {
     assert!(stderr.contains("Printer: kitchen"));
     assert!(stderr.contains("Transport: network"));
     assert!(
-        stderr.contains(&format!("Configuration: {}", config.display())),
+        stderr.contains(&format!("Updated configuration at {}", config.display())),
         "the command should report where it saved the printer:\n{stderr}"
     );
     let document = fs::read_to_string(&config).expect("the printer config should be readable");
@@ -152,6 +152,115 @@ fn printers_add_registers_a_network_printer_in_an_explicit_configuration() {
     assert_eq!(printer["host"].as_str(), Some("10.42.0.71"));
     assert_eq!(printer["port"].as_integer(), Some(9100));
     assert_eq!(printer["profile"].as_str(), Some("REFERENCE"));
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_reports_the_host_directory_that_backs_the_config_mount() {
+    let directory = temporary_directory("host-display-config");
+    // Stand in for the container mount target and the host directory backing it.
+    let config_directory = directory.join("container");
+    let host_directory = directory.join("host");
+    fs::create_dir(&config_directory).expect("the config directory should be creatable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "--non-interactive",
+            "printers",
+            "add",
+            "kitchen",
+            "--transport",
+            "network",
+            "--host",
+            "10.42.0.71",
+        ])
+        .env("ESCPOST_CONFIG_DIR", &config_directory)
+        .env("ESCPOST_CONFIG_DISPLAY_DIR", &host_directory)
+        .output()
+        .expect("the escpost command should finish");
+
+    assert_command_succeeded(&output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let displayed = host_directory.join("printers.toml");
+    assert!(
+        stderr.contains(&format!("Updated configuration at {}", displayed.display())),
+        "the reported path should name the host directory:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(config_directory.to_str().expect("the path should be UTF-8")),
+        "the container mount target should not appear in human output:\n{stderr}"
+    );
+    // The file is still written to the actual resolved configuration directory.
+    assert!(
+        config_directory.join("printers.toml").is_file(),
+        "the printer should be saved in the resolved configuration directory"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_list_reports_the_host_directory_it_reads() {
+    let directory = temporary_directory("list-host-display");
+    let config_directory = directory.join("container");
+    let host_directory = directory.join("host");
+    fs::create_dir(&config_directory).expect("the config directory should be creatable");
+
+    // The network filter keeps the listing from enumerating USB devices, which
+    // the test container is not equipped to reach.
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["printers", "list", "--transport", "network"])
+        .env("ESCPOST_CONFIG_DIR", &config_directory)
+        .env("ESCPOST_CONFIG_DISPLAY_DIR", &host_directory)
+        .output()
+        .expect("the escpost command should finish");
+
+    assert_command_succeeded(&output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let displayed = host_directory.join("printers.toml");
+    assert!(
+        stderr.contains(&format!(
+            "Reading configuration from {}",
+            displayed.display()
+        )),
+        "listing should name the host configuration path:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(config_directory.to_str().expect("the path should be UTF-8")),
+        "the container mount target should not appear in human output:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_configuration_error_names_the_host_directory_path() {
+    let directory = temporary_directory("error-host-display");
+    let config_directory = directory.join("container");
+    let host_directory = directory.join("host");
+    fs::create_dir(&config_directory).expect("the config directory should be creatable");
+    fs::write(config_directory.join("printers.toml"), "this is not TOML")
+        .expect("the invalid config should be writable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["printers", "list", "--transport", "network"])
+        .env("ESCPOST_CONFIG_DIR", &config_directory)
+        .env("ESCPOST_CONFIG_DISPLAY_DIR", &host_directory)
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success(), "invalid configuration must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let displayed = host_directory.join("printers.toml");
+    assert!(
+        stderr.contains(displayed.to_str().expect("the path should be UTF-8")),
+        "the error should name the host configuration path:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains(config_directory.to_str().expect("the path should be UTF-8")),
+        "the container mount target should not appear in the error:\n{stderr}"
+    );
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
 
@@ -682,20 +791,20 @@ fn development_wrapper_creates_the_checkout_local_config_source() {
         "#!/bin/sh\nprintf 'docker: %s\\n' \"$*\"\n",
     );
 
-    let output = Command::new(directory.join("escpost"))
-        .args(["printers", "list"])
-        .env_remove("ESCPOST_CONFIG_HOST_DIR")
-        .env(
-            "PATH",
-            format!(
-                "{}:/usr/bin:/bin",
-                executable_directory
-                    .to_str()
-                    .expect("the test path should be UTF-8")
+    let output = run_freshly_written_wrapper(
+        Command::new(directory.join("escpost"))
+            .args(["printers", "list"])
+            .env_remove("ESCPOST_CONFIG_HOST_DIR")
+            .env(
+                "PATH",
+                format!(
+                    "{}:/usr/bin:/bin",
+                    executable_directory
+                        .to_str()
+                        .expect("the test path should be UTF-8")
+                ),
             ),
-        )
-        .output()
-        .expect("the development wrapper should finish");
+    );
 
     assert!(
         output.status.success(),
@@ -827,6 +936,25 @@ fn run_printers_list(config: &Path) -> Output {
         .args(["list", "--transport", "network"])
         .output()
         .expect("the escpost command should finish")
+}
+
+#[cfg(unix)]
+fn run_freshly_written_wrapper(command: &mut Command) -> Output {
+    // Writing an executable and immediately running it races with sibling test
+    // threads that fork to spawn their own children: a child can momentarily
+    // inherit the still-open write handle, so the exec observes the file as busy
+    // (ETXTBSY, raw OS error 26). Retry across that short window rather than
+    // failing the run.
+    for _ in 0..100 {
+        match command.output() {
+            Ok(output) => return output,
+            Err(error) if error.raw_os_error() == Some(26) => {
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("the development wrapper should finish: {error}"),
+        }
+    }
+    panic!("the development wrapper stayed busy after repeated retries")
 }
 
 #[cfg(unix)]

@@ -184,13 +184,13 @@ pub(crate) enum CliError {
     #[error("could not write command output: {0}")]
     WriteHumanOutput(std::io::Error),
 
-    #[error("could not read printer configuration {path}: {source}")]
+    #[error("could not read printer configuration {}: {source}", crate::configuration::display_path(.path.as_path()))]
     ReadPrinterConfiguration {
         path: PathBuf,
         source: std::io::Error,
     },
 
-    #[error("invalid printer configuration {path}: {message}")]
+    #[error("invalid printer configuration {}: {message}", crate::configuration::display_path(.path.as_path()))]
     InvalidPrinterConfiguration { path: PathBuf, message: String },
 
     #[error("printer name is required")]
@@ -248,7 +248,7 @@ pub(crate) enum CliError {
     #[error("printer {0:?} is already configured")]
     PrinterAlreadyConfigured(String),
 
-    #[error("could not create printer configuration directory {path}: {source}")]
+    #[error("could not create printer configuration directory {}: {source}", crate::configuration::display_path(.path.as_path()))]
     CreatePrinterConfigurationDirectory {
         path: PathBuf,
         source: std::io::Error,
@@ -257,7 +257,7 @@ pub(crate) enum CliError {
     #[error("could not serialize printer configuration: {0}")]
     SerializePrinterConfiguration(String),
 
-    #[error("could not write printer configuration {path}: {source}")]
+    #[error("could not write printer configuration {}: {source}", crate::configuration::display_path(.path.as_path()))]
     WritePrinterConfiguration {
         path: PathBuf,
         source: std::io::Error,

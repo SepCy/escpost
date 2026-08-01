@@ -132,7 +132,12 @@ trait AddPrompter {
 pub(crate) async fn run(arguments: PrintersArgs, non_interactive: bool) -> Result<(), CliError> {
     match arguments.command {
         PrintersCommand::List(list) => {
+            let path = configuration::resolved_path(arguments.config.as_deref())?;
             let configuration = configuration::load(arguments.config.as_deref())?;
+            eprintln!(
+                "Reading configuration from {}",
+                configuration::display_path(&path)
+            );
             let network_statuses = if list.transport == Some(InventoryTransport::Usb) {
                 Vec::new()
             } else {
@@ -227,7 +232,10 @@ fn save_and_report_printer(
     }?;
     eprintln!("Printer: {}", printer.name);
     eprintln!("Transport: {}", printer.transport());
-    eprintln!("Configuration: {}", path.display());
+    eprintln!(
+        "Updated configuration at {}",
+        configuration::display_path(&path)
+    );
     if let ResolvedAddConnection::Usb(target) = &printer.connection
         && target.ambiguous_without_serial
     {

@@ -47,10 +47,10 @@ performed on Linux x86-64:
   browser;
 - Rust `printers list` enumerates the connected NT-5890K printer through
   `nusb` without claiming its interface;
-- the Python binding and Click CLI pass their automated suites;
+- the Python render binding passes its automated suite;
 - Docker Compose exposes the Linux host's `/dev/bus/usb` tree to the CLI; and
-- both the Python calibration path and named Rust USB output through `print`
-  have been exercised with the connected NT-5890K printer; and
+- named Rust USB output through `print` has been exercised with the connected
+  NT-5890K printer; and
 - named Rust RAW TCP output has been exercised through the interactive Docker
   workflow and physically confirmed on paper with a connected Munbyn ITPP047.
 
@@ -157,11 +157,9 @@ The Rust `print` command uses `nusb` for direct bulk transfers:
 ESCPost Rust CLI → nusb → operating system USB API
 ```
 
-The legacy Python configuration and calibration workflow continues to use
-python-escpos, PyUSB, and libusb while those higher-level commands are
-migrated. Passive listing and direct printing use Rust. The Rust choice avoids
-requiring a separately installed libusb runtime. It was selected after
-considering:
+All USB access — listing, registration, and printing — uses Rust and `nusb`.
+The Rust choice avoids requiring a separately installed libusb runtime. It was
+selected after considering:
 
 - bulk endpoint discovery and transfers;
 - interface claim, detach, and reattach behavior;
@@ -214,8 +212,7 @@ ESC/POS serial support.
 
 ### Direct USB
 
-Current status: **Verified through both Rust/nusb and Python/libusb on Linux
-x86-64.**
+Current status: **Verified through Rust/nusb on Linux x86-64.**
 
 Known caveats:
 
@@ -293,8 +290,7 @@ Expected limitations:
 ### Windows direct USB
 
 Implemented but unverified advanced output backend. Discovery and
-bidirectional protocol testing remain in the Python workflow or planned Rust
-work.
+bidirectional protocol testing remain planned Rust work.
 
 Known caveats:
 
@@ -324,7 +320,7 @@ belong in the issue tracker.
 
 | Platform/backend | Status | Caveat or missing evidence | Current direction |
 |---|---|---|---|
-| Linux direct USB | Verified with Rust/nusb and Python/libusb | Device permissions and `usblp` ownership vary by host | Add diagnostics for permissions and interface ownership |
+| Linux direct USB | Verified with Rust/nusb | Device permissions and `usblp` ownership vary by host | Add diagnostics for permissions and interface ownership |
 | Linux Docker USB | Verified on the development host | Requires `/dev/bus/usb` plus the correct group | Keep explicit Compose device access |
 | Linux RAW TCP | Verified through Docker with physical Munbyn ITPP047 output | Generic TCP success alone cannot confirm paper output | Add optional model-specific status checks separately from printing |
 | macOS direct USB | Unverified | Backend packaging and interface claiming need hardware evidence | Test the host-native Rust binary |

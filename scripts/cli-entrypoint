@@ -2,60 +2,7 @@
 
 set -eu
 
-virtual_environment=/workspace/.venv
-
-command_name=
-subcommand_name=
-skip_argument=false
-for argument in "$@"; do
-    if [ "$skip_argument" = true ]; then
-        skip_argument=false
-        continue
-    fi
-
-    case "$argument" in
-        --non-interactive)
-            ;;
-        --config)
-            # The printers group accepts this option before or after its
-            # subcommand. Its value must not be mistaken for the subcommand.
-            skip_argument=true
-            ;;
-        --config=*)
-            ;;
-        --)
-            break
-            ;;
-        -*)
-            ;;
-        *)
-            if [ -z "$command_name" ]; then
-                command_name=$argument
-            elif [ -z "$subcommand_name" ]; then
-                subcommand_name=$argument
-                break
-            fi
-            ;;
-    esac
-done
-
-case "$command_name:$subcommand_name" in
-    render:*|print:*|printers:list|printers:add)
-        cargo build --quiet --locked --package escpost-cli
-        exec "$CARGO_TARGET_DIR/debug/escpost" "$@"
-        ;;
-esac
-
-if [ ! -x "$virtual_environment/bin/python" ]; then
-    python3 -m venv "$virtual_environment"
-fi
-
-export VIRTUAL_ENV="$virtual_environment"
-export PATH="$virtual_environment/bin:$PATH"
-export PIP_QUIET=1
-
-maturin develop --quiet --locked --extras=printer
-
-# Use the path explicitly because the Rust and Python executables intentionally
-# share the final product name during this incremental migration.
-exec "$virtual_environment/bin/escpost" "$@"
+# The developer CLI is entirely Rust. Build the current sources and run the
+# resulting executable for every command.
+cargo build --quiet --locked --package escpost-cli
+exec "$CARGO_TARGET_DIR/debug/escpost" "$@"

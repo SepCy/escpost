@@ -37,10 +37,10 @@ PNG to stdout, or host an embedded browser workbench. The Rust `print` command
 sends the same source types unchanged to a named USB or RAW TCP printer, and
 Rust `printers list` reports connected or configured targets across those
 transports. Rust `printers add` registers either transport, including
-descriptor-based interactive USB selection. The Python binding remains
-available to applications, while the existing Python hardware commands
-continue to provide higher-level physical calibration during their migration
-to Rust.
+descriptor-based interactive USB selection, and non-interactive selection by
+USB descriptor. The developer CLI is entirely Rust. The Python binding remains
+available to applications for embedding the renderer; physical calibration uses
+the same `render` and `print` commands against the shared calibration receipt.
 
 The virtual `REFERENCE` profile enables every capability currently represented
 by the renderer without inheriting limitations or quirks from a physical
@@ -74,7 +74,7 @@ All build and test commands run in the project container:
 docker compose build
 ./escpost render --help
 docker compose run --rm test cargo test --workspace
-docker compose run --rm test .venv/bin/python -m unittest discover -s python/tests
+docker compose run --rm test scripts/binding-test
 ```
 
 Regenerate the canonical runtime profile pack after changing an enrichment or
@@ -87,12 +87,10 @@ docker compose run --rm test cargo run --quiet \
   profiles profiles/.generated/profiles.json
 ```
 
-`./escpost` is the stable development entry point. It runs `render`, `print`,
-and `printers list|add` through the Rust CLI and keeps the existing Python
-configuration and calibration commands reachable during migration. The CLI
-service has USB access for physical workflows; its Python environment lives in
-a named Docker volume and is created or updated only when a legacy command
-needs it.
+`./escpost` is the stable development entry point. It runs every command
+through the Rust CLI. The CLI service has USB access for physical workflows.
+The Python render binding is separate from the CLI; `scripts/binding-test`
+builds and exercises it in the test service.
 
 List connected USB printer-class devices:
 
@@ -222,26 +220,22 @@ Add `--watch` to rerender a file or case when its input changes. Add
 The Docker wrapper cannot open a browser on the host, so use `--web` there and
 open the printed URL yourself.
 
-For focused physical calibration, first use discovery to populate
-`local/config/printers.toml` through the Docker wrapper. The `case calibrate`
-command renders and sends one loaded byte buffer.
+For focused physical calibration, first register the printer with
+`printers add` to populate `local/config/printers.toml` through the Docker
+wrapper. Then render and print the same version-controlled input — a single
+conformance case, or the shared calibration receipt at `calibration/input.hex`:
 
 ```bash
-./escpost case calibrate \
-  tests/cases/graphics/esc-star-8dot-double-density \
-  --printer netum-usb \
+./escpost render calibration/input.hex \
+  --profile NT-5890K \
   --output-dir local/calibration
+
+./escpost print calibration/input.hex --printer netum-usb
 ```
 
-To calibrate a printer profile comprehensively, render and print the single
-shared receipt. The configured printer supplies the profile, so developers do
-not have to repeat it:
-
-```bash
-./escpost calibration calibrate \
-  --printer netum-usb \
-  --output-dir local/calibration
-```
+`render` and `print` are the same primitives every job uses. The render step
+names the profile explicitly; `print` sends the bytes unchanged to the named
+printer.
 
 The shared stream lives at `calibration/input.hex`. Its profile-specific
 expected PNG, verification record, notes, and any remaining hardware TODOs

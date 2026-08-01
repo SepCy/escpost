@@ -18,7 +18,7 @@ than cleverness.
 - Return a clear error for unsupported or unsafe input. Never hide uncertainty
   behind a silent best guess.
 
-These rules apply to both the Rust renderer and the Python tooling.
+These rules apply to both the Rust code and the Python render binding.
 
 ## Comments explain why
 
@@ -95,5 +95,6 @@ docker compose run --rm test cargo clippy --workspace --all-targets -- -D warnin
 docker compose run --rm test cargo test --workspace
 ```
 
-Python changes should remain formatted consistently with the surrounding code
-and pass the containerized Python test suite documented in `README.md`.
+Changes to the Python render binding should remain formatted consistently with
+the surrounding code and pass the containerized binding test suite documented
+in `README.md`.

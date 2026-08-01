@@ -43,12 +43,9 @@ WebAssembly targets, and is a deliberate boundary documented in
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 
-The Python package still contains the legacy discovery/configuration writer
-and higher-level calibration commands. The root development wrapper routes
-`render`, `print`, and `printers list|add` to the Rust executable and the
-remaining calibration commands to that package, keeping one public command
-name during migration. Hardware inventory and printing are not part of the
-Rust rendering library.
+The Python package is only the render binding; it contains no CLI. The root
+development wrapper routes every command to the Rust executable. Hardware
+inventory and printing live in `escpost-cli`, not the Rust rendering library.
 
 ## Rust named-printer output
 

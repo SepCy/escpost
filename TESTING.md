@@ -225,10 +225,9 @@ renders as well as failures.
 Shared calibration outputs use
 `local/test-output/calibration/<profile-id>/actual-001.png`.
 
-The Python calibration commands also write `manifest.json`, whose `sheets`
-array lists the current `actual-NNN.png` files in receipt order. The native
-`escpost render --output-dir` command instead writes `sheet-NNN.png`; its
-manifest is likewise the authority, so stale unlisted PNGs are ignored.
+`escpost render --output-dir` writes `sheet-NNN.png` and a `manifest.json`
+whose `sheets` array lists those files in receipt order. The manifest is the
+authority, so stale unlisted PNGs are ignored.
 
 When pixels differ, the test also writes `diff-001.png` and
 `comparison.html`. Matching ink is black, matching paper is white, unexpected
@@ -309,46 +308,29 @@ compare the new output with the physical printer before advancing
 the pending checks in that profile's `TODO.md` instead of claiming a new
 verification.
 
-## Legacy Python calibration CLI
+## Physical calibration commands
 
-A small Python CLI still orchestrates configured rendering and physical
-printing during migration:
+Physical calibration reuses the general-purpose Rust commands; there is no
+dedicated calibration command group. Register the printer once, then render and
+print the same version-controlled input — a conformance case, or the shared
+receipt at `calibration/input.hex`:
 
 ```text
-escpost printers discover
-escpost printers discover --name <local-name> --profile <profile>
-escpost case render <case>
-escpost case print <case> --printer <local-name>
-escpost case calibrate <case> --printer <local-name>
-escpost calibration render <profile>
-escpost calibration print --printer <local-name>
-escpost calibration calibrate --printer <local-name>
+escpost printers add <local-name> --transport usb \
+  --vendor-id <VID> --product-id <PID> --profile <profile>
+escpost render <case-or-input> --profile <profile> --output-dir <dir>
+escpost print <case-or-input> --printer <local-name>
 ```
 
-`render` invokes the Rust engine through the Python binding and writes the
-actual PNG sheets.
-
-`print` sends the decoded input bytes unchanged to the selected physical
-transport.
-
-`calibrate` loads the stream once, renders it, and sends the same in-memory
-bytes to the printer. This prevents accidental divergence between the two
-paths.
+`render` rasterizes the input to the actual PNG sheets. `print` sends the
+decoded input bytes unchanged to the selected physical transport. Both load the
+same immutable source, so the previewed and printed bytes cannot diverge.
 
 Use `escpost render <SOURCE> --web` for visual inspection. Its Rust web server
 holds the rendered sheets in memory, labels them in order, wraps them when
 space permits, and scales only by integer multiples so individual printer dots
 remain inspectable. `--watch` updates the view after successful filesystem
 changes while retaining the last complete render after an error.
-
-The printing adapter may use python-escpos's USB transport, but it uses only
-the raw-byte operation. It must not call high-level helpers such as `text`,
-`image`, `feed`, or `cut`, because those helpers generate additional ESC/POS
-bytes.
-
-python-escpos and its USB dependencies are development or optional hardware
-dependencies. They are not dependencies of the Rust core or ordinary renderer
-installations.
 
 The normal read-only inventory is native Rust:
 
@@ -434,9 +416,8 @@ Before sending bytes, the CLI shows:
 - USB identity or other transport destination;
 - byte count.
 
-The explicit `case print` or `case calibrate` command is the authorization to
-perform the physical action. Automated tests and build scripts never invoke
-these commands.
+The explicit `print` command is the authorization to perform the physical
+action. Automated tests and build scripts never invoke it.
 
 The CLI adds no implicit initialization, feed, or cut commands. A case that
 requires `ESC @`, trailing feed, or a cut includes those bytes explicitly in
@@ -450,8 +431,8 @@ For each new visible behavior:
 2. Run it and observe the expected automated test failure.
 3. Implement only enough behavior to make that case pass.
 4. Run the complete automated suite.
-5. If the behavior is model-sensitive, run the same case through
-   `case calibrate` on the Netum printer.
+5. If the behavior is model-sensitive, `render` and `print` the same case on
+   the Netum printer.
 6. Compare physical geometry with the rendered PNG.
 7. Record the observation in `notes.md` and update the profile enrichment when
    the behavior is model-specific.
@@ -460,8 +441,8 @@ For each new visible behavior:
 This is repeated one vertical slice at a time. Do not write a large suite of
 speculative command tests before exercising the first command end to end.
 
-For a new printer profile, first complete `profile.toml`, then run
-`calibration calibrate`. Compare the one long physical receipt with the
+For a new printer profile, first complete `profile.toml`, then `render` and
+`print` `calibration/input.hex`. Compare the one long physical receipt with the
 profile's generated PNG, accept it as `expected-001.png`, record evidence in
 `notes.md`, and write `verification.toml`. This broad calibration complements
 the focused workflow; it does not replace it.

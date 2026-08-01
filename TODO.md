@@ -62,11 +62,10 @@ reuse. Extract one when another executable or embedding API genuinely needs
 the same behavior. The `escpost` rendering crate must remain independent of
 CLI, networking, storage, and web concerns.
 
-The existing Python package remains the application binding. Migrate the
-current Click commands incrementally and remove them only after the Rust CLI
-has equivalent behavior. The root `./escpost` container wrapper should
-eventually invoke the Rust executable while keeping the developer-facing
-command name stable.
+The Python package is now only the render binding; the Click CLI has been
+removed. The root `./escpost` container wrapper invokes the Rust executable for
+every command. Physical calibration reuses `render` and `print` against
+`calibration/input.hex` rather than a dedicated command group.
 
 ## Rust CLI foundation and render migration
 
@@ -374,10 +373,9 @@ rules are specified in `CLI.md`.
       large enough to need it; keep sorting non-configurable.
 - [x] Keep the legacy Python calibration workflow on the same resolved
       `printers.toml` until the remaining calibration commands move to Rust.
-- [ ] Retire the temporary Python `printers discover` configuration writer.
-      Its only unique capability, a non-interactive USB config write, now exists
-      as `printers add --vendor-id/--product-id/--serial`, so this is waiting
-      only on pointing the calibration bootstrap at the Rust `printers add`.
+- [x] Retire the temporary Python `printers discover` configuration writer.
+      Its only unique capability, a non-interactive USB config write, is now
+      `printers add --vendor-id/--product-id/--serial`.
 - [ ] Add `printers scan` only with the first concrete active Bluetooth or
       network discovery backend. (`CLI-M05`, `CLI-M07`)
 - [ ] Add `printers pair` with the first transport that needs explicit
@@ -517,7 +515,10 @@ would target.
 - [ ] Add scanning and pairing only for transports that need them.
 - [ ] Add replay to USB and RAW network printers.
 - [ ] Add transparent proxy mode with response forwarding.
-- [ ] Port calibration commands and then retire the Click CLI.
+- [x] Retire the Click CLI. Its commands were either superseded by the Rust
+      `render`/`print`/`printers` commands or reduced to `render`/`print`
+      invocations against `calibration/input.hex`. The richer guided
+      calibration workflow remains future Phase-5 work.
 
 ### Phase 5: realistic emulation and integration testing
 

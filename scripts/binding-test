@@ -1,0 +1,20 @@
+#!/bin/sh
+
+set -eu
+
+# Build the PyO3 render binding into a workspace virtual environment and run the
+# Python binding tests against it. The binding is the only remaining Python
+# surface; the developer CLI is Rust and needs none of this.
+virtual_environment=/workspace/.venv
+
+if [ ! -x "$virtual_environment/bin/python" ]; then
+    python3 -m venv "$virtual_environment"
+fi
+
+export VIRTUAL_ENV="$virtual_environment"
+export PATH="$virtual_environment/bin:$PATH"
+export PIP_QUIET=1
+
+maturin develop --quiet --locked
+
+exec python -m unittest discover -s python/tests "$@"

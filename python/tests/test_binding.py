@@ -1,15 +1,10 @@
-import json
 import struct
 import unittest
-from contextlib import redirect_stdout
-from io import StringIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 from escpost import render, render_result
 from escpost.cases import Case, CaseError
-from escpost.cli import main
 
 
 REPOSITORY = Path(__file__).parents[2]
@@ -20,14 +15,6 @@ CASE_DIRECTORY = (
     / "graphics"
     / "esc-star-8dot-double-density"
 )
-REFERENCE_CUT_CASE = (
-    REPOSITORY
-    / "tests"
-    / "cases"
-    / "mechanism"
-    / "reference-full-and-partial-cuts"
-)
-CALIBRATION_INPUT = REPOSITORY / "calibration" / "input.hex"
 
 
 class RenderBindingTest(unittest.TestCase):
@@ -56,96 +43,6 @@ class RenderBindingTest(unittest.TestCase):
             len(rendered["metadata"]["canonical_profile_sha256"]),
             64,
         )
-
-
-class CaseRenderCliTest(unittest.TestCase):
-    def test_case_render_loads_input_and_writes_png(self):
-        stdout = StringIO()
-        with TemporaryDirectory() as output_directory:
-            with redirect_stdout(stdout):
-                exit_code = main(
-                    [
-                        "case",
-                        "render",
-                        str(CASE_DIRECTORY),
-                        "--output-dir",
-                        output_directory,
-                    ]
-                )
-
-            output = Path(output_directory) / "actual-001.png"
-            self.assertEqual(exit_code, 0)
-            self.assertEqual(_read_png_header(output.read_bytes()), (384, 30, 1, 0))
-            self.assertEqual(
-                json.loads((Path(output_directory) / "manifest.json").read_text()),
-                {"sheets": ["actual-001.png"]},
-            )
-            self.assertNotIn("input sha256", stdout.getvalue())
-
-    def test_case_render_writes_all_sheets_in_preview_order(self):
-        rendered = {
-            "sheets": [b"first sheet", b"second sheet"],
-            "metadata": {"canonical_profile_sha256": "0" * 64},
-        }
-        with TemporaryDirectory() as output_directory:
-            with patch("escpost.cli.render_result", return_value=rendered):
-                with redirect_stdout(StringIO()):
-                    exit_code = main(
-                        [
-                            "case",
-                            "render",
-                            str(CASE_DIRECTORY),
-                            "--output-dir",
-                            output_directory,
-                        ]
-                    )
-
-            output_directory = Path(output_directory)
-            self.assertEqual(exit_code, 0)
-            self.assertEqual(
-                json.loads((output_directory / "manifest.json").read_text()),
-                {"sheets": ["actual-001.png", "actual-002.png"]},
-            )
-            self.assertEqual(
-                (output_directory / "actual-001.png").read_bytes(),
-                b"first sheet",
-            )
-            self.assertEqual(
-                (output_directory / "actual-002.png").read_bytes(),
-                b"second sheet",
-            )
-
-    def test_reference_cut_case_writes_three_preview_sheets(self):
-        with TemporaryDirectory() as output_directory:
-            with redirect_stdout(StringIO()):
-                exit_code = main(
-                    [
-                        "case",
-                        "render",
-                        str(REFERENCE_CUT_CASE),
-                        "--output-dir",
-                        output_directory,
-                    ]
-                )
-
-            output_directory = Path(output_directory)
-            sheet_names = [
-                "actual-001.png",
-                "actual-002.png",
-                "actual-003.png",
-            ]
-            self.assertEqual(exit_code, 0)
-            self.assertEqual(
-                json.loads((output_directory / "manifest.json").read_text()),
-                {"sheets": sheet_names},
-            )
-            self.assertEqual(
-                [
-                    _read_png_header((output_directory / name).read_bytes())[:2]
-                    for name in sheet_names
-                ],
-                [(576, 140), (576, 110), (576, 30)],
-            )
 
 
 class CaseLoaderTest(unittest.TestCase):
@@ -181,176 +78,6 @@ input_sha256 = "0fcb71d8b3b3b965f4d75d20e8d4bca56c4d13a44de0a9ac2899181d8d9b7abf
 
             with self.assertRaisesRegex(CaseError, "unknown case field 'input_sha256'"):
                 Case.load(case_directory)
-
-
-class CasePrintCliTest(unittest.TestCase):
-    def test_case_print_sends_the_input_bytes_unchanged(self):
-        printer = FakePrinter()
-        stdout = StringIO()
-        with TemporaryDirectory() as local_directory:
-            config = Path(local_directory) / "printers.toml"
-            config.write_text(
-                """
-[netum-usb]
-transport = "usb"
-profile = "NT-5890K"
-vendor_id = "0x1234"
-product_id = "0x5678"
-interface_number = 0
-out_endpoint = "0x01"
-in_endpoint = "0x81"
-""".strip()
-            )
-
-            with (
-                patch(
-                    "escpost.cli._open_usb_printer",
-                    return_value=printer,
-                ),
-                redirect_stdout(stdout),
-            ):
-                exit_code = main(
-                    [
-                        "case",
-                        "print",
-                        str(CASE_DIRECTORY),
-                        "--printer",
-                        "netum-usb",
-                        "--config",
-                        str(config),
-                    ]
-                )
-
-        expected = bytes.fromhex((CASE_DIRECTORY / "input.hex").read_text())
-        self.assertEqual(exit_code, 0)
-        self.assertEqual(printer.writes, [expected])
-        self.assertTrue(printer.closed)
-        self.assertIn(f"bytes: {len(expected)}", stdout.getvalue())
-
-    def test_case_calibrate_renders_and_prints_one_loaded_stream(self):
-        printer = FakePrinter()
-        with TemporaryDirectory() as local_directory:
-            local_directory = Path(local_directory)
-            config = local_directory / "printers.toml"
-            config.write_text(
-                """
-[netum-usb]
-transport = "usb"
-profile = "NT-5890K"
-vendor_id = "0x1234"
-product_id = "0x5678"
-interface_number = 0
-out_endpoint = "0x01"
-in_endpoint = "0x81"
-""".strip()
-            )
-            output_directory = local_directory / "rendered"
-
-            with (
-                patch(
-                    "escpost.cli._open_usb_printer",
-                    return_value=printer,
-                ),
-                redirect_stdout(StringIO()),
-            ):
-                exit_code = main(
-                    [
-                        "case",
-                        "calibrate",
-                        str(CASE_DIRECTORY),
-                        "--printer",
-                        "netum-usb",
-                        "--config",
-                        str(config),
-                        "--output-dir",
-                        str(output_directory),
-                    ]
-                )
-
-            rendered = (output_directory / "actual-001.png").read_bytes()
-
-        expected = bytes.fromhex((CASE_DIRECTORY / "input.hex").read_text())
-        self.assertEqual(exit_code, 0)
-        self.assertEqual(_read_png_header(rendered), (384, 30, 1, 0))
-        self.assertEqual(printer.writes, [expected])
-
-
-class CalibrationCliTest(unittest.TestCase):
-    def test_calibration_render_uses_the_shared_stream_and_selected_profile(self):
-        with TemporaryDirectory() as output_directory:
-            with redirect_stdout(StringIO()):
-                exit_code = main(
-                    [
-                        "calibration",
-                        "render",
-                        "NT-5890K",
-                        "--output-dir",
-                        output_directory,
-                    ]
-                )
-
-            output = Path(output_directory) / "actual-001.png"
-            self.assertEqual(exit_code, 0)
-            self.assertEqual(
-                _read_png_header(output.read_bytes()),
-                (384, 1632, 1, 0),
-            )
-
-    def test_calibration_calibrate_infers_the_profile_from_the_printer(self):
-        printer = FakePrinter()
-        with TemporaryDirectory() as local_directory:
-            local_directory = Path(local_directory)
-            config = local_directory / "printers.toml"
-            config.write_text(
-                """
-[netum-usb]
-transport = "usb"
-profile = "NT-5890K"
-vendor_id = "0x1234"
-product_id = "0x5678"
-interface_number = 0
-out_endpoint = "0x01"
-in_endpoint = "0x81"
-""".strip()
-            )
-            output_directory = local_directory / "rendered"
-
-            with (
-                patch(
-                    "escpost.cli._open_usb_printer",
-                    return_value=printer,
-                ),
-                redirect_stdout(StringIO()),
-            ):
-                exit_code = main(
-                    [
-                        "calibration",
-                        "calibrate",
-                        "--printer",
-                        "netum-usb",
-                        "--config",
-                        str(config),
-                        "--output-dir",
-                        str(output_directory),
-                    ]
-                )
-
-        expected = bytes.fromhex(CALIBRATION_INPUT.read_text())
-        self.assertEqual(exit_code, 0)
-        self.assertEqual(printer.writes, [expected])
-        self.assertTrue(printer.closed)
-
-
-class FakePrinter:
-    def __init__(self):
-        self.writes = []
-        self.closed = False
-
-    def _raw(self, data):
-        self.writes.append(data)
-
-    def close(self):
-        self.closed = True
 
 
 def _read_png_header(png):

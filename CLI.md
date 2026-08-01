@@ -3,15 +3,14 @@
 ## Purpose
 
 The `escpost` command is the developer-facing ESC/POS workbench. It should be
-useful both at a terminal and in unattended scripts without exposing different
-Python and Rust command families.
+useful both at a terminal and in unattended scripts. It is a single Rust
+executable; there is no separate Python command family.
 
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
 be reviewed. `render`, named USB and RAW-network `print`, USB and
 configured-network `printers list`, and USB/network registration through
-`printers add` are implemented; the other top-level commands remain planned
-or temporarily available through the Python hardware workflow.
+`printers add` are implemented; the other top-level commands remain planned.
 `README.md` describes what works today, while `TODO.md` is the single
 implementation checklist.
 

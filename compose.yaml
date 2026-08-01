@@ -31,7 +31,6 @@ services:
       - ${ESCPOST_CONFIG_HOST_DIR:-./local/config}:/home/developer/.config/escpost
       - cargo-home:/home/developer/.cargo
       - cargo-target:/home/developer/target
-      - python-venv:/workspace/.venv
     devices:
       - /dev/bus/usb:/dev/bus/usb
     group_add:

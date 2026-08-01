@@ -142,10 +142,13 @@ async fn finalize(
     completion: &'static str,
 ) {
     // Rendering is synchronous and CPU-bound; run it off the async workers so a
-    // job in flight cannot stall the web viewer's responses.
-    match tokio::task::spawn_blocking(move || render(&bytes, profile)).await {
-        Ok(Ok(rendered)) => jobs.replace_captured(rendered, completion).await,
-        Ok(Err(error)) => {
+    // job in flight cannot stall the web viewer's responses. The blocking task
+    // returns the bytes so the exact input can be kept for download.
+    match tokio::task::spawn_blocking(move || (render(&bytes, profile), bytes)).await {
+        Ok((Ok(rendered), raw_input)) => {
+            jobs.replace_captured(rendered, completion, raw_input).await;
+        }
+        Ok((Err(error), _)) => {
             eprintln!("warning: could not render captured job: {error}");
             jobs.set_error(error.to_string()).await;
         }

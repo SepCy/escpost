@@ -35,6 +35,8 @@ struct JobStoreState {
     session_profile: String,
     /// Wall-clock time the current job completed, in Unix epoch milliseconds.
     completed_at: Option<u64>,
+    /// The current job's exact captured bytes, offered for download.
+    raw_input: Option<Vec<u8>>,
 }
 
 /// Current wall-clock time in Unix epoch milliseconds, for job completion.
@@ -73,6 +75,8 @@ struct RenderResponse {
     /// When the current job completed, in Unix epoch milliseconds.
     #[serde(skip_serializing_if = "Option::is_none")]
     completed_at: Option<u64>,
+    /// True when the current job's raw bytes can be downloaded from /job.
+    input_available: bool,
     sheets: Vec<SheetResponse>,
 }
 
@@ -97,6 +101,7 @@ impl JobStore {
                 receiving: 0,
                 session_profile: String::new(),
                 completed_at: Some(epoch_millis()),
+                raw_input: None,
             })),
         }
     }
@@ -115,6 +120,7 @@ impl JobStore {
                 receiving: 0,
                 session_profile: profile,
                 completed_at: None,
+                raw_input: None,
             })),
         }
     }
@@ -132,24 +138,44 @@ impl JobStore {
     }
 
     /// Replace the preview with a render that has no capture semantics, such as
-    /// `render --web`.
+    /// `render --web`. Its source is a file, so nothing is offered for download.
     pub(crate) async fn replace_render(&self, rendered: RenderResult) {
-        self.store_render(rendered, None).await;
+        self.store_render(rendered, None, None).await;
     }
 
     /// Replace the preview with a captured job, recording how it ended so the
-    /// viewer can distinguish a closed connection from an idle timeout.
-    pub(crate) async fn replace_captured(&self, rendered: RenderResult, completion: &'static str) {
-        self.store_render(rendered, Some(completion)).await;
+    /// viewer can distinguish a closed connection from an idle timeout, and
+    /// keeping its exact bytes for download.
+    pub(crate) async fn replace_captured(
+        &self,
+        rendered: RenderResult,
+        completion: &'static str,
+        raw_input: Vec<u8>,
+    ) {
+        self.store_render(rendered, Some(completion), Some(raw_input))
+            .await;
     }
 
-    async fn store_render(&self, rendered: RenderResult, completion: Option<&'static str>) {
+    async fn store_render(
+        &self,
+        rendered: RenderResult,
+        completion: Option<&'static str>,
+        raw_input: Option<Vec<u8>>,
+    ) {
         let mut state = self.state.write().await;
         state.jobs = VecDeque::from([Arc::new(RenderedJob::from(rendered))]);
         state.error = None;
         state.generation += 1;
         state.completion = completion;
         state.completed_at = Some(epoch_millis());
+        state.raw_input = raw_input;
+    }
+
+    /// The current job's captured bytes and completion time, for download.
+    async fn raw_input_download(&self) -> Option<(Vec<u8>, u64)> {
+        let state = self.state.read().await;
+        let bytes = state.raw_input.clone()?;
+        Some((bytes, state.completed_at.unwrap_or(0)))
     }
 
     pub(crate) async fn set_error(&self, error: String) {
@@ -178,6 +204,7 @@ impl JobStore {
                 completion: None,
                 receiving: state.receiving > 0,
                 completed_at: None,
+                input_available: false,
                 sheets: Vec::new(),
             };
         };
@@ -201,6 +228,7 @@ impl JobStore {
             completion: state.completion,
             receiving: state.receiving > 0,
             completed_at: state.completed_at,
+            input_available: state.raw_input.is_some(),
             sheets,
         }
     }
@@ -257,6 +285,7 @@ pub(crate) async fn serve(
         .route("/health", get(health))
         .route("/api/render", get(current_render))
         .route("/sheets/{file}", get(sheet_png))
+        .route("/job", get(download_job))
         .with_state(jobs);
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
@@ -276,6 +305,25 @@ async fn health() -> &'static str {
 
 async fn current_render(State(jobs): State<JobStore>) -> Json<RenderResponse> {
     Json(jobs.render_response().await)
+}
+
+async fn download_job(State(jobs): State<JobStore>) -> Response {
+    let Some((bytes, completed_at)) = jobs.raw_input_download().await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    // Name the file by completion time so several captures do not collide.
+    let disposition = format!("attachment; filename=\"escpost-job-{completed_at}.bin\"");
+    (
+        [
+            (
+                header::CONTENT_TYPE,
+                String::from("application/octet-stream"),
+            ),
+            (header::CONTENT_DISPOSITION, disposition),
+        ],
+        bytes,
+    )
+        .into_response()
 }
 
 async fn sheet_png(Path(file): Path<String>, State(jobs): State<JobStore>) -> Response {

@@ -75,6 +75,32 @@ fn serve_finalizes_a_held_open_connection_after_the_idle_timeout() {
 }
 
 #[test]
+fn serve_offers_the_captured_raw_input_for_download() {
+    let mut child = start_serve_on_ephemeral_ports();
+    let (raw_port, web_port) = read_listen_ports(&mut child);
+    wait_until_listening(&mut child, raw_port);
+    wait_until_listening(&mut child, web_port);
+
+    let sent = b"Downloadable raw input\n";
+    send_raw_job(raw_port, sent);
+    let metadata = wait_for_first_job(web_port);
+    assert_eq!(metadata["input_available"], true);
+
+    let response = http_get_bytes(web_port, "/job");
+    stop(&mut child);
+
+    assert!(response.starts_with(b"HTTP/1.1 200"));
+    assert!(
+        String::from_utf8_lossy(&response)
+            .to_ascii_lowercase()
+            .contains("content-disposition: attachment"),
+        "the raw input should download as an attachment"
+    );
+    // The download is the exact captured bytes, not the rendered output.
+    assert_eq!(response_body(&response), sent);
+}
+
+#[test]
 fn serve_flags_a_connection_that_is_still_receiving() {
     // Disable the idle timeout so the job stays in-progress until we close.
     let mut child = start_serve(&[

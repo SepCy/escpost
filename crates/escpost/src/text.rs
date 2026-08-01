@@ -86,41 +86,7 @@ impl PrinterState {
             cell_height_dots,
             self.active_font.baseline_dots,
         );
-        let ink = font::glyph_cell_mask(character, cell_width_dots, cell_height_dots, &geometry);
-
-        for destination_y in 0..cell_height_dots as usize {
-            for destination_x in 0..cell_width_dots as usize {
-                if !ink[destination_y * cell_width_dots as usize + destination_x] {
-                    continue;
-                }
-
-                let left = self.print_x + destination_x as u32 * self.character_width_multiplier;
-                let top = destination_y as u32 * self.character_height_multiplier;
-                for x in left..left + self.character_width_multiplier {
-                    for y in top..top + self.character_height_multiplier {
-                        if self.reversed {
-                            self.line.clear_dot(x, y);
-                        } else {
-                            self.line.print_dot(x, y);
-                        }
-                        // ESC E emphasis is a firmware double-strike: the printer
-                        // re-strikes the same ROM glyph one dot to the right,
-                        // thickening it horizontally. Smearing the base ink by one
-                        // dot models that mechanism faithfully rather than swapping
-                        // in a separately-designed bold weight, which would diverge
-                        // from the dots the device actually lays down. It stops at
-                        // the cell's right edge so bold stays within its own cell.
-                        if self.emphasized && x + 1 < self.print_x.saturating_add(cell_width) {
-                            if self.reversed {
-                                self.line.clear_dot(x + 1, y);
-                            } else {
-                                self.line.print_dot(x + 1, y);
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        self.draw_glyph(character, &geometry, cell_width_dots, cell_height_dots);
 
         if !self.reversed {
             let underline_top = cell_height.saturating_sub(self.underline_thickness);
@@ -138,6 +104,81 @@ impl PrinterState {
         Ok(())
     }
 
+    /// Blit one glyph into the line surface.
+    ///
+    /// The font module returns the glyph's coverage at `scale ×` the cell
+    /// resolution. Without anti-aliasing each subpixel is thresholded to a hard
+    /// dot (the faithful path — identical to the printed dots); with it, the
+    /// coverage is kept for soft edges. Styling is applied uniformly: ink is
+    /// laid over paper or carved out of a reverse block, each subpixel is
+    /// replicated for the size multipliers, and emphasis smears one dot right.
+    fn draw_glyph(
+        &mut self,
+        character: char,
+        geometry: &font::GlyphGeometry,
+        cell_width_dots: u32,
+        cell_height_dots: u32,
+    ) {
+        let scale = self.scale;
+        let coverage = font::glyph_cell_coverage(
+            character,
+            cell_width_dots,
+            cell_height_dots,
+            geometry,
+            scale,
+        );
+        let hard = |sample: u8| sample >= font::GLYPH_ALPHA_THRESHOLD;
+        let inked = |sample: u8| {
+            if self.antialias {
+                sample != 0
+            } else {
+                hard(sample)
+            }
+        };
+        if !coverage.iter().copied().any(inked) {
+            return;
+        }
+        let source_width = (cell_width_dots * scale) as usize;
+        let source_height = (cell_height_dots * scale) as usize;
+        let width_multiplier = self.character_width_multiplier;
+        let height_multiplier = self.character_height_multiplier;
+        let cell_width = self.current_character_advance_width();
+        let cell_height = cell_height_dots.saturating_mul(height_multiplier);
+        // Reserve the cell rows so subpixel blends land in-bounds.
+        self.line.ensure_height(cell_height);
+        // Lay ink over paper for normal text; carve paper from a reverse block.
+        let lay_ink = !self.reversed;
+        let base_x = self.print_x * scale;
+        let cell_right = self.print_x.saturating_add(cell_width) * scale;
+        for source_y in 0..source_height {
+            for source_x in 0..source_width {
+                let sample = coverage[source_y * source_width + source_x];
+                // Faithful path snaps to full ink at the glyph threshold; the
+                // preview keeps the soft coverage.
+                let value = if self.antialias {
+                    sample
+                } else if hard(sample) {
+                    255
+                } else {
+                    0
+                };
+                if value == 0 {
+                    continue;
+                }
+                for offset_y in 0..height_multiplier {
+                    let dy = source_y as u32 * height_multiplier + offset_y;
+                    for offset_x in 0..width_multiplier {
+                        let dx = base_x + source_x as u32 * width_multiplier + offset_x;
+                        self.line.blend_subpixel(dx, dy, value, lay_ink);
+                        if self.emphasized && dx + scale < cell_right {
+                            self.line.blend_subpixel(dx + scale, dy, value, lay_ink);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub(crate) fn current_character_advance_width(&self) -> u32 {
         self.active_font
             .cell_width_dots
@@ -146,9 +187,14 @@ impl PrinterState {
     }
 }
 
-pub(crate) fn render_hri(data: &[char], profile_font: &ProfileFont) -> MonoSurface {
+pub(crate) fn render_hri(
+    data: &[char],
+    profile_font: &ProfileFont,
+    scale: u32,
+    antialias: bool,
+) -> MonoSurface {
     let width = (data.len() as u32).saturating_mul(profile_font.cell_width_dots);
-    let mut surface = MonoSurface::new(width);
+    let mut surface = MonoSurface::new(width, scale, antialias);
     surface.ensure_height(profile_font.cell_height_dots);
 
     // Map glyphs onto the cell exactly like printed text so HRI labels share the
@@ -160,15 +206,32 @@ pub(crate) fn render_hri(data: &[char], profile_font: &ProfileFont) -> MonoSurfa
     );
     let cell_width_dots = profile_font.cell_width_dots;
     let cell_height_dots = profile_font.cell_height_dots;
+    let source_width = (cell_width_dots * scale) as usize;
+    let source_height = (cell_height_dots * scale) as usize;
 
     for (character_index, character) in data.iter().copied().enumerate() {
-        let ink = font::glyph_cell_mask(character, cell_width_dots, cell_height_dots, &geometry);
-        let cell_left = character_index as u32 * cell_width_dots;
-
-        for destination_y in 0..cell_height_dots as usize {
-            for destination_x in 0..cell_width_dots as usize {
-                if ink[destination_y * cell_width_dots as usize + destination_x] {
-                    surface.print_dot(cell_left + destination_x as u32, destination_y as u32);
+        let base_x = character_index as u32 * cell_width_dots * scale;
+        let coverage = font::glyph_cell_coverage(
+            character,
+            cell_width_dots,
+            cell_height_dots,
+            &geometry,
+            scale,
+        );
+        for source_y in 0..source_height {
+            for source_x in 0..source_width {
+                let sample = coverage[source_y * source_width + source_x];
+                // Faithful HRI snaps to full ink at the glyph threshold; the
+                // preview keeps the soft coverage.
+                let value = if antialias {
+                    sample
+                } else if sample >= font::GLYPH_ALPHA_THRESHOLD {
+                    255
+                } else {
+                    0
+                };
+                if value != 0 {
+                    surface.blend_subpixel(base_x + source_x as u32, source_y as u32, value, true);
                 }
             }
         }

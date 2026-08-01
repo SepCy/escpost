@@ -1,7 +1,7 @@
 use std::io::{self, IsTerminal};
 use std::path::Path;
 
-use escpost::render;
+use escpost::{RenderOptions, render_with_options};
 
 use crate::cli::RenderArgs;
 use crate::error::CliError;
@@ -31,8 +31,13 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
         && io::stderr().is_terminal();
     let profile_id = profiles::resolve(arguments.profile, input.profile, can_prompt)?;
     let profile = profiles::load(&profile_id)?;
-    let rendered =
-        render(&input.bytes, profile).map_err(|error| CliError::Render(error.to_string()))?;
+    let options = RenderOptions {
+        scale: arguments.scale,
+        antialias: arguments.antialias,
+        ..RenderOptions::default()
+    };
+    let rendered = render_with_options(&input.bytes, profile, &options)
+        .map_err(|error| CliError::Render(error.to_string()))?;
     if !binary_stdout {
         eprintln!("Profile: {profile_id}");
     }
@@ -55,6 +60,8 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
                     output: arguments.output,
                     output_dir: arguments.output_dir,
                     sheet: arguments.sheet,
+                    scale: arguments.scale,
+                    antialias: arguments.antialias,
                 },
                 jobs.clone(),
             )?;

@@ -31,7 +31,7 @@ impl PrinterState {
             });
         }
         let hri = (self.hri_position != HriPosition::None)
-            .then(|| render_hri(&barcode.hri, &self.hri_font));
+            .then(|| render_hri(&barcode.hri, &self.hri_font, self.scale, self.antialias));
         let content_width = hri
             .as_ref()
             .map_or(barcode_width, |surface| barcode_width.max(surface.width));

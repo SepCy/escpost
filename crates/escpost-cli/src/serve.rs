@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use escpost::render;
+use escpost::{RenderOptions, render_with_options};
 use escpost_profiles::PrinterProfile;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
@@ -58,7 +58,18 @@ pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
 
     // Accept jobs while the web viewer runs. The viewer owns the foreground and
     // returns on Ctrl+C; stop accepting once it does.
-    let acceptor = tokio::spawn(accept_jobs(raw, jobs.clone(), profile, idle_timeout));
+    let options = RenderOptions {
+        scale: arguments.scale,
+        antialias: arguments.antialias,
+        ..RenderOptions::default()
+    };
+    let acceptor = tokio::spawn(accept_jobs(
+        raw,
+        jobs.clone(),
+        profile,
+        idle_timeout,
+        options,
+    ));
     let result = web::serve(web_listener, jobs, arguments.browser).await;
     acceptor.abort();
     result
@@ -69,13 +80,20 @@ async fn accept_jobs(
     jobs: web::JobStore,
     profile: &'static PrinterProfile,
     idle_timeout: Option<Duration>,
+    options: RenderOptions,
 ) {
     loop {
         match listener.accept().await {
             // A transient accept error must not tear down the listener; the next
             // client can still connect.
             Ok((stream, _peer)) => {
-                tokio::spawn(capture_job(stream, jobs.clone(), profile, idle_timeout));
+                tokio::spawn(capture_job(
+                    stream,
+                    jobs.clone(),
+                    profile,
+                    idle_timeout,
+                    options,
+                ));
             }
             Err(_) => continue,
         }
@@ -87,6 +105,7 @@ async fn capture_job(
     jobs: web::JobStore,
     profile: &'static PrinterProfile,
     idle_timeout: Option<Duration>,
+    options: RenderOptions,
 ) {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 8192];
@@ -99,7 +118,14 @@ async fn capture_job(
                 // Silence for the idle interval completes whatever has arrived.
                 Err(_elapsed) => {
                     if !buffer.is_empty() {
-                        finalize(&jobs, std::mem::take(&mut buffer), profile, "timeout").await;
+                        finalize(
+                            &jobs,
+                            std::mem::take(&mut buffer),
+                            profile,
+                            "timeout",
+                            options,
+                        )
+                        .await;
                         jobs.end_capture().await;
                         receiving = false;
                     }
@@ -128,7 +154,7 @@ async fn capture_job(
     }
     // The connection closed: any remaining bytes are an explicitly completed job.
     if !buffer.is_empty() {
-        finalize(&jobs, buffer, profile, "closed").await;
+        finalize(&jobs, buffer, profile, "closed", options).await;
     }
     if receiving {
         jobs.end_capture().await;
@@ -140,11 +166,16 @@ async fn finalize(
     bytes: Vec<u8>,
     profile: &'static PrinterProfile,
     completion: &'static str,
+    options: RenderOptions,
 ) {
     // Rendering is synchronous and CPU-bound; run it off the async workers so a
     // job in flight cannot stall the web viewer's responses. The blocking task
     // returns the bytes so the exact input can be kept for download.
-    match tokio::task::spawn_blocking(move || (render(&bytes, profile), bytes)).await {
+    match tokio::task::spawn_blocking(move || {
+        (render_with_options(&bytes, profile, &options), bytes)
+    })
+    .await
+    {
         Ok((Ok(rendered), raw_input)) => {
             jobs.replace_captured(rendered, completion, raw_input).await;
         }

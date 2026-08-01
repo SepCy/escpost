@@ -56,69 +56,86 @@ pub(crate) fn glyph_geometry(
     }
 }
 
-/// Rasterize `character` into a 1-bit ink mask covering one profile cell.
-///
-/// The returned vector is row-major, `cell_width_dots × cell_height_dots`, with
-/// `true` where the dot should be inked. The glyph is rasterized at
-/// [`GLYPH_SUPERSAMPLE`]× the cell resolution and each dot is inked when the mean
-/// coverage of its `N × N` samples reaches [`GLYPH_ALPHA_THRESHOLD`], so
-/// horizontal condensation is area-correct rather than nearest-neighbour.
-/// Placement (styling, multipliers) stays with the caller.
-pub(crate) fn glyph_cell_mask(
+/// Rasterize `character` into an 8-bit coverage buffer covering one profile
+/// cell at `out_scale ×` the dot resolution (255 = full ink), row-major. The
+/// caller thresholds it at [`GLYPH_ALPHA_THRESHOLD`] for the faithful 1-bit path
+/// or keeps the coverage for the anti-aliased preview. Placement (styling,
+/// multipliers) stays with the caller.
+pub(crate) fn glyph_cell_coverage(
     character: char,
     cell_width_dots: u32,
     cell_height_dots: u32,
     geometry: &GlyphGeometry,
-) -> Vec<bool> {
-    let cell_width = cell_width_dots as usize;
-    let cell_height = cell_height_dots as usize;
-    let mut mask = vec![false; cell_width * cell_height];
+    out_scale: u32,
+) -> Vec<u8> {
+    sample_cell(
+        character,
+        cell_width_dots,
+        cell_height_dots,
+        geometry,
+        out_scale,
+    )
+}
 
-    let supersample = GLYPH_SUPERSAMPLE as f32;
-    let (metrics, coverage) = default_font().rasterize(character, geometry.font_size * supersample);
+/// Sample the condensed, baseline-placed glyph into a coverage buffer of
+/// `(cell_width_dots × out_scale) × (cell_height_dots × out_scale)` bytes.
+///
+/// Each output sample averages `GLYPH_SUPERSAMPLE²` sub-samples of the glyph
+/// rasterized at `out_scale × GLYPH_SUPERSAMPLE ×` the cell resolution, so the
+/// horizontal condensation is area-correct. At `out_scale = 1` each sample is
+/// one dot; larger scales carry the sub-dot detail the AA preview needs.
+fn sample_cell(
+    character: char,
+    cell_width_dots: u32,
+    cell_height_dots: u32,
+    geometry: &GlyphGeometry,
+    out_scale: u32,
+) -> Vec<u8> {
+    let out_width = (cell_width_dots * out_scale) as usize;
+    let out_height = (cell_height_dots * out_scale) as usize;
+    let mut out = vec![0u8; out_width * out_height];
+
+    let render_super = (out_scale * GLYPH_SUPERSAMPLE) as f32;
+    let (metrics, coverage) =
+        default_font().rasterize(character, geometry.font_size * render_super);
     if metrics.width == 0 || metrics.height == 0 {
-        return mask;
+        return out;
     }
 
-    // Work in cell-dot space; the supersampled bitmap has `supersample` samples
-    // per dot. Centre the condensed ink horizontally and place it on the
-    // resolved baseline vertically.
-    let ink_width_dots = metrics.width as f32 / supersample;
-    let horizontal_padding = (cell_width as f32 - ink_width_dots * geometry.condense) / 2.0;
-    let glyph_top =
-        geometry.baseline_dots as f32 - (metrics.ymin as f32 + metrics.height as f32) / supersample;
+    // Work in cell-dot space; the rasterized bitmap has `render_super` samples
+    // per dot. Centre the condensed ink horizontally, place it on the baseline.
+    let ink_width_dots = metrics.width as f32 / render_super;
+    let horizontal_padding = (cell_width_dots as f32 - ink_width_dots * geometry.condense) / 2.0;
+    let glyph_top = geometry.baseline_dots as f32
+        - (metrics.ymin as f32 + metrics.height as f32) / render_super;
 
-    let samples_per_dot = GLYPH_SUPERSAMPLE * GLYPH_SUPERSAMPLE;
-    let ink_threshold = GLYPH_ALPHA_THRESHOLD as u32 * samples_per_dot;
-    for dy in 0..cell_height {
-        for dx in 0..cell_width {
-            // Average the N×N samples covering this dot. Samples that fall
-            // outside the glyph count as blank, so the mean is the dot's true
-            // coverage.
+    let out_scale_f = out_scale as f32;
+    let sub = GLYPH_SUPERSAMPLE as f32;
+    let denom = GLYPH_SUPERSAMPLE * GLYPH_SUPERSAMPLE;
+    for oy in 0..out_height {
+        for ox in 0..out_width {
             let mut coverage_sum = 0u32;
             for sub_y in 0..GLYPH_SUPERSAMPLE {
-                let out_y = dy as f32 + (sub_y as f32 + 0.5) / supersample;
-                let source_y = ((out_y - glyph_top) * supersample) as i32;
+                let out_y_dot = (oy as f32 + (sub_y as f32 + 0.5) / sub) / out_scale_f;
+                let source_y = ((out_y_dot - glyph_top) * render_super) as i32;
                 if source_y < 0 || source_y as usize >= metrics.height {
                     continue;
                 }
                 let row = source_y as usize * metrics.width;
                 for sub_x in 0..GLYPH_SUPERSAMPLE {
-                    let out_x = dx as f32 + (sub_x as f32 + 0.5) / supersample;
-                    let source_dot = (out_x - horizontal_padding) / geometry.condense;
-                    let source_x = (source_dot * supersample) as i32;
+                    let out_x_dot = (ox as f32 + (sub_x as f32 + 0.5) / sub) / out_scale_f;
+                    let source_dot = (out_x_dot - horizontal_padding) / geometry.condense;
+                    let source_x = (source_dot * render_super) as i32;
                     if source_x < 0 || source_x as usize >= metrics.width {
                         continue;
                     }
                     coverage_sum += coverage[row + source_x as usize] as u32;
                 }
             }
-            if coverage_sum >= ink_threshold {
-                mask[dy * cell_width + dx] = true;
-            }
+            out[oy * out_width + ox] = (coverage_sum / denom) as u8;
         }
     }
-    mask
+    out
 }
 
 /// Pixel size that rasterizes glyphs as tall as the cell without clipping.

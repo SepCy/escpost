@@ -79,7 +79,10 @@ fn test_profile() -> escpost_profiles::PrinterProfile {
 fn options_with(update: impl FnOnce(&mut RenderLimits)) -> RenderOptions {
     let mut limits = RenderLimits::default();
     update(&mut limits);
-    RenderOptions { limits }
+    RenderOptions {
+        limits,
+        ..RenderOptions::default()
+    }
 }
 
 fn assert_limit(

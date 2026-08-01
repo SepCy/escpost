@@ -21,9 +21,27 @@ use escpost_profiles::{Approximation, PrinterProfile};
 use state::PrinterState;
 use surface::encode_png;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RenderOptions {
     pub limits: RenderLimits,
+    /// Subpixels per dot. `1` is dot resolution; `N > 1` renders at `N ×`
+    /// density. Independent of `antialias`.
+    pub scale: u32,
+    /// When `false`, glyph coverage is thresholded to hard dots and the sheet
+    /// encodes as a faithful 1-bit PNG (the printer's real output, used by
+    /// golden tests). When `true`, glyph edges keep their coverage and the sheet
+    /// encodes as an 8-bit grayscale preview — cosmetic only, never what prints.
+    pub antialias: bool,
+}
+
+impl Default for RenderOptions {
+    fn default() -> Self {
+        Self {
+            limits: RenderLimits::default(),
+            scale: 1,
+            antialias: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,7 +107,7 @@ pub fn render_with_options(
     options: &RenderOptions,
 ) -> Result<RenderResult, RenderError> {
     validate_initial_limits(data, profile, &options.limits)?;
-    let mut state = PrinterState::new(profile, options.limits);
+    let mut state = PrinterState::new(profile, options.limits, options.scale, options.antialias);
     let mut offset = 0;
 
     while offset < data.len() {

@@ -45,6 +45,9 @@ pub(crate) struct PrinterState {
     pub(crate) limits: RenderLimits,
     pub(crate) device_events: Vec<DeviceEvent>,
     pub(crate) completed_sheets: Vec<MonoSurface>,
+    // Subpixels per dot and whether glyph edges stay soft (grayscale preview).
+    pub(crate) scale: u32,
+    pub(crate) antialias: bool,
     pub(crate) roll: MonoSurface,
     // Text and ESC * data are composed on a line first because ESC a applies
     // justification when the printer receives the line feed, not per glyph.
@@ -116,7 +119,13 @@ pub(crate) struct PrinterState {
 }
 
 impl PrinterState {
-    pub(crate) fn new(profile: &PrinterProfile, limits: RenderLimits) -> Self {
+    pub(crate) fn new(
+        profile: &PrinterProfile,
+        limits: RenderLimits,
+        scale: u32,
+        antialias: bool,
+    ) -> Self {
+        let scale = scale.max(1);
         let width = profile.geometry.printable_width_dots;
         let default_line_spacing = profile.defaults.line_spacing_dots;
         let font_a = profile.fonts.a.clone();
@@ -133,8 +142,10 @@ impl PrinterState {
             limits,
             device_events: Vec::new(),
             completed_sheets: Vec::new(),
-            roll: MonoSurface::new(width),
-            line: MonoSurface::new(width),
+            scale,
+            antialias,
+            roll: MonoSurface::new(width, scale, antialias),
+            line: MonoSurface::new(width, scale, antialias),
             print_area_left: 0,
             print_area_width: width,
             line_top: 0,
@@ -208,7 +219,7 @@ impl PrinterState {
         // modes. Already committed rows on `roll` represent fed paper and stay.
         self.print_area_left = 0;
         self.print_area_width = self.roll.width;
-        self.line = MonoSurface::new(self.print_area_width);
+        self.line = MonoSurface::new(self.print_area_width, self.scale, self.antialias);
         self.print_x = 0;
         self.line_used_width = 0;
         self.line_has_printable_data = false;
@@ -325,7 +336,7 @@ impl PrinterState {
             .min(self.roll.width.saturating_sub(margin));
         // Line coordinates are relative to the active print area. Rebuilding
         // is safe here because GS L is honored only at the beginning of a line.
-        self.line = MonoSurface::new(self.print_area_width);
+        self.line = MonoSurface::new(self.print_area_width, self.scale, self.antialias);
         self.print_x = 0;
         self.line_used_width = 0;
         self.line_has_printable_data = false;
@@ -342,7 +353,7 @@ impl PrinterState {
             .min(available_width);
         // Keeping the line buffer print-area-sized makes wrapping and
         // justification independent of the physical left margin.
-        self.line = MonoSurface::new(self.print_area_width);
+        self.line = MonoSurface::new(self.print_area_width, self.scale, self.antialias);
         self.print_x = 0;
         self.line_used_width = 0;
         self.line_has_printable_data = false;
@@ -609,7 +620,7 @@ impl PrinterState {
 
         // Function A cuts at the current paper position; it does not add a
         // model-dependent feed-to-cutter distance.
-        let next_roll = MonoSurface::new(self.roll.width);
+        let next_roll = MonoSurface::new(self.roll.width, self.scale, self.antialias);
         self.completed_sheets
             .push(std::mem::replace(&mut self.roll, next_roll));
         self.line_top = 0;

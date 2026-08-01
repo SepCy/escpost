@@ -56,6 +56,16 @@ pub(crate) struct ServeArgs {
     #[arg(long, value_name = "SECONDS", default_value_t = 20.0)]
     pub(crate) idle_timeout: f64,
 
+    /// Preview pixel density: subpixels per dot. 1 is dot resolution; N renders
+    /// at N× density.
+    #[arg(long, value_name = "N", default_value_t = 3)]
+    pub(crate) scale: u32,
+
+    /// Anti-alias glyph edges into a grayscale preview (cosmetic; never what a
+    /// printer emits). Pass --antialias=false for faithful 1-bit dots.
+    #[arg(long, num_args = 0..=1, default_value_t = true, default_missing_value = "true")]
+    pub(crate) antialias: bool,
+
     /// Open the web viewer in the default browser.
     #[arg(long)]
     pub(crate) browser: bool,
@@ -101,6 +111,16 @@ pub(crate) struct RenderArgs {
     /// Rerender a filesystem source whenever it changes.
     #[arg(long)]
     pub(crate) watch: bool,
+
+    /// Output pixel density: subpixels per dot. 1 is dot resolution; N renders
+    /// at N× density.
+    #[arg(long, value_name = "N", default_value_t = 1)]
+    pub(crate) scale: u32,
+
+    /// Anti-alias glyph edges into a grayscale preview (cosmetic; never what a
+    /// printer emits). Pass --antialias for a nicer on-screen render.
+    #[arg(long, num_args = 0..=1, default_value_t = false, default_missing_value = "true")]
+    pub(crate) antialias: bool,
 }
 
 #[derive(Debug, Args)]

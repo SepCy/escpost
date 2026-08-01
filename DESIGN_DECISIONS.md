@@ -683,6 +683,53 @@ real printer does not produce.
   mapping entirely, since the `font` module keeps the glyph-provider boundary
   replaceable.
 
+## DD-029 — Anti-aliased grayscale previews, kept distinct from the faithful dots
+
+**Status:** Accepted
+
+### Context
+
+The 1-bit dot grid is faithful to what a thermal printer prints, but on screen
+its hard-edged glyphs read as harsh — a preview-oriented viewer (`serve`, the
+web viewer) benefits from smoother text. A printer cannot lay down gray, so any
+smoothing is cosmetic and must never be mistaken for real output or leak into
+the golden comparison.
+
+### Decision
+
+The surface stores 8-bit coverage per subpixel at `scale ×` the dot resolution,
+governed by two independent options:
+
+- `scale` — pixel density (subpixels per dot).
+- `antialias` — encoding. When off, glyph coverage is thresholded to hard dots
+  and the sheet packs to a 1-bit PNG; the values are 0/255 so the faithful path
+  is bit-identical to bit-packing and the golden fixtures never move. When on,
+  glyph edges keep their coverage and the sheet encodes as 8-bit grayscale.
+
+Keeping the two orthogonal — rather than deriving anti-aliasing from `scale > 1`
+— removes a hidden coupling and collapses the renderer to a single glyph blit:
+only the final threshold (or not) and the encoder differ. Dot-native content
+(barcodes, `GS v0` bitmaps, reverse fills, underlines) always fills hard blocks,
+since only vector glyphs benefit from smoothing; smoothing a barcode would
+misrepresent it. Reverse video carves glyph coverage out of the ink block, size
+multipliers replicate each subpixel, and emphasis smears one dot — all in the
+one blit.
+
+The library defaults to `scale = 1`, `antialias = false` (faithful), so
+`render()` and every golden test are unaffected. The CLI exposes `--scale <N>`
+and `--antialias[=<bool>]`: `render` defaults to faithful (`1`, off) so its
+artifacts stay true; `serve` defaults to a `3 ×` grayscale preview (nicer out of
+the box), and either can be overridden.
+
+### Consequences
+
+- Previews look markedly smoother without changing what the renderer claims the
+  printer prints; the faithful path and its goldens are byte-for-byte unchanged.
+- Coverage storage costs ~8× the memory of bit-packing on the faithful path —
+  acceptable for receipt-sized sheets, and the simplification is worth it.
+- The grayscale sheet is a cosmetic presentation output; it is never compared
+  against goldens and carries no fidelity guarantee.
+
 ## Open questions
 
 The following are intentionally not decided yet:

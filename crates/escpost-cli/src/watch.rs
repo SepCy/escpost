@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-use escpost::render;
+use escpost::{RenderOptions, render_with_options};
 
 use crate::cli::InputFormat;
 use crate::error::CliError;
@@ -18,6 +18,8 @@ pub(crate) struct WatchConfig {
     pub(crate) output: Option<PathBuf>,
     pub(crate) output_dir: Option<PathBuf>,
     pub(crate) sheet: Option<usize>,
+    pub(crate) scale: u32,
+    pub(crate) antialias: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -69,8 +71,13 @@ async fn run(
 fn rerender(config: &WatchConfig) -> Result<escpost::RenderResult, CliError> {
     let input = source::load(&config.source, config.format)?;
     let profile = profiles::load(&config.profile)?;
-    let rendered =
-        render(&input.bytes, profile).map_err(|error| CliError::Render(error.to_string()))?;
+    let options = RenderOptions {
+        scale: config.scale,
+        antialias: config.antialias,
+        ..RenderOptions::default()
+    };
+    let rendered = render_with_options(&input.bytes, profile, &options)
+        .map_err(|error| CliError::Render(error.to_string()))?;
     if let Some(path) = &config.output {
         output::write_single(&rendered, path, config.sheet)?;
     }

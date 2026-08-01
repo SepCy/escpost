@@ -22,6 +22,9 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("<title>ESCPost render</title>"));
     assert!(response.contains("<div id=\"sheets\""));
     assert!(response.contains("<option value=\"1\" selected>1×</option>"));
+    assert!(response.contains("id=\"margin\""));
+    assert!(response.contains("Paper margin"));
+    assert!(response.contains("id=\"connection\""));
     assert!(response.contains("fetch(\"/api/render\""));
 }
 

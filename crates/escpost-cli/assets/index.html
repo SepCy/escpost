@@ -19,10 +19,73 @@
 
       header {
         display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+
+      .toolbar {
+        display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: 16px;
-        margin-bottom: 20px;
+      }
+
+      /* Title on the left, server status centred on the first line. */
+      .bar {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .bar h1 {
+        justify-self: start;
+      }
+
+      #serverStatus {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: #b8b8b8;
+        font-size: 13px;
+      }
+
+      /* The profile is part of the server status: it is what we render as. */
+      #profile:empty {
+        display: none;
+      }
+
+      #profile:not(:empty)::before {
+        content: "·";
+        margin-right: 10px;
+        color: #6b6b6b;
+      }
+
+      #connection {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #connection::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #6b6b6b;
+      }
+
+      #connection.connected::before {
+        background: #57c964;
+      }
+
+      #connection.offline::before {
+        background: #ff6b6b;
+      }
+
+      #connection.error::before {
+        background: #ffb454;
       }
 
       h1 {
@@ -37,8 +100,17 @@
         font-size: 13px;
       }
 
+      header label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      header input {
+        margin: 0;
+      }
+
       select {
-        margin-left: 6px;
         padding: 4px 8px;
         font: inherit;
       }
@@ -83,10 +155,34 @@
       .receipt {
         display: block;
         max-width: none;
-        background: white;
+        /* Reserve blank paper on top/left/right at all times so toggling the
+           margin only changes its colour and never shifts the receipt. The
+           bottom is left flush because receipt paper feeds continuously. */
+        padding: 16px 16px 0;
+        background-color: transparent;
         image-rendering: pixelated;
         image-rendering: crisp-edges;
         box-shadow: 0 3px 16px rgb(0 0 0 / 45%);
+        transition: background-color 150ms ease;
+      }
+
+      /* The reserved padding reads as unprinted receipt paper when enabled. */
+      #sheets.paper-margin .receipt {
+        background-color: white;
+      }
+
+      /* Briefly tint the margin on enable so its extent is visible. */
+      @keyframes reveal-margin {
+        from {
+          background-color: #7fd1ff;
+        }
+        to {
+          background-color: white;
+        }
+      }
+
+      #sheets.paper-margin.flash .receipt {
+        animation: reveal-margin 600ms ease-out;
       }
 
       #waiting {
@@ -103,23 +199,34 @@
   </head>
   <body>
     <header>
-      <h1>ESCPost render</h1>
-      <label>
-        Zoom
-        <select id="zoom">
-          <option value="1" selected>1×</option>
-          <option value="2">2×</option>
-          <option value="4">4×</option>
-          <option value="8">8×</option>
-        </select>
-      </label>
-      <span id="status"></span>
+      <div class="bar">
+        <h1>ESCPost render</h1>
+        <div id="serverStatus">
+          <span id="connection">Connecting…</span>
+          <span id="profile"></span>
+        </div>
+      </div>
+      <div class="toolbar">
+        <label>
+          Zoom
+          <select id="zoom">
+            <option value="1" selected>1×</option>
+            <option value="2">2×</option>
+            <option value="4">4×</option>
+            <option value="8">8×</option>
+          </select>
+        </label>
+        <label>
+          <input type="checkbox" id="margin">
+          Paper margin
+        </label>
+      </div>
     </header>
 
     <main id="viewport">
       <div id="sheets" aria-live="polite"></div>
       <p id="waiting" aria-live="polite"></p>
-      <p id="error">The rendering is currently unavailable.</p>
+      <p id="error"></p>
     </main>
 
     <script>
@@ -127,8 +234,35 @@
       const waiting = document.querySelector("#waiting");
       const error = document.querySelector("#error");
       const zoom = document.querySelector("#zoom");
-      const status = document.querySelector("#status");
+      const margin = document.querySelector("#margin");
+      const profile = document.querySelector("#profile");
+      const connection = document.querySelector("#connection");
+      const serverAddress = window.location.host;
       let currentRendering = "";
+
+      // Server-connection indicator: connected | error | offline. Always names
+      // the address the viewer is talking to.
+      function setConnection(state, detail) {
+        connection.className = state;
+        connection.textContent = `${serverAddress} · ${detail}`;
+      }
+
+      let flashTimer;
+
+      function applyMargin() {
+        // The class lives on the persistent container, so it also styles sheets
+        // added by later renders without reapplying per sheet.
+        sheets.classList.toggle("paper-margin", margin.checked);
+      }
+
+      function flashMargin() {
+        // Remove and re-add so the animation restarts on repeated toggles.
+        sheets.classList.remove("flash");
+        void sheets.offsetWidth;
+        sheets.classList.add("flash");
+        window.clearTimeout(flashTimer);
+        flashTimer = window.setTimeout(() => sheets.classList.remove("flash"), 650);
+      }
 
       function applyZoom() {
         for (const image of sheets.querySelectorAll(".receipt")) {
@@ -137,12 +271,23 @@
         }
       }
 
+      function showError(message) {
+        error.textContent = message;
+        error.style.display = "block";
+      }
+
+      function clearError() {
+        error.textContent = "";
+        error.style.display = "none";
+      }
+
       function showRendering(rendering, cacheKey) {
+        // A render error (e.g. malformed ESC/POS) is distinct from the server
+        // being unreachable, which refresh() reports separately.
         if (rendering.error) {
-          error.textContent = rendering.error;
-          error.style.display = "block";
+          showError(`Render error: ${rendering.error}`);
         } else {
-          error.style.display = "none";
+          clearError();
         }
 
         const identity = String(rendering.generation);
@@ -156,7 +301,7 @@
           sheets.replaceChildren();
           waiting.textContent = rendering.hint;
           waiting.style.display = "block";
-          status.textContent = "Waiting";
+          profile.textContent = "";
           return;
         }
         waiting.style.display = "none";
@@ -166,9 +311,9 @@
             createSheet(sheet, rendering.sheets.length, cacheKey)
           )
         );
-        status.textContent =
-          `${rendering.profile} · ${rendering.sheets.length} ` +
-          `${rendering.sheets.length === 1 ? "sheet" : "sheets"}`;
+        // The profile is shown with the server status; the sheet count is
+        // obvious from the rendered sheets themselves.
+        profile.textContent = rendering.profile;
       }
 
       function createSheet(sheet, sheetCount, cacheKey) {
@@ -200,17 +345,61 @@
         try {
           const response = await fetch("/api/render", { cache: "no-store" });
           if (!response.ok) {
-            throw new Error(`render request returned ${response.status}`);
+            setConnection("error", `Server error (HTTP ${response.status})`);
+            return;
           }
+          setConnection("connected", "Connected");
           showRendering(await response.json(), cacheKey);
           applyZoom();
         } catch {
-          status.textContent = "";
-          error.style.display = "block";
+          // fetch throws when the server is unreachable — stopped, restarted, or
+          // the connection dropped. The 0.75 s poll keeps trying, so recovery is
+          // automatic once it is back. The last render stays on screen.
+          setConnection("offline", "Offline, reconnecting…");
         }
       }
 
-      zoom.addEventListener("change", applyZoom);
+      const ZOOM_KEY = "escpost.zoom";
+      const MARGIN_KEY = "escpost.margin";
+
+      function readSetting(key) {
+        try {
+          return localStorage.getItem(key);
+        } catch {
+          return null;
+        }
+      }
+
+      function writeSetting(key, value) {
+        try {
+          localStorage.setItem(key, value);
+        } catch {
+          // Ignore storage failures; the setting just will not persist.
+        }
+      }
+
+      // Restore saved settings. Zoom defaults to 1× and the margin is on unless
+      // it was previously turned off.
+      const storedZoom = readSetting(ZOOM_KEY);
+      if (storedZoom !== null) {
+        zoom.value = storedZoom;
+      }
+      const storedMargin = readSetting(MARGIN_KEY);
+      margin.checked = storedMargin === null ? true : storedMargin === "true";
+
+      zoom.addEventListener("change", () => {
+        writeSetting(ZOOM_KEY, zoom.value);
+        applyZoom();
+      });
+      margin.addEventListener("change", () => {
+        writeSetting(MARGIN_KEY, String(margin.checked));
+        applyMargin();
+        if (margin.checked) {
+          flashMargin();
+        }
+      });
+      applyMargin();
+      setConnection("", "Connecting…");
       refresh();
       window.setInterval(refresh, 750);
     </script>

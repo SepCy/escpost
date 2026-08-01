@@ -604,6 +604,58 @@ instead of moving them into the renderer.
 - Reusable physical printing becomes its own crate with its own dependency
   profile, extracted only when a second consumer exists.
 
+## DD-028 — Condense representative glyphs to fill the profile cell
+
+**Status:** Accepted
+
+### Context
+
+The bundled font (DD-023) is rasterized at `font_size = cell_height_dots` so
+glyphs fill the cell vertically. Noto Sans Mono advances 0.6 em, which is 14.4
+dots in the NT-5890K's 12-dot cell, so drawn one-to-one the wide glyphs overflow
+their cell and print glued to their neighbours with no separating white space.
+
+Three fixes were considered: clip the overflow (crops the sides off wide
+glyphs), uniformly scale each glyph down (preserves proportions but shrinks the
+text and leaves the cell underfilled vertically), or condense horizontally
+(keeps full cell height, squeezes width to fit). A tempting fourth — measuring
+each glyph and scaling it individually — was rejected outright: a per-glyph
+scale factor makes stroke weights and proportions vary across a line and breaks
+the monospace grid.
+
+### Decision
+
+Condense every glyph horizontally by a single font-wide factor so its advance
+box coincides with the profile cell. The glyph then fills the cell in both axes
+and retains its designed side bearings, so adjacent glyphs stop colliding
+without reserving any artificial inter-glyph gutter.
+
+The factor is one constant applied to every glyph, derived at runtime from the
+font's own advance metric (`fontdue` advance width ÷ em, measured once and
+memoized). It is never computed from an individual glyph's ink, and profiles
+remain authoritative for cell size and advancement (consistent with DD-023).
+
+Emphasized text (`ESC E`) stays a one-dot horizontal double-strike of the base
+glyph, modeling the printer firmware's mechanism rather than swapping in a
+separately designed bold weight, which would diverge from the dots the device
+lays down.
+
+Full-bleed glyphs whose ink spans the whole advance (`_`, `%`) therefore touch
+consecutive copies of themselves. Physical printing on the NT-5890K confirms
+this matches hardware: a run of underscores renders as one continuous rule, so
+an earlier `cell_width - 1` gutter idea was rejected as it would insert gaps the
+real printer does not produce.
+
+### Consequences
+
+- Wide glyphs are no longer cropped, and normal text no longer prints glued.
+- Replacing the bundled font needs no code change: the condense factor recomputes
+  itself from whatever font is embedded.
+- The condense is a deliberate rendering change, so its golden PNG fixtures were
+  re-blessed after visual review (DD-023's pixel-fixture rule).
+- A profile that later selects a printer-specific bitmap atlas can bypass
+  condensing entirely, since the glyph-provider boundary stays replaceable.
+
 ## Open questions
 
 The following are intentionally not decided yet:

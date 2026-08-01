@@ -19,6 +19,42 @@ const DEFAULT_FONT_BYTES: &[u8] =
     include_bytes!("../../../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
 const GLYPH_ALPHA_THRESHOLD: u8 = 128;
 
+/// Horizontal condensation factor that maps the bundled font's natural advance
+/// onto the profile cell width.
+///
+/// The font is rasterized at `font_size = cell_height_dots` so glyphs fill the
+/// cell vertically. At that size the font's monospace advance is wider than the
+/// profile cell (Noto Sans Mono advances 0.6 em, i.e. 14.4 dots in a 12-dot
+/// cell), so drawn one-to-one, wide glyphs overflow their cell and touch their
+/// neighbours. Condensing every glyph horizontally by this factor makes the
+/// advance box coincide with the cell: the font then fills the cell in both
+/// axes and keeps its designed side bearings, so glyphs no longer collide.
+///
+/// The same factor is applied to every glyph (never a per-glyph measurement),
+/// so the monospace grid stays regular. It is derived from the font's own
+/// advance metric, so replacing the bundled font needs no code change.
+fn glyph_condense_factor(cell_width_dots: u32, font_size: f32) -> f32 {
+    let natural_advance = font_advance_ratio() * font_size;
+    if natural_advance <= f32::EPSILON {
+        return 1.0;
+    }
+    cell_width_dots as f32 / natural_advance
+}
+
+/// The bundled font's advance width expressed as a fraction of its em, measured
+/// once from the font itself. Advance scales linearly with `font_size`, so this
+/// dimensionless ratio is size-independent and cached for the whole process.
+fn font_advance_ratio() -> f32 {
+    static RATIO: OnceLock<f32> = OnceLock::new();
+    *RATIO.get_or_init(|| {
+        // Any glyph works for a monospace font; measure at a large size for
+        // precision. `metrics` reads the precomputed advance without
+        // rasterizing pixels, so this is a cheap one-time lookup.
+        const REFERENCE_EM: f32 = 1000.0;
+        default_font().metrics('M', REFERENCE_EM).advance_width / REFERENCE_EM
+    })
+}
+
 impl PrinterState {
     pub(crate) fn print_byte(&mut self, byte: u8, offset: usize) -> Result<(), RenderError> {
         // The ESC t operand is printer-specific. The profile translates that
@@ -81,14 +117,14 @@ impl PrinterState {
 
         let font_size = self.active_font.cell_height_dots as f32;
         let (metrics, bitmap) = default_font().rasterize(character, font_size);
-        // The bundled font supplies stable glyph shapes, while printer profile
-        // cells remain authoritative for clipping, centering, and advancement.
-        let horizontal_crop = metrics
-            .width
-            .saturating_sub(self.active_font.cell_width_dots as usize)
-            / 2;
-        let horizontal_padding =
-            (self.active_font.cell_width_dots as usize).saturating_sub(metrics.width) / 2;
+        // The bundled font supplies stable glyph shapes; the profile cell stays
+        // authoritative for size, spacing, and advancement. Condense every glyph
+        // horizontally by the same font-wide factor so its advance box fills the
+        // cell width instead of overflowing into the next cell.
+        let condense = glyph_condense_factor(self.active_font.cell_width_dots, font_size);
+        let cell_width_dots = self.active_font.cell_width_dots as usize;
+        // Left padding, in cell dots, that centres the condensed ink in the cell.
+        let horizontal_padding = (cell_width_dots as f32 - metrics.width as f32 * condense) / 2.0;
         let glyph_top =
             self.active_font.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
 
@@ -98,10 +134,17 @@ impl PrinterState {
                 continue;
             }
 
-            for source_x in horizontal_crop..metrics.width {
-                let destination_x = horizontal_padding + source_x - horizontal_crop;
-                if destination_x >= self.active_font.cell_width_dots as usize {
-                    break;
+            for destination_x in 0..cell_width_dots {
+                // Map the centre of this cell column back to a source ink column.
+                // Sampling per destination column keeps the condensed glyph
+                // gap-free whichever way the factor scales it.
+                let source_x_f = (destination_x as f32 + 0.5 - horizontal_padding) / condense;
+                if source_x_f < 0.0 {
+                    continue;
+                }
+                let source_x = source_x_f as usize;
+                if source_x >= metrics.width {
+                    continue;
                 }
                 if bitmap[source_y * metrics.width + source_x] < GLYPH_ALPHA_THRESHOLD {
                     continue;
@@ -116,6 +159,13 @@ impl PrinterState {
                         } else {
                             self.line.print_dot(x, y);
                         }
+                        // ESC E emphasis is a firmware double-strike: the printer
+                        // re-strikes the same ROM glyph one dot to the right,
+                        // thickening it horizontally. Smearing the base ink by one
+                        // dot models that mechanism faithfully rather than swapping
+                        // in a separately-designed bold weight, which would diverge
+                        // from the dots the device actually lays down. It stops at
+                        // the cell's right edge so bold stays within its own cell.
                         if self.emphasized && x + 1 < self.print_x.saturating_add(cell_width) {
                             if self.reversed {
                                 self.line.clear_dot(x + 1, y);
@@ -160,8 +210,11 @@ pub(crate) fn render_hri(data: &[char], font: &ProfileFont) -> MonoSurface {
     for (character_index, character) in data.iter().copied().enumerate() {
         let font_size = font.cell_height_dots as f32;
         let (metrics, bitmap) = default_font().rasterize(character, font_size);
-        let horizontal_crop = metrics.width.saturating_sub(font.cell_width_dots as usize) / 2;
-        let horizontal_padding = (font.cell_width_dots as usize).saturating_sub(metrics.width) / 2;
+        // Condense every glyph horizontally onto the cell, matching how printed
+        // text is rendered so HRI labels share the same glyph shapes.
+        let condense = glyph_condense_factor(font.cell_width_dots, font_size);
+        let cell_width_dots = font.cell_width_dots as usize;
+        let horizontal_padding = (cell_width_dots as f32 - metrics.width as f32 * condense) / 2.0;
         let glyph_top = font.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
         let cell_left = character_index as u32 * font.cell_width_dots;
 
@@ -170,10 +223,14 @@ pub(crate) fn render_hri(data: &[char], font: &ProfileFont) -> MonoSurface {
             if destination_y < 0 || destination_y >= font.cell_height_dots as i32 {
                 continue;
             }
-            for source_x in horizontal_crop..metrics.width {
-                let destination_x = horizontal_padding + source_x - horizontal_crop;
-                if destination_x >= font.cell_width_dots as usize {
-                    break;
+            for destination_x in 0..cell_width_dots {
+                let source_x_f = (destination_x as f32 + 0.5 - horizontal_padding) / condense;
+                if source_x_f < 0.0 {
+                    continue;
+                }
+                let source_x = source_x_f as usize;
+                if source_x >= metrics.width {
+                    continue;
                 }
                 if bitmap[source_y * metrics.width + source_x] >= GLYPH_ALPHA_THRESHOLD {
                     surface.print_dot(cell_left + destination_x as u32, destination_y as u32);

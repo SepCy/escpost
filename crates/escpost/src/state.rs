@@ -457,6 +457,9 @@ impl PrinterState {
         }
     }
 
+    /// Emphasized text is rendered as a one-dot horizontal double-strike of the
+    /// base glyph, matching how printer firmware implements `ESC E`. See the
+    /// smear in `text.rs::print_character`.
     pub(crate) fn set_emphasis(&mut self, emphasized: bool) {
         self.emphasized = emphasized;
     }

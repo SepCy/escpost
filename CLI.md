@@ -579,9 +579,11 @@ The initial implementation is narrower than the contract above. `--profile`
 defaults to `REFERENCE`, and both listeners auto-select a free loopback port
 when no address is given. It frames one job per connection using connection
 close and previews only the most recent job — replacing the previous one rather
-than keeping a history. Before the first job the viewer shows where to send
-data. `FF`/cut boundaries, persistent-connection jobs, retention limits, a
-health endpoint, and raw-input download are planned.
+than keeping a history. A job's `GS V` cuts appear as its ordered sheets. The
+web server answers `GET /health` with `200 ok` for container and test probes.
+Before the first job the viewer shows where to send data. Standard-mode `FF`
+job boundaries, persistent-connection jobs, an idle timeout, retention limits,
+and raw-input download are planned.
 
 ## Other commands
 

@@ -29,6 +29,19 @@ fn web_mode_serves_the_embedded_workbench() {
 }
 
 #[test]
+fn health_endpoint_reports_ok() {
+    let port = unused_loopback_port();
+    let mut child = start_case_web("text/ascii-fonts-and-styles", port);
+
+    wait_until_listening(&mut child, port);
+    let response = http_get_bytes(port, "/health");
+    stop(&mut child);
+
+    assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+    assert_eq!(response_body(&response), b"ok");
+}
+
+#[test]
 fn web_mode_exposes_ordered_sheet_metadata_and_png_bytes() {
     let port = unused_loopback_port();
     let case = "mechanism/reference-full-and-partial-cuts";

@@ -190,6 +190,7 @@ pub(crate) async fn serve(
 
     let router = Router::new()
         .route("/", get(index))
+        .route("/health", get(health))
         .route("/api/render", get(current_render))
         .route("/sheets/{file}", get(sheet_png))
         .with_state(jobs);
@@ -201,6 +202,12 @@ pub(crate) async fn serve(
 
 async fn index() -> Html<&'static str> {
     Html(INDEX_HTML)
+}
+
+/// Liveness check for containers and automated tests. Returns 200 while the
+/// server is accepting requests, independent of whether any job was captured.
+async fn health() -> &'static str {
+    "ok"
 }
 
 async fn current_render(State(jobs): State<JobStore>) -> Json<RenderResponse> {

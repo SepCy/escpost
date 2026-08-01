@@ -178,7 +178,7 @@ render and does not require a profile.
 - [x] Expose the captured job and its ordered PNG sheets in the web interface.
 - [x] Allow separate configuration of the RAW printer port and HTTP port.
 - [ ] Apply input, rendered-dot, sheet-count, connection, and retention limits.
-- [ ] Provide a health endpoint suitable for containers and automated tests.
+- [x] Provide a health endpoint suitable for containers and automated tests.
 
 Port 9100 is the common RAW/AppSocket transport used by network printers. It is
 not an ESC/POS-defined job protocol and provides no authentication or
@@ -201,7 +201,9 @@ They must not be conflated.
 
 - [x] Treat a TCP connection close as the default end of the active job.
 - [ ] Treat Standard-mode `FF` as an explicit ESC/POS job boundary.
-- [ ] Treat full and partial cuts as sheet boundaries within a job.
+- [x] Treat full and partial cuts as sheet boundaries within a job. The
+      renderer already splits `GS V` cuts into separate sheets, so a captured
+      job's cuts appear as its ordered sheets without extra serve handling.
 - [ ] Support multiple explicitly completed jobs on one persistent connection.
 - [ ] Offer an optional idle timeout for clients that keep a connection open
       without sending an explicit job terminator.
@@ -501,7 +503,7 @@ would target.
       `render --web`.
 - [x] Show live ordered sheets, with a waiting hint before the first job.
 - [ ] Offer the captured job's raw input as a download.
-- [ ] Add container health and transport-fragmentation tests.
+- [x] Add container health and transport-fragmentation tests.
 
 ### Phase 3: inspection
 

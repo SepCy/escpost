@@ -83,6 +83,30 @@ fn serve_viewer_shows_instructions_before_the_first_job() {
 }
 
 #[test]
+fn serve_reassembles_a_job_sent_one_byte_at_a_time() {
+    let mut child = start_serve_on_ephemeral_ports();
+    let (raw_port, web_port) = read_listen_ports(&mut child);
+    wait_until_listening(&mut child, raw_port);
+    wait_until_listening(&mut child, web_port);
+
+    // Deliver the receipt one byte per write so the server must reassemble the
+    // job across many reads, as it would with a fragmenting client.
+    send_raw_job_one_byte_at_a_time(raw_port, b"Fragmented receipt\n");
+
+    let metadata = wait_for_first_job(web_port);
+    assert!(
+        !metadata["sheets"]
+            .as_array()
+            .expect("sheets should be an array")
+            .is_empty(),
+        "a byte-by-byte job should still render"
+    );
+    let png = response_body(&http_get_bytes(web_port, "/sheets/1.png")).to_vec();
+    stop(&mut child);
+    assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+}
+
+#[test]
 fn serve_defaults_the_profile_to_reference() {
     // No --profile: a virtual printer should preview with REFERENCE.
     let mut child = start_serve(&["--listen", "127.0.0.1:0", "--web-listen", "127.0.0.1:0"]);
@@ -188,6 +212,35 @@ fn raw_send_once(port: u16, bytes: &[u8]) -> std::io::Result<()> {
     stream.write_all(bytes)?;
     // Dropping the stream closes the connection, completing the job.
     Ok(())
+}
+
+fn send_raw_job_one_byte_at_a_time(port: u16, bytes: &[u8]) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut stream = loop {
+        match TcpStream::connect((Ipv4Addr::LOCALHOST, port)) {
+            Ok(stream) => break stream,
+            Err(error) => {
+                assert!(
+                    Instant::now() < deadline,
+                    "the RAW printer never accepted data: {error}"
+                );
+                thread::sleep(Duration::from_millis(25));
+            }
+        }
+    };
+    // Disable Nagle and flush each byte so the writes reach the server as
+    // separate reads rather than one coalesced buffer.
+    stream
+        .set_nodelay(true)
+        .expect("nodelay should be settable on loopback");
+    for byte in bytes {
+        stream
+            .write_all(&[*byte])
+            .expect("each byte should be writable");
+        stream.flush().expect("each byte should flush");
+        thread::sleep(Duration::from_millis(1));
+    }
+    // Dropping the stream closes the connection, completing the job.
 }
 
 fn wait_for_first_job(web_port: u16) -> serde_json::Value {

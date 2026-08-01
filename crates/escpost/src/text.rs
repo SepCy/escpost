@@ -1,5 +1,6 @@
-//! Character decoding and glyph rasterization.
+//! Character decoding and glyph placement.
 
+use crate::font::{self, GLYPH_ALPHA_THRESHOLD};
 use crate::state::PrinterState;
 use crate::surface::MonoSurface;
 use crate::{RenderError, international};
@@ -8,52 +9,10 @@ use encoding_rs::{
     WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
 };
 use escpost_profiles::Font as ProfileFont;
-use fontdue::{Font, FontSettings};
 use oem_cp::{
     Cp437, Cp720, Cp737, Cp775, Cp850, Cp852, Cp855, Cp857, Cp858, Cp860, Cp861, Cp862, Cp863,
     Cp864, Cp865, Cp866, Cp869, Cp874,
 };
-use std::sync::OnceLock;
-
-const DEFAULT_FONT_BYTES: &[u8] =
-    include_bytes!("../../../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
-const GLYPH_ALPHA_THRESHOLD: u8 = 128;
-
-/// Horizontal condensation factor that maps the bundled font's natural advance
-/// onto the profile cell width.
-///
-/// The font is rasterized at `font_size = cell_height_dots` so glyphs fill the
-/// cell vertically. At that size the font's monospace advance is wider than the
-/// profile cell (Noto Sans Mono advances 0.6 em, i.e. 14.4 dots in a 12-dot
-/// cell), so drawn one-to-one, wide glyphs overflow their cell and touch their
-/// neighbours. Condensing every glyph horizontally by this factor makes the
-/// advance box coincide with the cell: the font then fills the cell in both
-/// axes and keeps its designed side bearings, so glyphs no longer collide.
-///
-/// The same factor is applied to every glyph (never a per-glyph measurement),
-/// so the monospace grid stays regular. It is derived from the font's own
-/// advance metric, so replacing the bundled font needs no code change.
-fn glyph_condense_factor(cell_width_dots: u32, font_size: f32) -> f32 {
-    let natural_advance = font_advance_ratio() * font_size;
-    if natural_advance <= f32::EPSILON {
-        return 1.0;
-    }
-    cell_width_dots as f32 / natural_advance
-}
-
-/// The bundled font's advance width expressed as a fraction of its em, measured
-/// once from the font itself. Advance scales linearly with `font_size`, so this
-/// dimensionless ratio is size-independent and cached for the whole process.
-fn font_advance_ratio() -> f32 {
-    static RATIO: OnceLock<f32> = OnceLock::new();
-    *RATIO.get_or_init(|| {
-        // Any glyph works for a monospace font; measure at a large size for
-        // precision. `metrics` reads the precomputed advance without
-        // rasterizing pixels, so this is a cheap one-time lookup.
-        const REFERENCE_EM: f32 = 1000.0;
-        default_font().metrics('M', REFERENCE_EM).advance_width / REFERENCE_EM
-    })
-}
 
 impl PrinterState {
     pub(crate) fn print_byte(&mut self, byte: u8, offset: usize) -> Result<(), RenderError> {
@@ -90,7 +49,7 @@ impl PrinterState {
         };
         // fontdue uses glyph index zero for the font's generic .notdef box.
         // Report it instead of silently making unrelated scripts look equal.
-        if default_font().lookup_glyph_index(character) == 0 {
+        if font::default_font().lookup_glyph_index(character) == 0 {
             return Err(RenderError::MissingGlyph { character, offset });
         }
 
@@ -115,18 +74,21 @@ impl PrinterState {
             }
         }
 
-        let font_size = self.active_font.cell_height_dots as f32;
-        let (metrics, bitmap) = default_font().rasterize(character, font_size);
         // The bundled font supplies stable glyph shapes; the profile cell stays
-        // authoritative for size, spacing, and advancement. Condense every glyph
-        // horizontally by the same font-wide factor so its advance box fills the
-        // cell width instead of overflowing into the next cell.
-        let condense = glyph_condense_factor(self.active_font.cell_width_dots, font_size);
+        // authoritative for size, spacing, and advancement. The geometry picks the
+        // rasterization size that fits the cell, condenses every glyph onto the
+        // cell width, and resolves the baseline that keeps descenders inside.
+        let geometry = font::glyph_geometry(
+            self.active_font.cell_width_dots,
+            self.active_font.cell_height_dots,
+            self.active_font.baseline_dots,
+        );
+        let (metrics, bitmap) = font::default_font().rasterize(character, geometry.font_size);
         let cell_width_dots = self.active_font.cell_width_dots as usize;
         // Left padding, in cell dots, that centres the condensed ink in the cell.
-        let horizontal_padding = (cell_width_dots as f32 - metrics.width as f32 * condense) / 2.0;
-        let glyph_top =
-            self.active_font.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
+        let horizontal_padding =
+            (cell_width_dots as f32 - metrics.width as f32 * geometry.condense) / 2.0;
+        let glyph_top = geometry.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
 
         for source_y in 0..metrics.height {
             let destination_y = glyph_top + source_y as i32;
@@ -138,7 +100,8 @@ impl PrinterState {
                 // Map the centre of this cell column back to a source ink column.
                 // Sampling per destination column keeps the condensed glyph
                 // gap-free whichever way the factor scales it.
-                let source_x_f = (destination_x as f32 + 0.5 - horizontal_padding) / condense;
+                let source_x_f =
+                    (destination_x as f32 + 0.5 - horizontal_padding) / geometry.condense;
                 if source_x_f < 0.0 {
                     continue;
                 }
@@ -202,29 +165,35 @@ impl PrinterState {
     }
 }
 
-pub(crate) fn render_hri(data: &[char], font: &ProfileFont) -> MonoSurface {
-    let width = (data.len() as u32).saturating_mul(font.cell_width_dots);
+pub(crate) fn render_hri(data: &[char], profile_font: &ProfileFont) -> MonoSurface {
+    let width = (data.len() as u32).saturating_mul(profile_font.cell_width_dots);
     let mut surface = MonoSurface::new(width);
-    surface.ensure_height(font.cell_height_dots);
+    surface.ensure_height(profile_font.cell_height_dots);
+
+    // Condense and place glyphs exactly like printed text so HRI labels share the
+    // same shapes; the geometry is constant across the label.
+    let geometry = font::glyph_geometry(
+        profile_font.cell_width_dots,
+        profile_font.cell_height_dots,
+        profile_font.baseline_dots,
+    );
+    let cell_width_dots = profile_font.cell_width_dots as usize;
 
     for (character_index, character) in data.iter().copied().enumerate() {
-        let font_size = font.cell_height_dots as f32;
-        let (metrics, bitmap) = default_font().rasterize(character, font_size);
-        // Condense every glyph horizontally onto the cell, matching how printed
-        // text is rendered so HRI labels share the same glyph shapes.
-        let condense = glyph_condense_factor(font.cell_width_dots, font_size);
-        let cell_width_dots = font.cell_width_dots as usize;
-        let horizontal_padding = (cell_width_dots as f32 - metrics.width as f32 * condense) / 2.0;
-        let glyph_top = font.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
-        let cell_left = character_index as u32 * font.cell_width_dots;
+        let (metrics, bitmap) = font::default_font().rasterize(character, geometry.font_size);
+        let horizontal_padding =
+            (cell_width_dots as f32 - metrics.width as f32 * geometry.condense) / 2.0;
+        let glyph_top = geometry.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
+        let cell_left = character_index as u32 * profile_font.cell_width_dots;
 
         for source_y in 0..metrics.height {
             let destination_y = glyph_top + source_y as i32;
-            if destination_y < 0 || destination_y >= font.cell_height_dots as i32 {
+            if destination_y < 0 || destination_y >= profile_font.cell_height_dots as i32 {
                 continue;
             }
             for destination_x in 0..cell_width_dots {
-                let source_x_f = (destination_x as f32 + 0.5 - horizontal_padding) / condense;
+                let source_x_f =
+                    (destination_x as f32 + 0.5 - horizontal_padding) / geometry.condense;
                 if source_x_f < 0.0 {
                     continue;
                 }
@@ -239,15 +208,6 @@ pub(crate) fn render_hri(data: &[char], font: &ProfileFont) -> MonoSurface {
         }
     }
     surface
-}
-
-fn default_font() -> &'static Font {
-    static DEFAULT_FONT: OnceLock<Font> = OnceLock::new();
-
-    DEFAULT_FONT.get_or_init(|| {
-        Font::from_bytes(DEFAULT_FONT_BYTES, FontSettings::default())
-            .expect("the bundled Noto Sans Mono font must remain valid")
-    })
 }
 
 fn is_supported_code_page_encoding(encoding: &str) -> bool {

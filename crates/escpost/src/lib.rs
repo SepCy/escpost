@@ -4,6 +4,7 @@ mod barcode;
 mod command;
 mod databar;
 mod error;
+mod font;
 mod graphics;
 mod international;
 mod qr;

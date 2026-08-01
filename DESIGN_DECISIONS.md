@@ -635,6 +635,22 @@ font's own advance metric (`fontdue` advance width ÷ em, measured once and
 memoized). It is never computed from an individual glyph's ink, and profiles
 remain authoritative for cell size and advancement (consistent with DD-023).
 
+The vertical axis is fitted the same way. `font_size` sets the em, but glyph ink
+(descenders, accents) can extend past it, so a font can still overflow a cell
+rasterized at its height — the bundled font's descenders are deeper than the ROM
+font a profile was measured against, which clipped `g`/`y`/`p`. Two font-wide
+measurements, taken once from the font, resolve this: the rasterization size is
+reduced when the ink is taller than the em so the ink box matches the cell, and
+the baseline is kept at the profile value unless descenders would still clip, in
+which case it is lowered just enough to admit them. Both are uniform repositions
+or scales — never per-glyph, and never a non-proportional squeeze of the
+descender alone.
+
+The font provider and this whole family of derived measures (advance ratio, ink
+extents, condense factor, fitted size, effective baseline) live in a dedicated
+`font` module. That module *is* the replaceable glyph-provider boundary DD-023
+calls for; glyph placement in `text.rs` only consumes the resolved geometry.
+
 Emphasized text (`ESC E`) stays a one-dot horizontal double-strike of the base
 glyph, modeling the printer firmware's mechanism rather than swapping in a
 separately designed bold weight, which would diverge from the dots the device
@@ -648,13 +664,15 @@ real printer does not produce.
 
 ### Consequences
 
-- Wide glyphs are no longer cropped, and normal text no longer prints glued.
-- Replacing the bundled font needs no code change: the condense factor recomputes
-  itself from whatever font is embedded.
-- The condense is a deliberate rendering change, so its golden PNG fixtures were
+- Wide glyphs are no longer cropped, normal text no longer prints glued, and
+  descenders are no longer clipped.
+- Replacing the bundled font needs no code change: every factor — horizontal and
+  vertical — recomputes itself from whatever font is embedded.
+- The change is a deliberate rendering change, so its golden PNG fixtures were
   re-blessed after visual review (DD-023's pixel-fixture rule).
-- A profile that later selects a printer-specific bitmap atlas can bypass
-  condensing entirely, since the glyph-provider boundary stays replaceable.
+- A profile that later selects a printer-specific bitmap atlas can bypass this
+  mapping entirely, since the `font` module keeps the glyph-provider boundary
+  replaceable.
 
 ## Open questions
 

@@ -198,6 +198,11 @@
         display: flex;
         flex-wrap: wrap;
         align-items: flex-start;
+        /* Centre each row and wrap to the next line when a row runs out of
+           horizontal space. "safe" falls back to start-alignment when a sheet
+           is wider than the viewport (e.g. at high zoom) so its left edge stays
+           scrollable rather than being clipped. */
+        justify-content: safe center;
         gap: 24px;
       }
 

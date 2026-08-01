@@ -10,17 +10,36 @@ Current component boundaries and implementation structure belong in
 details in `PROFILE_SCHEMA.md`; and repository, tooling, licensing, release,
 and contribution process in their corresponding project documents.
 
-Decision numbers are stable and may contain gaps when an entry is relocated
-outside this document's scope.
+Decision numbers are stable and may contain gaps when an entry is removed,
+merged, or relocated outside this document's scope.
 
 Each decision has a status:
 
-- **Accepted**: current design; implementation should follow it.
-- **Provisional**: current direction, deliberately easy to revisit.
-- **Superseded**: retained for history and replaced by a later decision.
+- **Accepted**: a settled decision the project follows.
+- **Provisional**: a current direction, deliberately easy to revisit.
 
-When a decision changes, add a new entry that names the superseded decision
-instead of rewriting the old rationale.
+Entries are not immutable. As the design evolves, edit, merge, or remove them
+directly — git preserves the history, so the document need not carry a record of
+how a decision changed.
+
+## Authoring entries
+
+Entries capture higher-level design decisions about ESC/POS receipt printing,
+rendering, and fidelity — the concepts and methodology behind the project.
+Architecture and implementation structure belong in `ARCHITECTURE.md`, not here.
+
+Write each one as a timeless statement of the decision and its rationale. An
+entry describes the design as though it always held: state the situation and the
+choice in the present tense. Avoid before/after narration — no "previously",
+"used to", "now", or "as before". Git preserves how the design evolved, so the
+entry need not recount it.
+
+Each entry follows the same shape:
+
+- a `## DD-NNN — <short title>` heading and a `**Status:**` line;
+- **Context** — the situation and constraints that force a choice;
+- **Decision** — what is decided, in the present tense;
+- **Consequences** — what the decision commits the project to, good and bad.
 
 ## DD-002 — Promise geometry fidelity, not photographic fidelity
 

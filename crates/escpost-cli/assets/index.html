@@ -398,38 +398,55 @@
         // Vary by generation so a new job's bytes are not served from cache.
         download.href = `/job?g=${rendering.generation}`;
 
+        // The status line updates every poll: a render error or an in-progress
+        // capture changes it without advancing the generation.
+        updateStatus(rendering);
+
+        // Rebuilding the sheet images is expensive, so gate it on a new job.
+        // Errors leave the generation unchanged and keep the last sheets shown.
         const identity = String(rendering.generation);
         if (identity === currentRendering) {
           return;
         }
         currentRendering = identity;
 
-        // No job captured yet: guide the developer instead of showing sheets.
-        if (rendering.sheets.length === 0 && rendering.hint) {
-          sheets.replaceChildren();
-          waiting.textContent = rendering.hint;
-          waiting.style.display = "block";
-          // The profile is known before the first job, so show it right away.
-          profile.textContent = rendering.profile;
-          jobStatus.textContent = "Waiting for first job";
-          completionLabel.textContent = "";
-          return;
-        }
-        waiting.style.display = "none";
-
         sheets.replaceChildren(
           ...rendering.sheets.map((sheet) =>
             createSheet(sheet, rendering.sheets.length, cacheKey)
           )
         );
-        // The profile is shown with the server status; the sheet count is
-        // obvious from the rendered sheets themselves.
+      }
+
+      // The profile, waiting hint, and job status reflect the latest poll rather
+      // than the latest generation, so a job that arrives and fails is reported
+      // as a failure instead of leaving "Waiting for first job" on screen.
+      function updateStatus(rendering) {
+        // The profile is known from startup, so it always shows.
         profile.textContent = rendering.profile;
-        // Always show a status: the time the job completed.
-        jobStatus.textContent = completionTime(rendering.completed_at);
-        // Flag a job that ended on the idle timeout, since it may be incomplete.
-        completionLabel.textContent =
-          rendering.completion === "timeout" ? "idle-timeout" : "";
+
+        // Nothing has rendered and nothing has failed yet: guide the developer.
+        if (rendering.sheets.length === 0 && !rendering.error) {
+          waiting.textContent = rendering.hint || "";
+          waiting.style.display = rendering.hint ? "block" : "none";
+          jobStatus.textContent = "Waiting for first job";
+          completionLabel.textContent = "";
+          return;
+        }
+
+        // A job arrived — it either rendered or failed. Either way we are no
+        // longer waiting for the first job.
+        waiting.style.display = "none";
+        if (rendering.error) {
+          // A received job that could not be rendered; the banner shows why.
+          jobStatus.textContent = "Render failed";
+          completionLabel.textContent = "";
+        } else {
+          // Always show a status: the time the job completed.
+          jobStatus.textContent = completionTime(rendering.completed_at);
+          // Flag a job ended by the idle timeout, since it may be incomplete.
+          completionLabel.textContent =
+            rendering.completion === "timeout" ? "idle-timeout" : "";
+        }
       }
 
       function createSheet(sheet, sheetCount, cacheKey) {

@@ -236,6 +236,46 @@ fn serve_defaults_the_profile_to_reference() {
     assert_eq!(metadata["profile"], "REFERENCE");
 }
 
+#[test]
+fn serve_reports_a_render_error_without_a_sheet() {
+    // NT-5890K tears paper at a manual bar, so a GS V full cut is unsupported
+    // and the job fails to render. The viewer reads `error` with no sheets and
+    // must report the failure rather than keep waiting for the first job.
+    let mut child = start_serve(&[
+        "--profile",
+        "NT-5890K",
+        "--listen",
+        "127.0.0.1:0",
+        "--web-listen",
+        "127.0.0.1:0",
+    ]);
+    let (raw_port, web_port) = read_listen_ports(&mut child);
+    wait_until_listening(&mut child, raw_port);
+    wait_until_listening(&mut child, web_port);
+
+    // GS V 0 is a full cut, which this profile cannot perform.
+    send_raw_job(raw_port, b"Uncuttable\n\x1dV\x00");
+
+    let metadata = wait_for_render_error(web_port);
+    stop(&mut child);
+
+    assert_eq!(
+        metadata["sheets"]
+            .as_array()
+            .expect("sheets should be an array")
+            .len(),
+        0,
+        "a failed render produces no sheet"
+    );
+    let error = metadata["error"]
+        .as_str()
+        .expect("the render error should be reported");
+    assert!(
+        error.contains("full cut"),
+        "the error should explain the unsupported cut:\n{error}"
+    );
+}
+
 fn start_serve(arguments: &[&str]) -> Child {
     Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args(["--non-interactive", "serve"])
@@ -387,6 +427,21 @@ fn wait_for_first_job(web_port: u16) -> serde_json::Value {
         assert!(
             Instant::now() < deadline,
             "the captured job did not become visible"
+        );
+        thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn wait_for_render_error(web_port: u16) -> serde_json::Value {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        let metadata = render_metadata(web_port);
+        if metadata["error"].is_string() {
+            return metadata;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "the render error did not become visible"
         );
         thread::sleep(Duration::from_millis(50));
     }

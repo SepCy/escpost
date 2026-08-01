@@ -1,6 +1,6 @@
 //! Character decoding and glyph placement.
 
-use crate::font::{self, GLYPH_ALPHA_THRESHOLD};
+use crate::font;
 use crate::state::PrinterState;
 use crate::surface::MonoSurface;
 use crate::{RenderError, international};
@@ -75,41 +75,22 @@ impl PrinterState {
         }
 
         // The bundled font supplies stable glyph shapes; the profile cell stays
-        // authoritative for size, spacing, and advancement. The geometry picks the
-        // rasterization size that fits the cell, condenses every glyph onto the
-        // cell width, and resolves the baseline that keeps descenders inside.
+        // authoritative for size, spacing, and advancement. The font module maps
+        // the glyph onto the cell's dot grid — fitting the size, condensing the
+        // width, placing the baseline, and supersampling — and returns the inked
+        // dots; placement below applies styling and multipliers.
+        let cell_width_dots = self.active_font.cell_width_dots;
+        let cell_height_dots = self.active_font.cell_height_dots;
         let geometry = font::glyph_geometry(
-            self.active_font.cell_width_dots,
-            self.active_font.cell_height_dots,
+            cell_width_dots,
+            cell_height_dots,
             self.active_font.baseline_dots,
         );
-        let (metrics, bitmap) = font::default_font().rasterize(character, geometry.font_size);
-        let cell_width_dots = self.active_font.cell_width_dots as usize;
-        // Left padding, in cell dots, that centres the condensed ink in the cell.
-        let horizontal_padding =
-            (cell_width_dots as f32 - metrics.width as f32 * geometry.condense) / 2.0;
-        let glyph_top = geometry.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
+        let ink = font::glyph_cell_mask(character, cell_width_dots, cell_height_dots, &geometry);
 
-        for source_y in 0..metrics.height {
-            let destination_y = glyph_top + source_y as i32;
-            if destination_y < 0 || destination_y >= self.active_font.cell_height_dots as i32 {
-                continue;
-            }
-
-            for destination_x in 0..cell_width_dots {
-                // Map the centre of this cell column back to a source ink column.
-                // Sampling per destination column keeps the condensed glyph
-                // gap-free whichever way the factor scales it.
-                let source_x_f =
-                    (destination_x as f32 + 0.5 - horizontal_padding) / geometry.condense;
-                if source_x_f < 0.0 {
-                    continue;
-                }
-                let source_x = source_x_f as usize;
-                if source_x >= metrics.width {
-                    continue;
-                }
-                if bitmap[source_y * metrics.width + source_x] < GLYPH_ALPHA_THRESHOLD {
+        for destination_y in 0..cell_height_dots as usize {
+            for destination_x in 0..cell_width_dots as usize {
+                if !ink[destination_y * cell_width_dots as usize + destination_x] {
                     continue;
                 }
 
@@ -170,38 +151,23 @@ pub(crate) fn render_hri(data: &[char], profile_font: &ProfileFont) -> MonoSurfa
     let mut surface = MonoSurface::new(width);
     surface.ensure_height(profile_font.cell_height_dots);
 
-    // Condense and place glyphs exactly like printed text so HRI labels share the
+    // Map glyphs onto the cell exactly like printed text so HRI labels share the
     // same shapes; the geometry is constant across the label.
     let geometry = font::glyph_geometry(
         profile_font.cell_width_dots,
         profile_font.cell_height_dots,
         profile_font.baseline_dots,
     );
-    let cell_width_dots = profile_font.cell_width_dots as usize;
+    let cell_width_dots = profile_font.cell_width_dots;
+    let cell_height_dots = profile_font.cell_height_dots;
 
     for (character_index, character) in data.iter().copied().enumerate() {
-        let (metrics, bitmap) = font::default_font().rasterize(character, geometry.font_size);
-        let horizontal_padding =
-            (cell_width_dots as f32 - metrics.width as f32 * geometry.condense) / 2.0;
-        let glyph_top = geometry.baseline_dots as i32 - (metrics.ymin + metrics.height as i32);
-        let cell_left = character_index as u32 * profile_font.cell_width_dots;
+        let ink = font::glyph_cell_mask(character, cell_width_dots, cell_height_dots, &geometry);
+        let cell_left = character_index as u32 * cell_width_dots;
 
-        for source_y in 0..metrics.height {
-            let destination_y = glyph_top + source_y as i32;
-            if destination_y < 0 || destination_y >= profile_font.cell_height_dots as i32 {
-                continue;
-            }
-            for destination_x in 0..cell_width_dots {
-                let source_x_f =
-                    (destination_x as f32 + 0.5 - horizontal_padding) / geometry.condense;
-                if source_x_f < 0.0 {
-                    continue;
-                }
-                let source_x = source_x_f as usize;
-                if source_x >= metrics.width {
-                    continue;
-                }
-                if bitmap[source_y * metrics.width + source_x] >= GLYPH_ALPHA_THRESHOLD {
+        for destination_y in 0..cell_height_dots as usize {
+            for destination_x in 0..cell_width_dots as usize {
+                if ink[destination_y * cell_width_dots as usize + destination_x] {
                     surface.print_dot(cell_left + destination_x as u32, destination_y as u32);
                 }
             }

@@ -646,10 +646,19 @@ which case it is lowered just enough to admit them. Both are uniform repositions
 or scales — never per-glyph, and never a non-proportional squeeze of the
 descender alone.
 
+Condensing is area-correct: glyphs are rasterized at a small supersample of the
+cell resolution and each output dot is inked from the mean coverage of its
+samples, rather than picking one nearest source column. That keeps thin vertical
+stems in dense glyphs (`W`, `M`, `m`) present and evenly weighted after the
+horizontal squeeze. Output stays 1-bit on the profile's dot grid, so it remains
+faithful and golden-comparable — the supersample only improves which dots the
+condensed glyph lights.
+
 The font provider and this whole family of derived measures (advance ratio, ink
-extents, condense factor, fitted size, effective baseline) live in a dedicated
-`font` module. That module *is* the replaceable glyph-provider boundary DD-023
-calls for; glyph placement in `text.rs` only consumes the resolved geometry.
+extents, condense factor, fitted size, effective baseline, supersampled cell
+mask) live in a dedicated `font` module. That module *is* the replaceable
+glyph-provider boundary DD-023 calls for; glyph placement in `text.rs` only
+consumes the resolved geometry and the returned ink mask.
 
 Emphasized text (`ESC E`) stays a one-dot horizontal double-strike of the base
 glyph, modeling the printer firmware's mechanism rather than swapping in a

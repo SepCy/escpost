@@ -14,8 +14,18 @@ use std::sync::OnceLock;
 const DEFAULT_FONT_BYTES: &[u8] =
     include_bytes!("../../../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
 
-/// Alpha value at or above which a rasterized glyph sample becomes an ink dot.
-pub(crate) const GLYPH_ALPHA_THRESHOLD: u8 = 128;
+/// Alpha value at or above which a glyph dot's mean coverage becomes ink.
+pub(crate) const GLYPH_ALPHA_THRESHOLD: u8 = 80;
+
+/// Linear supersampling factor for glyph rasterization. Glyphs are rasterized at
+/// `N ×` the cell resolution and each output dot is decided from the mean
+/// coverage of its `N × N` samples, so horizontal condensation integrates the
+/// glyph over each dot's area instead of picking one nearest column. Output
+/// stays 1-bit on the profile's dot grid; higher `N` only refines which dots the
+/// condensed glyph lights. Two already resolves the stem-placement artefacts of
+/// nearest-neighbour condensation; three was visually indistinguishable at this
+/// cell size.
+const GLYPH_SUPERSAMPLE: u32 = 2;
 
 /// How the bundled font maps onto one profile character cell.
 pub(crate) struct GlyphGeometry {
@@ -44,6 +54,71 @@ pub(crate) fn glyph_geometry(
         condense: condense_factor(cell_width_dots, font_size),
         baseline_dots: effective_baseline(cell_height_dots, baseline_dots, font_size),
     }
+}
+
+/// Rasterize `character` into a 1-bit ink mask covering one profile cell.
+///
+/// The returned vector is row-major, `cell_width_dots × cell_height_dots`, with
+/// `true` where the dot should be inked. The glyph is rasterized at
+/// [`GLYPH_SUPERSAMPLE`]× the cell resolution and each dot is inked when the mean
+/// coverage of its `N × N` samples reaches [`GLYPH_ALPHA_THRESHOLD`], so
+/// horizontal condensation is area-correct rather than nearest-neighbour.
+/// Placement (styling, multipliers) stays with the caller.
+pub(crate) fn glyph_cell_mask(
+    character: char,
+    cell_width_dots: u32,
+    cell_height_dots: u32,
+    geometry: &GlyphGeometry,
+) -> Vec<bool> {
+    let cell_width = cell_width_dots as usize;
+    let cell_height = cell_height_dots as usize;
+    let mut mask = vec![false; cell_width * cell_height];
+
+    let supersample = GLYPH_SUPERSAMPLE as f32;
+    let (metrics, coverage) = default_font().rasterize(character, geometry.font_size * supersample);
+    if metrics.width == 0 || metrics.height == 0 {
+        return mask;
+    }
+
+    // Work in cell-dot space; the supersampled bitmap has `supersample` samples
+    // per dot. Centre the condensed ink horizontally and place it on the
+    // resolved baseline vertically.
+    let ink_width_dots = metrics.width as f32 / supersample;
+    let horizontal_padding = (cell_width as f32 - ink_width_dots * geometry.condense) / 2.0;
+    let glyph_top =
+        geometry.baseline_dots as f32 - (metrics.ymin as f32 + metrics.height as f32) / supersample;
+
+    let samples_per_dot = GLYPH_SUPERSAMPLE * GLYPH_SUPERSAMPLE;
+    let ink_threshold = GLYPH_ALPHA_THRESHOLD as u32 * samples_per_dot;
+    for dy in 0..cell_height {
+        for dx in 0..cell_width {
+            // Average the N×N samples covering this dot. Samples that fall
+            // outside the glyph count as blank, so the mean is the dot's true
+            // coverage.
+            let mut coverage_sum = 0u32;
+            for sub_y in 0..GLYPH_SUPERSAMPLE {
+                let out_y = dy as f32 + (sub_y as f32 + 0.5) / supersample;
+                let source_y = ((out_y - glyph_top) * supersample) as i32;
+                if source_y < 0 || source_y as usize >= metrics.height {
+                    continue;
+                }
+                let row = source_y as usize * metrics.width;
+                for sub_x in 0..GLYPH_SUPERSAMPLE {
+                    let out_x = dx as f32 + (sub_x as f32 + 0.5) / supersample;
+                    let source_dot = (out_x - horizontal_padding) / geometry.condense;
+                    let source_x = (source_dot * supersample) as i32;
+                    if source_x < 0 || source_x as usize >= metrics.width {
+                        continue;
+                    }
+                    coverage_sum += coverage[row + source_x as usize] as u32;
+                }
+            }
+            if coverage_sum >= ink_threshold {
+                mask[dy * cell_width + dx] = true;
+            }
+        }
+    }
+    mask
 }
 
 /// Pixel size that rasterizes glyphs as tall as the cell without clipping.

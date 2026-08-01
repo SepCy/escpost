@@ -244,6 +244,33 @@ must clearly show whether jobs are held only in memory or written to disk.
 Persistent capture should be opt-in unless the developer selects an explicit
 local storage directory.
 
+## Serve as a full workbench interface
+
+The web app is the primary surface of `escpost serve`. Running `escpost serve`
+should launch the web workbench and let the developer drive the whole workflow
+from the browser. The RAW virtual printer becomes one opt-in capability rather
+than the command's implicit purpose, which also decouples the workbench — printer
+discovery, adding a printer, calibration — from any open network port.
+
+- [ ] Make the web app `serve`'s primary role: it runs and is reachable with no
+      RAW listener open. This supersedes today's behavior, where `serve` always
+      binds a 9100 listener. The web app binds `--web-listen`, with `--listen`
+      as a visible alias since the web is now the primary service.
+- [ ] Start the RAW virtual printer only on explicit opt-in — `--virtual-listen
+      [ADDR]`, whose presence enables it and whose value overrides the default
+      `:9100` — instead of implicitly binding 9100.
+- [ ] Enable and disable the virtual printer from the web app at runtime,
+      selecting its profile, through a local control endpoint that binds and
+      unbinds the RAW listener live.
+- [ ] Surface printer discovery — attached USB printer-class interfaces and
+      configured network targets — in the web interface.
+- [ ] Add and configure a printer through the shared add workflow used by
+      `printers add` and `print`.
+- [ ] Render and print the shared calibration case, and other conformance
+      cases, against a selected printer from the interface.
+- [ ] Expose the remaining developer CLI commands so the browser is a complete
+      alternative to the terminal for the common workflow.
+
 ## Command inspector
 
 The inspector should explain how the byte stream changes printer state and

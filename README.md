@@ -74,7 +74,7 @@ All build and test commands run in the project container:
 docker compose build
 ./escpost render --help
 docker compose run --rm test cargo test --workspace
-docker compose run --rm test scripts/binding-test
+scripts/python-binding-test
 ```
 
 Regenerate the canonical runtime profile pack after changing an enrichment or
@@ -89,7 +89,7 @@ docker compose run --rm test cargo run --quiet \
 
 `./escpost` is the stable development entry point. It runs every command
 through the Rust CLI. The CLI service has USB access for physical workflows.
-The Python render binding is separate from the CLI; `scripts/binding-test`
+The Python render binding is separate from the CLI; `scripts/python-binding-test`
 builds and exercises it in the test service.
 
 List connected USB printer-class devices:

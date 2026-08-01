@@ -141,9 +141,34 @@ pub(crate) struct AddPrinterArgs {
     #[arg(long)]
     pub(crate) port: Option<u16>,
 
+    /// Select a USB printer by vendor ID (decimal or `0x`-prefixed hexadecimal).
+    #[arg(long, value_parser = parse_usb_id)]
+    pub(crate) vendor_id: Option<u16>,
+
+    /// Select a USB printer by product ID (decimal or `0x`-prefixed hexadecimal).
+    #[arg(long, value_parser = parse_usb_id)]
+    pub(crate) product_id: Option<u16>,
+
+    /// Select a USB printer by exact serial number.
+    #[arg(long)]
+    pub(crate) serial: Option<String>,
+
     /// Optional rendering profile.
     #[arg(long)]
     pub(crate) profile: Option<String>,
+}
+
+/// Parse a USB vendor or product identifier given in decimal or `0x`-prefixed
+/// hexadecimal, matching how the same identifiers are stored in `printers.toml`.
+fn parse_usb_id(value: &str) -> Result<u16, String> {
+    let text = value.trim();
+    let parsed = match text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
+        Some(hexadecimal) => u16::from_str_radix(hexadecimal, 16),
+        None => text.parse::<u16>(),
+    };
+    parsed.map_err(|_| {
+        format!("expected a decimal or 0x-prefixed 16-bit USB identifier, found `{value}`")
+    })
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]

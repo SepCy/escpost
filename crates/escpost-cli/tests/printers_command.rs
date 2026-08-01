@@ -47,6 +47,9 @@ fn printers_add_documents_its_registration_options() {
     assert!(stdout.contains("network"));
     assert!(stdout.contains("--host <HOST>"));
     assert!(stdout.contains("--port <PORT>"));
+    assert!(stdout.contains("--vendor-id <VENDOR_ID>"));
+    assert!(stdout.contains("--product-id <PRODUCT_ID>"));
+    assert!(stdout.contains("--serial <SERIAL>"));
     assert!(stdout.contains("--profile <PROFILE>"));
 }
 
@@ -63,6 +66,50 @@ fn printers_add_requires_a_terminal_for_usb_registration() {
         &config,
         "USB printer registration requires an interactive terminal",
     );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_rejects_a_partial_usb_selector() {
+    let directory = temporary_directory("partial-usb-selector");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &["counter", "--transport", "usb", "--vendor-id", "0x0416"],
+    );
+
+    assert_failed_without_configuration(
+        &output,
+        &config,
+        "--vendor-id and --product-id must be given together",
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_rejects_usb_selectors_for_a_network_printer() {
+    let directory = temporary_directory("network-usb-selector");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--transport",
+            "network",
+            "--host",
+            "10.42.0.71",
+            "--vendor-id",
+            "0x0416",
+            "--product-id",
+            "0x5011",
+        ],
+    );
+
+    assert_failed_without_configuration(&output, &config, "only valid for USB printers");
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
 

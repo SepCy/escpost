@@ -429,11 +429,29 @@ unprofiled. Sending an existing ESC/POS stream does not require a rendering
 profile, and no profile—including `REFERENCE`—is inferred for an unknown
 printer.
 
+A USB printer can also be selected without a menu by naming its stable
+descriptor. `--vendor-id` and `--product-id` accept decimal or `0x`-prefixed
+hexadecimal and must be given together; `--serial` further narrows otherwise
+identical devices. The selectors must match exactly one unconfigured route.
+No match, several matching devices, or a device that still exposes several bulk
+OUT endpoints is an error rather than a guess, so a scripted registration is
+as deterministic as the interactive one:
+
+```bash
+escpost --non-interactive printers add counter \
+  --transport usb \
+  --vendor-id 0x0416 \
+  --product-id 0x5011 \
+  --serial B120300001 \
+  --profile NT-5890K
+```
+
 `--non-interactive` disables all questions and reports the first missing
-required value. USB registration is initially interactive-only because it
-requires a deliberate device/endpoint selection. ESCPost behaves the same way
-when no terminal is attached, so pipelines and CI jobs cannot wait
-indefinitely for input. Network registration remains fully scriptable:
+required value. Without descriptor selectors, USB registration requires a
+terminal because choosing a device and endpoint is a deliberate act; ESCPost
+behaves the same way when no terminal is attached, so pipelines and CI jobs
+cannot wait indefinitely for input. Network registration is fully scriptable
+from host and port alone:
 
 ```bash
 escpost --non-interactive printers add kitchen \
@@ -656,11 +674,11 @@ the completed implementation must satisfy.
 | CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
 | CLI-M09 | Keep passive listing free of configuration writes while showing matched names and an explicit assigned or unassigned profile for every printer. |
 | CLI-M10 | Merge discovered and configured printers once, list connected before unavailable, and sort each status group by display name. |
-| CLI-M11 | Register USB or known network targets with `printers add`, selecting USB descriptors and prompting for missing values only at an interactive terminal. |
+| CLI-M11 | Register USB or known network targets with `printers add`, selecting a USB descriptor interactively from a menu or non-interactively by explicit vendor, product, and optional serial selectors, and prompting for missing values only at an interactive terminal. |
 | CLI-M12 | Make non-interactive registration deterministic, default RAW TCP to port 9100, and keep the profile optional. |
 | CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |
 | CLI-M14 | List configured network targets as connected or unavailable using concurrent, bounded TCP handshakes that send zero bytes. |
-| CLI-M15 | Exclude configured USB identities, never persist temporary bus/address values, and require explicit selection when endpoint or device identity is ambiguous. |
+| CLI-M15 | Exclude configured USB identities, never persist temporary bus/address values, and require explicit selection when endpoint or device identity is ambiguous, whether that selection is an interactive menu choice or a unique non-interactive descriptor match. |
 
 ### Web requirements
 

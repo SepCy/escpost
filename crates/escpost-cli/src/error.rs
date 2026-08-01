@@ -202,8 +202,24 @@ pub(crate) enum CliError {
     #[error("printer transport is required")]
     MissingPrinterTransport,
 
-    #[error("USB printer registration requires an interactive terminal")]
+    #[error(
+        "USB printer registration requires an interactive terminal or explicit --vendor-id and --product-id selectors"
+    )]
     UsbRegistrationRequiresInteractive,
+
+    #[error("--vendor-id and --product-id must be given together to select a USB printer")]
+    IncompleteUsbSelector,
+
+    #[error("--vendor-id, --product-id, and --serial are only valid for USB printers")]
+    UsbSelectorForNetworkPrinter,
+
+    #[error("no connected USB printer matched the given selectors")]
+    NoMatchingUsbPrinter,
+
+    #[error(
+        "several connected USB printers matched the given selectors; narrow the selection with --serial or register interactively"
+    )]
+    AmbiguousUsbPrinter,
 
     #[error("--host is only valid for network printers")]
     NetworkHostForUsbPrinter,

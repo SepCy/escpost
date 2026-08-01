@@ -360,6 +360,10 @@ rules are specified in `CLI.md`.
 - [x] Register connected USB printers through the same interactive add
       workflow used by `printers add` and `print`, deriving stable descriptor
       coordinates without inferring a profile. (`CLI-M11`, `CLI-M15`)
+- [x] Register a connected USB printer non-interactively by explicit
+      `--vendor-id`, `--product-id`, and optional `--serial` selectors that must
+      match exactly one unconfigured route, closing the last capability the
+      Python `printers discover` writer still provided. (`CLI-M11`, `CLI-M15`)
 - [x] List configured RAW network targets with concurrent, one-second,
       zero-byte reachability probes. (`CLI-M14`)
 - [x] Add `--transport usb|network` filtering. (`CLI-M02`)
@@ -370,8 +374,10 @@ rules are specified in `CLI.md`.
       large enough to need it; keep sorting non-configurable.
 - [x] Keep the legacy Python calibration workflow on the same resolved
       `printers.toml` until the remaining calibration commands move to Rust.
-- [ ] Retire the temporary Python `printers discover` configuration writer
-      after its remaining calibration use is migrated.
+- [ ] Retire the temporary Python `printers discover` configuration writer.
+      Its only unique capability, a non-interactive USB config write, now exists
+      as `printers add --vendor-id/--product-id/--serial`, so this is waiting
+      only on pointing the calibration bootstrap at the Rust `printers add`.
 - [ ] Add `printers scan` only with the first concrete active Bluetooth or
       network discovery backend. (`CLI-M05`, `CLI-M07`)
 - [ ] Add `printers pair` with the first transport that needs explicit

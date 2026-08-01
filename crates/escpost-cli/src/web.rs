@@ -33,6 +33,9 @@ struct JobStoreState {
     receiving: usize,
     /// Profile the server renders with, shown before the first job arrives.
     session_profile: String,
+    /// Whether renders are anti-aliased grayscale previews. The viewer smooths
+    /// those and keeps the faithful 1-bit dots crisp.
+    antialias: bool,
     /// Wall-clock time the current job completed, in Unix epoch milliseconds.
     completed_at: Option<u64>,
     /// The current job's exact captured bytes, offered for download.
@@ -79,6 +82,8 @@ struct RenderResponse {
     completed_at: Option<u64>,
     /// True when the current job's raw bytes can be downloaded from /job.
     input_available: bool,
+    /// True when renders are anti-aliased grayscale, so the viewer smooths them.
+    antialias: bool,
     /// Non-fatal render diagnostics for the current job, ready to display.
     warnings: Vec<String>,
     sheets: Vec<SheetResponse>,
@@ -94,7 +99,7 @@ struct SheetResponse {
 }
 
 impl JobStore {
-    pub(crate) fn with_render(rendered: RenderResult) -> Self {
+    pub(crate) fn with_render(rendered: RenderResult, antialias: bool) -> Self {
         Self {
             state: Arc::new(RwLock::new(JobStoreState {
                 jobs: VecDeque::from([Arc::new(RenderedJob::from(rendered))]),
@@ -104,6 +109,7 @@ impl JobStore {
                 completion: None,
                 receiving: 0,
                 session_profile: String::new(),
+                antialias,
                 completed_at: Some(epoch_millis()),
                 raw_input: None,
             })),
@@ -113,7 +119,7 @@ impl JobStore {
     /// Create a store with no job yet. The web viewer shows `hint` and the
     /// `profile` until the first job arrives, which suits a listener that
     /// renders on demand with a known profile.
-    pub(crate) fn awaiting_jobs(profile: String, hint: String) -> Self {
+    pub(crate) fn awaiting_jobs(profile: String, hint: String, antialias: bool) -> Self {
         Self {
             state: Arc::new(RwLock::new(JobStoreState {
                 jobs: VecDeque::new(),
@@ -123,6 +129,7 @@ impl JobStore {
                 completion: None,
                 receiving: 0,
                 session_profile: profile,
+                antialias,
                 completed_at: None,
                 raw_input: None,
             })),
@@ -209,6 +216,7 @@ impl JobStore {
                 receiving: state.receiving > 0,
                 completed_at: None,
                 input_available: false,
+                antialias: state.antialias,
                 warnings: Vec::new(),
                 sheets: Vec::new(),
             };
@@ -234,6 +242,7 @@ impl JobStore {
             receiving: state.receiving > 0,
             completed_at: state.completed_at,
             input_available: state.raw_input.is_some(),
+            antialias: state.antialias,
             warnings: job.warnings.clone(),
             sheets,
         }

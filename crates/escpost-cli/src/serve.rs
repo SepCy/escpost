@@ -54,6 +54,7 @@ pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
         format!(
             "Waiting for the first job. Configure a local ERP or POS application to send its RAW ESC/POS print jobs to {raw_address}."
         ),
+        arguments.antialias,
     );
 
     // Accept jobs while the web viewer runs. The viewer owns the foreground and

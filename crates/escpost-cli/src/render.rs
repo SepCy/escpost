@@ -55,7 +55,7 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
     }
     if web_enabled {
         let listener = crate::web::bind(arguments.web_listen).await?;
-        let jobs = crate::web::JobStore::with_render(rendered);
+        let jobs = crate::web::JobStore::with_render(rendered, arguments.antialias);
         if arguments.watch {
             crate::watch::start(
                 crate::watch::WatchConfig {

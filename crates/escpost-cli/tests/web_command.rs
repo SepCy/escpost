@@ -21,7 +21,8 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
     assert!(response.contains("<title>ESCPost render</title>"));
     assert!(response.contains("<div id=\"sheets\""));
-    assert!(response.contains("<option value=\"1\" selected>1×</option>"));
+    // Anti-aliased renders are smoothed; the faithful dot grid stays pixelated.
+    assert!(response.contains("#sheets.antialiased"));
     assert!(response.contains("id=\"margin\""));
     assert!(response.contains("Paper margin"));
     assert!(response.contains("id=\"connection\""));
@@ -30,6 +31,7 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("id=\"receiving\""));
     assert!(response.contains("id=\"download\""));
     assert!(response.contains("id=\"warnings\""));
+    assert!(response.contains("id=\"magnifyHint\""));
     assert!(response.contains("fetch(\"/api/render\""));
 }
 

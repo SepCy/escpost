@@ -235,10 +235,18 @@
            bottom is left flush because receipt paper feeds continuously. */
         padding: 16px 16px 0;
         background-color: transparent;
+        /* Faithful 1-bit dots stay crisp under nearest-neighbour scaling. */
         image-rendering: pixelated;
         image-rendering: crisp-edges;
         box-shadow: 0 3px 16px rgb(0 0 0 / 45%);
         transition: background-color 150ms ease;
+      }
+
+      /* An anti-aliased preview is a supersampled grayscale image, so let the
+         browser smooth it: nearest-neighbour would discard the very softening
+         it encodes whenever the image is scaled into its box. */
+      #sheets.antialiased .receipt {
+        image-rendering: auto;
       }
 
       /* The reserved padding reads as unprinted receipt paper when enabled. */
@@ -288,6 +296,18 @@
       #warnings .warning::before {
         content: "⚠";
       }
+
+      /* Footer note under the sheets; only meaningful once something is
+         rendered, so it is hidden while the sheet list is empty. */
+      #magnifyHint {
+        margin: 16px 0 0;
+        color: #6b6b6b;
+        font-size: 13px;
+      }
+
+      #sheets:empty ~ #magnifyHint {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -304,15 +324,6 @@
       </div>
       <div class="toolbar">
         <label>
-          Zoom
-          <select id="zoom">
-            <option value="1" selected>1×</option>
-            <option value="2">2×</option>
-            <option value="4">4×</option>
-            <option value="8">8×</option>
-          </select>
-        </label>
-        <label>
           <input type="checkbox" id="margin">
           Paper margin
         </label>
@@ -328,6 +339,7 @@
       </div>
       <div id="sheets" aria-live="polite"></div>
       <div id="warnings" aria-live="polite"></div>
+      <p id="magnifyHint">Use your browser's zoom to magnify.</p>
       <p id="waiting" aria-live="polite"></p>
       <p id="error"></p>
     </main>
@@ -337,7 +349,6 @@
       const waiting = document.querySelector("#waiting");
       const error = document.querySelector("#error");
       const warnings = document.querySelector("#warnings");
-      const zoom = document.querySelector("#zoom");
       const margin = document.querySelector("#margin");
       const profile = document.querySelector("#profile");
       const jobStatus = document.querySelector("#jobStatus");
@@ -379,13 +390,6 @@
         sheets.classList.add("flash");
         window.clearTimeout(flashTimer);
         flashTimer = window.setTimeout(() => sheets.classList.remove("flash"), 650);
-      }
-
-      function applyZoom() {
-        for (const image of sheets.querySelectorAll(".receipt")) {
-          image.style.width =
-            `${Number(image.dataset.widthDots) * Number(zoom.value)}px`;
-        }
       }
 
       function showError(message) {
@@ -437,6 +441,10 @@
         // Reflect an in-progress capture every poll, independent of generation:
         // it replaces the job status while the last render and profile stay.
         printStatus.classList.toggle("receiving", rendering.receiving === true);
+
+        // Anti-aliased renders are supersampled grayscale; smooth them instead
+        // of the nearest-neighbour scaling used for the faithful dot grid.
+        sheets.classList.toggle("antialiased", rendering.antialias === true);
 
         // Offer the current job's raw bytes for download, but not mid-capture.
         const canDownload =
@@ -515,7 +523,10 @@
         const image = document.createElement("img");
         image.className = "receipt";
         image.alt = `Rendered receipt sheet ${sheet.order} of ${sheetCount}`;
-        image.dataset.widthDots = sheet.width_dots;
+        // Lay the sheet out at one CSS pixel per printer dot, independent of the
+        // render's supersample factor, so --scale stays a resolution knob rather
+        // than a size knob. Browser zoom magnifies from here.
+        image.style.width = `${sheet.width_dots}px`;
         image.src = `${sheet.url}?t=${cacheKey}`;
         figure.append(caption, image);
         return figure;
@@ -531,7 +542,6 @@
           }
           setConnection("connected", "Connected");
           showRendering(await response.json(), cacheKey);
-          applyZoom();
         } catch {
           // fetch throws when the server is unreachable — stopped, restarted, or
           // the connection dropped. The 0.75 s poll keeps trying, so recovery is
@@ -540,8 +550,7 @@
         }
       }
 
-      const ZOOM_KEY = "escpost.zoom";
-      const MARGIN_KEY = "escpost.margin";
+      const MARGIN_KEY = "escpost.paper_margin";
 
       function readSetting(key) {
         try {
@@ -559,19 +568,10 @@
         }
       }
 
-      // Restore saved settings. Zoom defaults to 1× and the margin is on unless
-      // it was previously turned off.
-      const storedZoom = readSetting(ZOOM_KEY);
-      if (storedZoom !== null) {
-        zoom.value = storedZoom;
-      }
+      // Restore saved settings. The margin is on unless it was turned off.
       const storedMargin = readSetting(MARGIN_KEY);
       margin.checked = storedMargin === null ? true : storedMargin === "true";
 
-      zoom.addEventListener("change", () => {
-        writeSetting(ZOOM_KEY, zoom.value);
-        applyZoom();
-      });
       margin.addEventListener("change", () => {
         writeSetting(MARGIN_KEY, String(margin.checked));
         applyMargin();

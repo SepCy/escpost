@@ -362,8 +362,8 @@ however, describe all geometry and behavior required by an emulator.
 ### Decision
 
 Pin the upstream database as a source repository and import it at build time.
-Maintain ESCPost enrichment files for exact rendering metrics, behavioral
-details, corrections, and explicit approximations. Resolve and validate both
+Maintain ESCPost enrichment files that state exact descriptors and the
+behavioral deviations a printer confirms (DD-031). Resolve and validate both
 sources into a canonical profile pack embedded in the Rust library.
 
 Do not fetch profile data at installation or render time. The Git submodule
@@ -377,8 +377,9 @@ runtime profile.
 - Upstream updates are deliberate, reviewable dependency changes.
 - The renderer is insulated from upstream schema changes by its importer and
   canonical internal schema.
-- A large catalog does not imply high-fidelity support: profiles without
-  sufficient enrichment must report documented approximations.
+- A large catalog does not imply high-fidelity support: a profile without
+  enrichment rests on default base values and is marked as synthesized rather
+  than calibrated (DD-031, DD-032).
 
 ## DD-022 — Use typed, hash-guarded profile enrichments
 
@@ -401,9 +402,8 @@ Use the Git submodule itself as the global repository and commit pin. For each
 enriched printer, store the SHA-256 of its fully resolved, deterministically
 normalized upstream profile.
 
-Express enrichments as typed TOML. Use simple source references plus explicit
-approximation records, and generate deterministic canonical JSON with a
-canonical profile hash.
+Express enrichments as typed TOML with simple source references, and generate
+deterministic canonical JSON with a canonical profile hash.
 
 Reject unknown enrichment fields and stale upstream-profile hashes. Defer a
 generic patch language, operation declarations, separate evidence records,
@@ -480,8 +480,8 @@ renderer remains responsible for mapping modules to printer dots.
 
 Treat a valid QR matrix as distinct from a firmware-identical QR matrix.
 Segmentation and mask selection may differ between a standards-compliant
-library and a particular printer firmware. Record that difference as an
-approximation until hardware evidence requires a fork or replacement.
+library and a particular printer firmware. Record that difference as a
+documented divergence until hardware evidence requires a fork or replacement.
 
 ### Consequences
 
@@ -522,7 +522,7 @@ affects command parsing, content meaning, positioning, wrapping, feeds, cuts,
 sheet boundaries, or another behavior needed by the product. Minor native
 symbol size differences, HRI deviations, thermal artifacts, resident glyph
 shapes, and standards-valid QR matrix differences may remain documented
-approximations when the resulting receipt layout is still useful and correct.
+divergences when the resulting receipt layout is still useful and correct.
 
 Record observed but unmodeled quirks with the physical test case so the
 decision can be revisited if the difference later matters.
@@ -563,7 +563,9 @@ placement.
 Maintain `REFERENCE` as a self-contained virtual profile. It imports no
 upstream printer and explicitly enables every capability represented by the
 current canonical profile schema. It follows documented baseline command
-behavior without model-specific ignored-command rules.
+behavior without model-specific ignored-command rules. In the descriptor and
+deviation model (DD-031), REFERENCE is the zero-deviation baseline: it states
+virtual descriptors and enables every capability while turning on no deviations.
 
 Give the virtual mechanism concrete, deterministic geometry so it can produce
 PNG pixels. Treat those values as test parameters, not universal ESC/POS
@@ -771,8 +773,8 @@ command, profile, and byte offset) so callers can report that the paper was not
 severed.
 
 `RenderResult` carries a `warnings: Vec<RenderWarning>` channel alongside
-`device_events` and `approximations` — for diagnostics that do not fail a render
-but note where the preview diverges from the printer's physical behaviour.
+`device_events` — for diagnostics that do not fail a render but note where the
+preview diverges from the printer's physical behaviour.
 
 "Acted-upon" is the qualifier: a firmware quirk that discards a cut outright (the
 NT-5890K ignores Function B `GS V 66`) is a true no-op — no split, no warning —
@@ -788,6 +790,123 @@ and fed Function B) split and warn.
   a `warnings` list — the render itself is unaffected.
 - The split is a preview convenience, not a claim that the paper was cut; the
   warning is what distinguishes the two.
+
+## DD-031 — Model profile parameters as descriptors and deviations
+
+**Status:** Accepted
+
+### Context
+
+A printer profile mixes two unlike things: intrinsic physical facts, and firmware
+behaviors. ESC/POS documents a baseline for the behaviors but standardizes none
+of the physical facts — DD-026 notes it defines no paper width, DPI, resident
+font ROM, or cutter placement. Treating every field as a bare value hides that
+distinction; treating every field as a "deviation from REFERENCE" would falsely
+elevate REFERENCE's virtual dimensions into a standard that printers depart from.
+
+### Decision
+
+Split profile parameters into two kinds.
+
+**Descriptors** are intrinsic physical facts with no spec norm: printable width,
+horizontal and vertical DPI, motion units, font cell metrics, cutter distance,
+capabilities, and the available code-page map. They are sourced from the shared
+upstream database (DD-018) or measured from the device.
+
+**Deviations** are departures from the documented ESC/POS baseline: the command
+behaviors (`ESC \` negative positioning, `ESC $` after printable data, `ESC J`,
+the LF following `GS v 0`, and `GS V` Function B full and partial), the `ESC *`
+8-dot vertical pitch, carriage-return handling, and the power-on defaults (line
+spacing, active code-page slot, international character set). Each has a
+conformant baseline; a profile turns on only the departures it has confirmed.
+
+Both kinds share one axis. An omitted parameter is **assumed** — it takes its
+default value, or stays conformant. A stated parameter is **known** — a measured
+or sourced value, or a confirmed deviation. Stating a parameter is itself the
+confirmation. There is no separate provenance level and no per-field disclosure
+record.
+
+REFERENCE (DD-026) is the zero-deviation baseline: it states virtual descriptors
+and enables every capability, but turns on no deviations. A physical profile
+states the descriptors it knows and turns on the deviations it has verified.
+
+The base an omitted parameter falls back to is a set of default values, not an
+ancestor profile. ESCPost has no profile inheritance, so a profile stays flat,
+local, and content-addressed (DD-006), unlike upstream's `inherits:` graph, which
+is flattened at build time.
+
+Renderer-wide fidelity limits — representative glyphs (DD-007, DD-023), QR mask
+choice (DD-024), unmodeled thermal artifacts (DD-025) — are not profile
+parameters. They belong to the standing fidelity contract, and an observed but
+unmodeled per-printer quirk is recorded with its physical test case (DD-025).
+
+### Consequences
+
+- Authoring or calibrating a printer means stating the descriptors you know and
+  toggling the deviations you confirm; everything unstated is visibly assumed by
+  its absence, so the profile is its own calibration checklist.
+- The canonical profile stores resolved values; whether a profile rests on
+  assumed defaults or on calibration is signaled at the profile level by its
+  source (DD-032), not by a per-field record.
+- No confidence prose or disclosure list is maintained: render honesty comes from
+  the standing fidelity contract plus the profile-level source.
+- The command quirks a profile turns on are exactly the model-specific behaviors
+  DD-025 admits, expressed as explicit deviations rather than ad hoc corrections.
+
+## DD-032 — Make upstream printers available by synthesizing against the default base
+
+**Status:** Accepted
+
+### Context
+
+The shared upstream database (DD-018) provides descriptors — capabilities, code
+pages, media width and DPI, font columns — for many printers, but not the full
+descriptor and deviation set an emulator needs. Requiring a complete typed
+enrichment (DD-022) before a printer is usable means an upstream identifier
+either carries a hand-authored enrichment or has no runtime profile at all, which
+blocks the ordinary act of adopting a printer and calibrating it incrementally.
+
+### Decision
+
+Every profile parameter is optional; an omitted parameter takes the default base
+(DD-031). Synthesize a renderable profile for every upstream entry whose
+printable width is derivable — from the upstream media pixels or an enrichment —
+filling the remaining descriptors from upstream where present (DPI, font cell
+width from width divided by columns, capabilities, code pages) and otherwise from
+documented constants, and leaving every deviation conformant unless an enrichment
+turns it on.
+
+The default capability posture is conservative: nothing is claimed until stated,
+so an uncalibrated profile never over-advertises. The default paper width is the
+smaller common thermal size (58 mm), which fails safe by wrapping content early
+rather than overrunning a narrower sheet. Width is never fabricated for a
+real-named printer: an upstream entry that states no width — the generic
+`default`, `safe`, and `simple` templates — produces no profile and is logged. A
+human-authored profile may still omit width and accept the 58 mm default, because
+a person then owns that choice.
+
+A synthesized profile carries a distinct source marker, separate from a
+hash-pinned enrichment (DD-022), so an assumed profile never presents as a
+physically reviewed one; that marker is the runtime signal that a profile rests
+on base defaults rather than calibration.
+
+All profiles resolve at build time into the single canonical pack (DD-018). An
+equality check between the committed pack and a fresh compile guards against
+silent upstream or default drift.
+
+### Consequences
+
+- Shared upstream identifiers resolve without a hand-authored enrichment per
+  printer; adoption starts from nothing and grows as deviations are confirmed and
+  descriptors measured.
+- An uncalibrated profile cannot over-claim capabilities or overrun a wider sheet
+  than assumed.
+- A generic template with no width yields no profile; REFERENCE (DD-026) remains
+  the choice when no specific printer is known.
+- The 58 mm default width and the constant descriptor defaults are heuristics
+  open to revision as calibrated evidence accumulates.
+- Runtime resolution stays a pack lookup; the larger pack must be regenerated on
+  upstream or default changes, enforced by the drift check.
 
 ## Open questions
 

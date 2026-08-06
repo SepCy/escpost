@@ -3,6 +3,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod defaults;
+pub mod resolver;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

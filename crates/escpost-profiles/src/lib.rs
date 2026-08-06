@@ -11,6 +11,9 @@ use thiserror::Error;
 
 const ENRICHMENT_SCHEMA_VERSION: u32 = 1;
 const CANONICAL_PROFILE_SCHEMA_VERSION: u32 = 1;
+/// Epson's documented 8-dot `ESC *` vertical pitch baseline (DD-031/DD-032):
+/// three printer dots between adjacent source rows at 203 DPI.
+const DEFAULT_EIGHT_DOT_VERTICAL_PITCH_DOTS: u32 = 3;
 const LEGACY_FUNCTION_A_SYSTEMS: [BarcodeSystem; 7] = [
     BarcodeSystem::UpcA,
     BarcodeSystem::UpcE,
@@ -337,16 +340,26 @@ struct Enrichment {
     /// Authoring evidence is validated as strings but does not enter runtime profiles.
     #[serde(rename = "sources")]
     _sources: Vec<String>,
-    geometry: Geometry,
+    /// Descriptor: absent when the upstream entry's media width/DPI (or the
+    /// documented constant defaults) should fill it (DD-031/DD-032).
+    geometry: Option<Geometry>,
     cutter: Option<CutterGeometry>,
-    motion: MotionUnits,
-    column_bit_image: ColumnBitImage,
-    commands: CommandBehavior,
-    defaults: PrinterDefaults,
-    fonts: Fonts,
+    /// Descriptor: absent when the resolved geometry DPI should fill it.
+    motion: Option<MotionUnits>,
+    /// Deviation: absent when the Epson baseline pitch should fill it.
+    column_bit_image: Option<ColumnBitImage>,
+    /// Deviation: absent when the conformant defaults should fill it.
+    commands: Option<CommandBehavior>,
+    /// Deviation: absent when the conformant defaults should fill it.
+    defaults: Option<PrinterDefaults>,
+    /// Descriptor: absent when upstream font columns (or the documented
+    /// constant defaults) should fill it.
+    fonts: Option<Fonts>,
     #[serde(default)]
     features: FeatureOverrides,
     code_pages: Option<BTreeMap<u8, String>>,
+    /// A minimal upstream enrichment discloses no approximations of its own.
+    #[serde(default)]
     approximations: Vec<Approximation>,
 }
 
@@ -467,23 +480,50 @@ pub fn compile_profile(
         toml::from_str(enrichment_toml).map_err(CompileProfileError::InvalidEnrichment)?;
 
     validate_schema_version(enrichment.schema_version)?;
-    validate_profile_values(&enrichment)?;
 
-    let (source, code_pages, features) = compile_profile_source(capabilities_json, &enrichment)?;
-    validate_default_code_page(enrichment.defaults.code_page, &code_pages)?;
+    let (source, code_pages, features, upstream) =
+        compile_profile_source(capabilities_json, &enrichment)?;
+
+    let geometry = resolve_geometry(enrichment.geometry, upstream.as_ref());
+    let motion = resolve_motion(enrichment.motion, &geometry);
+    let column_bit_image = enrichment.column_bit_image.unwrap_or(ColumnBitImage {
+        eight_dot_vertical_pitch_dots: DEFAULT_EIGHT_DOT_VERTICAL_PITCH_DOTS,
+    });
+    let commands = enrichment
+        .commands
+        .unwrap_or_else(defaults::default_commands);
+    let printer_defaults = enrichment
+        .defaults
+        .unwrap_or_else(defaults::default_printer_defaults);
+    let fonts = resolve_fonts(
+        enrichment.fonts,
+        geometry.printable_width_dots,
+        upstream.as_ref(),
+    );
+
+    validate_profile_values(
+        &geometry,
+        &motion,
+        &column_bit_image,
+        &printer_defaults,
+        &fonts,
+        &enrichment.features,
+        enrichment.cutter.as_ref(),
+    )?;
+    validate_default_code_page(printer_defaults.code_page, &code_pages)?;
     validate_cutter_capabilities(enrichment.cutter.as_ref(), &features)?;
 
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: enrichment.profile,
         source,
-        geometry: enrichment.geometry,
+        geometry,
         cutter: enrichment.cutter,
-        motion: enrichment.motion,
-        column_bit_image: enrichment.column_bit_image,
-        commands: enrichment.commands,
-        defaults: enrichment.defaults,
-        fonts: enrichment.fonts,
+        motion,
+        column_bit_image,
+        commands,
+        defaults: printer_defaults,
+        fonts,
         features,
         code_pages,
         approximations: enrichment.approximations,
@@ -495,10 +535,26 @@ pub fn compile_profile(
     Ok(profile)
 }
 
+/// The upstream descriptors available to fill an omitted enrichment field
+/// (DD-031/DD-032). Only an upstream source carries them; a reference profile
+/// is fully self-contained and resolves every descriptor from its enrichment.
+struct UpstreamDescriptors {
+    media: ImportedMedia,
+    fonts: BTreeMap<u8, ImportedFont>,
+}
+
 fn compile_profile_source(
     capabilities_json: &[u8],
     enrichment: &Enrichment,
-) -> Result<(ProfileSource, BTreeMap<u8, String>, Features), CompileProfileError> {
+) -> Result<
+    (
+        ProfileSource,
+        BTreeMap<u8, String>,
+        Features,
+        Option<UpstreamDescriptors>,
+    ),
+    CompileProfileError,
+> {
     match &enrichment.source {
         ProfileSource::Upstream {
             profile_sha256: expected_hash,
@@ -526,6 +582,10 @@ fn compile_profile_source(
                 },
                 code_pages,
                 features,
+                Some(UpstreamDescriptors {
+                    media: imported.media,
+                    fonts: imported.fonts,
+                }),
             ))
         }
         ProfileSource::Reference => {
@@ -535,7 +595,7 @@ fn compile_profile_source(
                 },
             )?;
             let features = compile_reference_features(&enrichment.features)?;
-            Ok((ProfileSource::Reference, code_pages, features))
+            Ok((ProfileSource::Reference, code_pages, features, None))
         }
     }
 }
@@ -619,6 +679,76 @@ pub fn import_upstream_descriptors(
     })?;
     let imported = import_upstream_profile(upstream_profile, id)?;
     Ok((imported.media, imported.fonts))
+}
+
+/// Fills an omitted `geometry` table from the upstream entry's media
+/// descriptors, falling back to the documented constant defaults
+/// (DD-031/DD-032). Both DPI axes take the single reported upstream value.
+fn resolve_geometry(
+    geometry: Option<Geometry>,
+    upstream: Option<&UpstreamDescriptors>,
+) -> Geometry {
+    geometry.unwrap_or_else(|| {
+        let media = upstream.map(|upstream| &upstream.media);
+        let width = media
+            .and_then(|media| media.width_pixels)
+            .unwrap_or(defaults::DEFAULT_WIDTH_DOTS);
+        let dpi = media
+            .and_then(|media| media.dpi)
+            .unwrap_or(defaults::DEFAULT_DPI);
+        Geometry {
+            printable_width_dots: width,
+            dpi_x: dpi,
+            dpi_y: dpi,
+        }
+    })
+}
+
+/// Fills an omitted `motion` table from the resolved geometry's DPI, per
+/// axis (DD-031/DD-032).
+fn resolve_motion(motion: Option<MotionUnits>, geometry: &Geometry) -> MotionUnits {
+    motion.unwrap_or(MotionUnits {
+        horizontal_units_per_inch: geometry.dpi_x,
+        vertical_units_per_inch: geometry.dpi_y,
+    })
+}
+
+/// Fills an omitted `fonts` table font-by-font: a font whose upstream column
+/// count is known derives its cell width from the resolved printable width,
+/// keeping the documented default height/baseline; a font with no known
+/// column count falls back to the documented default cell entirely
+/// (DD-031/DD-032).
+fn resolve_fonts(
+    fonts: Option<Fonts>,
+    printable_width_dots: u32,
+    upstream: Option<&UpstreamDescriptors>,
+) -> Fonts {
+    fonts.unwrap_or_else(|| {
+        let upstream_fonts = upstream.map(|upstream| &upstream.fonts);
+        let default_fonts = defaults::default_fonts();
+        Fonts {
+            a: resolve_font(default_fonts.a, 0, printable_width_dots, upstream_fonts),
+            b: resolve_font(default_fonts.b, 1, printable_width_dots, upstream_fonts),
+        }
+    })
+}
+
+fn resolve_font(
+    default: Font,
+    key: u8,
+    printable_width_dots: u32,
+    upstream_fonts: Option<&BTreeMap<u8, ImportedFont>>,
+) -> Font {
+    let columns = upstream_fonts
+        .and_then(|fonts| fonts.get(&key))
+        .and_then(|font| font.columns);
+    match columns {
+        Some(columns) => Font {
+            cell_width_dots: defaults::derive_cell_width(printable_width_dots, columns),
+            ..default
+        },
+        None => default,
+    }
 }
 
 fn apply_feature_overrides(imported: ImportedFeatures, overrides: &FeatureOverrides) -> Features {
@@ -752,19 +882,22 @@ fn validate_schema_version(schema_version: u32) -> Result<(), CompileProfileErro
     })
 }
 
-fn validate_profile_values(enrichment: &Enrichment) -> Result<(), CompileProfileError> {
-    validate_runtime_values(
-        &enrichment.geometry,
-        &enrichment.motion,
-        &enrichment.column_bit_image,
-        &enrichment.defaults,
-        &enrichment.fonts,
-        None,
-    )?;
-    if let Some(barcodes) = &enrichment.features.barcodes {
+/// Validates the resolved (post-fill) descriptor and deviation values, never
+/// the raw `Option`s an enrichment may have omitted (DD-031/DD-032).
+fn validate_profile_values(
+    geometry: &Geometry,
+    motion: &MotionUnits,
+    column_bit_image: &ColumnBitImage,
+    defaults: &PrinterDefaults,
+    fonts: &Fonts,
+    features: &FeatureOverrides,
+    cutter: Option<&CutterGeometry>,
+) -> Result<(), CompileProfileError> {
+    validate_runtime_values(geometry, motion, column_bit_image, defaults, fonts, None)?;
+    if let Some(barcodes) = &features.barcodes {
         validate_barcode_capabilities(barcodes)?;
     }
-    if let Some(cutter) = &enrichment.cutter {
+    if let Some(cutter) = cutter {
         validate_positive(
             "cutter.print_head_to_cutter_dots",
             cutter.print_head_to_cutter_dots,

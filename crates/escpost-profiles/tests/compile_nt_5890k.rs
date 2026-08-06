@@ -505,6 +505,25 @@ fn profiles_reject_unknown_feature_overrides() {
 }
 
 #[test]
+fn upstream_enrichment_may_omit_descriptors_and_deviations() {
+    // Minimal upstream enrichment: only identity + pinned source.
+    let sha = RESOLVED_PROFILE_SHA256;
+    let minimal = format!(
+        "schema_version = 1\nprofile = \"NT-5890K\"\nsources = []\n\n[source]\ntype = \"upstream\"\nprofile_sha256 = \"{sha}\"\n"
+    );
+    let profile = compile_profile(CAPABILITIES_JSON, &minimal)
+        .expect("a minimal upstream enrichment should compile via defaults");
+    // Width unknown upstream for NT-5890K → 58 mm fallback; deviations conformant.
+    assert_eq!(profile.geometry.printable_width_dots, 384);
+    assert_eq!(
+        profile.defaults.carriage_return,
+        CarriageReturnMode::Ignored
+    );
+    assert_eq!(profile.commands.esc_j, FeedBehavior::Feed); // conformant default, not the measured Ignored
+    assert_eq!(profile.column_bit_image.eight_dot_vertical_pitch_dots, 3); // Epson baseline default
+}
+
+#[test]
 fn upstream_media_and_font_columns_parse_with_unknown_as_absent() {
     use escpost_profiles::import_upstream_descriptors;
     let (media, fonts) = import_upstream_descriptors(CAPABILITIES_JSON, "TM-T88III")

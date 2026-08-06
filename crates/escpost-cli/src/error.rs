@@ -17,6 +17,11 @@ pub(crate) enum CliError {
     ProfilePrompt(String),
 
     #[error(
+        "interactive selection is unavailable; run `escpost profiles list --search <text>` instead"
+    )]
+    InteractiveFindUnavailable,
+
+    #[error(
         "an output destination is required; pass --output <PNG>, --output-dir <DIRECTORY>, or --web"
     )]
     MissingOutput,

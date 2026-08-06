@@ -5,19 +5,24 @@
 //! and prints either `render_table`/`render_detail` or `--json`.
 
 use std::collections::BTreeSet;
+use std::io::IsTerminal;
 
 use escpost_profiles::resolver::{self, ResolveError};
 use escpost_profiles::{BarcodeSystem, Font, PrinterProfile, ProfileSource};
+use inquire::Select;
 use serde::Serialize;
 
-use crate::cli::{ListProfilesArgs, ProfilesArgs, ProfilesCommand, ShowProfileArgs, SourceFilter};
+use crate::cli::{
+    FindProfileArgs, ListProfilesArgs, ProfilesArgs, ProfilesCommand, ShowProfileArgs, SourceFilter,
+};
 use crate::error::CliError;
 
 /// Dispatches `escpost profiles <subcommand>`.
-pub(crate) fn run(arguments: ProfilesArgs) -> Result<(), CliError> {
+pub(crate) fn run(arguments: ProfilesArgs, non_interactive: bool) -> Result<(), CliError> {
     match arguments.command {
         ProfilesCommand::List(list_arguments) => run_list(list_arguments),
         ProfilesCommand::Show(show_arguments) => run_show(show_arguments),
+        ProfilesCommand::Find(find_arguments) => run_find(find_arguments, non_interactive),
     }
 }
 
@@ -65,6 +70,53 @@ fn run_show(arguments: ShowProfileArgs) -> Result<(), CliError> {
     } else {
         println!("{}", render_detail(&view));
     }
+    Ok(())
+}
+
+/// Handles `escpost profiles find`: an interactive substring picker over
+/// every embedded profile. Refuses to run without a usable terminal (honoring
+/// the global `--non-interactive` flag), pointing at `profiles list --search`
+/// instead.
+fn run_find(_arguments: FindProfileArgs, non_interactive: bool) -> Result<(), CliError> {
+    let can_prompt =
+        !non_interactive && std::io::stdin().is_terminal() && std::io::stderr().is_terminal();
+    if !can_prompt {
+        return Err(CliError::InteractiveFindUnavailable);
+    }
+
+    let ids = resolver::available_ids().map_err(map_resolve_error)?;
+    let mut views = ids
+        .iter()
+        .map(|id| {
+            resolver::resolve(id)
+                .map(ProfileView::from_profile)
+                .map_err(map_resolve_error)
+        })
+        .collect::<Result<Vec<ProfileView>, CliError>>()?;
+    views.sort_by(|left, right| left.id.cmp(&right.id));
+
+    let options: Vec<(String, String)> = views
+        .into_iter()
+        .map(|view| {
+            (
+                format!("{} — {} · {}", view.id, view.vendor, view.model),
+                view.id,
+            )
+        })
+        .collect();
+    let labels: Vec<String> = options.iter().map(|(label, _)| label.clone()).collect();
+
+    let chosen = Select::new("Find a printer profile", labels)
+        .with_page_size(10)
+        .prompt()
+        .map_err(|error| CliError::ProfilePrompt(error.to_string()))?;
+
+    let id = options
+        .into_iter()
+        .find(|(label, _)| *label == chosen)
+        .map(|(_, id)| id)
+        .unwrap_or(chosen);
+    println!("{id}");
     Ok(())
 }
 

@@ -241,7 +241,12 @@ pub(crate) enum ProfilesCommand {
     List(ListProfilesArgs),
     /// Show the full details of a single printer profile.
     Show(ShowProfileArgs),
+    /// Interactively pick a profile and print its id.
+    Find(FindProfileArgs),
 }
+
+#[derive(Debug, Args)]
+pub(crate) struct FindProfileArgs {}
 
 #[derive(Debug, Args)]
 pub(crate) struct ListProfilesArgs {

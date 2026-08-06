@@ -10,13 +10,14 @@ use escpost_profiles::resolver::{self, ResolveError};
 use escpost_profiles::{BarcodeSystem, Font, PrinterProfile, ProfileSource};
 use serde::Serialize;
 
-use crate::cli::{ListProfilesArgs, ProfilesArgs, ProfilesCommand, SourceFilter};
+use crate::cli::{ListProfilesArgs, ProfilesArgs, ProfilesCommand, ShowProfileArgs, SourceFilter};
 use crate::error::CliError;
 
 /// Dispatches `escpost profiles <subcommand>`.
 pub(crate) fn run(arguments: ProfilesArgs) -> Result<(), CliError> {
     match arguments.command {
         ProfilesCommand::List(list_arguments) => run_list(list_arguments),
+        ProfilesCommand::Show(show_arguments) => run_show(show_arguments),
     }
 }
 
@@ -49,6 +50,20 @@ fn run_list(arguments: ListProfilesArgs) -> Result<(), CliError> {
         println!("{}", serde_json::to_string_pretty(&filtered)?);
     } else {
         println!("{}", render_table(&filtered));
+    }
+    Ok(())
+}
+
+/// Handles `escpost profiles show <id>`: resolves the profile, then prints
+/// either the detail view or `--json`.
+fn run_show(arguments: ShowProfileArgs) -> Result<(), CliError> {
+    let profile = resolver::resolve(&arguments.id).map_err(map_resolve_error)?;
+    let view = ProfileView::from_profile(profile);
+
+    if arguments.json {
+        println!("{}", serde_json::to_string_pretty(&view)?);
+    } else {
+        println!("{}", render_detail(&view));
     }
     Ok(())
 }

@@ -239,6 +239,8 @@ pub(crate) struct ProfilesArgs {
 pub(crate) enum ProfilesCommand {
     /// List available printer profiles.
     List(ListProfilesArgs),
+    /// Show the full details of a single printer profile.
+    Show(ShowProfileArgs),
 }
 
 #[derive(Debug, Args)]
@@ -257,6 +259,16 @@ pub(crate) struct ListProfilesArgs {
     pub(crate) search: Option<String>,
 
     /// Print the full profile catalog as JSON instead of a table.
+    #[arg(long)]
+    pub(crate) json: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct ShowProfileArgs {
+    /// Profile id (as passed to --profile).
+    pub(crate) id: String,
+
+    /// Print the profile as JSON instead of the detail view.
     #[arg(long)]
     pub(crate) json: bool,
 }

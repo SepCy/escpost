@@ -1,14 +1,11 @@
 //! Python bindings for ESCPost.
 
 use escpost::{DeviceEvent, RenderResult, RenderWarning, render as render_escpos};
-use escpost_profiles::{PrinterProfile, ProfilePack, from_canonical_profile_pack_json};
+use escpost_profiles::PrinterProfile;
+use escpost_profiles::resolver::{self, ResolveError};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
-use std::sync::OnceLock;
-
-const PROFILE_PACK_JSON: &[u8] = include_bytes!("../../../profiles/.generated/profiles.json");
-static PROFILE_PACK: OnceLock<ProfilePack> = OnceLock::new();
 
 #[derive(Debug)]
 enum BindingError {
@@ -54,20 +51,10 @@ fn render_with_profile(data: &[u8], profile: &str) -> Result<RenderResult, Bindi
 }
 
 fn load_profile(profile_id: &str) -> Result<&'static PrinterProfile, BindingError> {
-    if PROFILE_PACK.get().is_none() {
-        let profile_pack = from_canonical_profile_pack_json(PROFILE_PACK_JSON)
-            .map_err(|error| BindingError::LoadProfiles(error.to_string()))?;
-        // Another render may win this race. Either verified pack is identical,
-        // and the OnceLock gives every caller the one stored instance.
-        let _ = PROFILE_PACK.set(profile_pack);
-    }
-
-    let profile_pack = PROFILE_PACK.get().ok_or_else(|| {
-        BindingError::LoadProfiles("profile-pack initialization did not complete".to_owned())
-    })?;
-    profile_pack
-        .get(profile_id)
-        .ok_or_else(|| BindingError::UnknownProfile(profile_id.to_owned()))
+    resolver::resolve(profile_id).map_err(|error| match error {
+        ResolveError::UnknownProfile(id) => BindingError::UnknownProfile(id),
+        ResolveError::LoadPack(message) => BindingError::LoadProfiles(message),
+    })
 }
 
 fn render_result_to_python<'py>(

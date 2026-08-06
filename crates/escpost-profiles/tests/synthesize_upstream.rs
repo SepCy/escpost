@@ -31,6 +31,15 @@ fn synthesizes_a_width_bearing_upstream_profile() {
 }
 
 #[test]
+fn synthesizes_vendor_and_model_catalog_metadata() {
+    let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+        .expect("import ok")
+        .expect("TM-T88III has a width, so it synthesizes");
+    assert_eq!(profile.vendor, "Epson");
+    assert_eq!(profile.model, "TM-T88III");
+}
+
+#[test]
 fn synthesized_upstream_default_profile_round_trips_through_canonical_json() {
     let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
         .expect("import ok")

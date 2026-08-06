@@ -50,6 +50,13 @@ pub struct PrinterProfile {
     pub features: Features,
     /// Maps each profile-specific `ESC t n` slot to a named encoding.
     pub code_pages: BTreeMap<u8, String>,
+    /// Catalog metadata (display-only; does not affect rendering): the
+    /// printer manufacturer, from enrichment or the upstream `vendor` field.
+    pub vendor: String,
+    /// Catalog metadata (display-only; does not affect rendering): the
+    /// printer model name, from enrichment or the upstream `name` field,
+    /// falling back to the profile id.
+    pub model: String,
     pub canonical_profile_sha256: String,
 }
 
@@ -252,6 +259,12 @@ pub enum CompileProfileError {
     #[error("reference profile field {field} is required")]
     MissingReferenceField { field: &'static str },
 
+    #[error(
+        "profile {profile:?} has no vendor: an upstream source always supplies one, so state \
+         `vendor` in the enrichment"
+    )]
+    MissingVendor { profile: String },
+
     #[error("an upstream profile cannot replace imported code-page mappings")]
     UpstreamCodePagesOverride,
 
@@ -361,6 +374,13 @@ struct Enrichment {
     #[serde(default)]
     features: FeatureOverrides,
     code_pages: Option<BTreeMap<u8, String>>,
+    /// Catalog metadata (display-only; DD-031/DD-032 keep it simple and hash
+    /// it like every other canonical field). Absent when the upstream
+    /// `vendor` field should fill it.
+    vendor: Option<String>,
+    /// Catalog metadata (display-only). Absent when the upstream `name`
+    /// field should fill it.
+    model: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -390,6 +410,12 @@ struct ImportedProfile {
     media: ImportedMedia,
     #[serde(default)]
     fonts: BTreeMap<u8, ImportedFont>,
+    /// Catalog model name, e.g. `TM-T88III`. Feeds `PrinterProfile::model`.
+    #[serde(default)]
+    name: Option<String>,
+    /// Catalog manufacturer, e.g. `Epson`. Feeds `PrinterProfile::vendor`.
+    #[serde(default)]
+    vendor: Option<String>,
 }
 
 /// Upstream media descriptors. Fields are `Option` because the pinned
@@ -469,6 +495,8 @@ struct CanonicalProfileContent<'a> {
     fonts: &'a Fonts,
     features: &'a Features,
     code_pages: &'a BTreeMap<u8, String>,
+    vendor: &'a str,
+    model: &'a str,
 }
 
 pub fn compile_profile(
@@ -505,6 +533,13 @@ pub fn compile_profile(
     validate_default_code_page(resolved.printer_defaults.code_page, &code_pages)?;
     validate_cutter_capabilities(enrichment.cutter.as_ref(), &features)?;
 
+    let (vendor, model) = resolve_vendor_model(
+        enrichment.vendor,
+        enrichment.model,
+        upstream.as_ref(),
+        &enrichment.profile,
+    )?;
+
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: enrichment.profile,
@@ -518,6 +553,8 @@ pub fn compile_profile(
         fonts: resolved.fonts,
         features,
         code_pages,
+        vendor,
+        model,
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
@@ -557,6 +594,8 @@ pub fn synthesize_profile(
     let upstream = UpstreamDescriptors {
         media: imported.media,
         fonts: imported.fonts,
+        name: imported.name,
+        vendor: imported.vendor,
     };
     let resolved = resolve_profile_fields(None, None, None, None, None, None, Some(&upstream));
 
@@ -572,6 +611,8 @@ pub fn synthesize_profile(
     validate_default_code_page(resolved.printer_defaults.code_page, &code_pages)?;
     validate_cutter_capabilities(None, &features)?;
 
+    let (vendor, model) = resolve_vendor_model(None, None, Some(&upstream), id)?;
+
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: id.to_owned(),
@@ -585,6 +626,8 @@ pub fn synthesize_profile(
         fonts: resolved.fonts,
         features,
         code_pages,
+        vendor,
+        model,
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
@@ -648,6 +691,10 @@ pub fn compile_all(
 struct UpstreamDescriptors {
     media: ImportedMedia,
     fonts: BTreeMap<u8, ImportedFont>,
+    /// Catalog model name, e.g. `TM-T88III`.
+    name: Option<String>,
+    /// Catalog manufacturer, e.g. `Epson`.
+    vendor: Option<String>,
 }
 
 fn compile_profile_source(
@@ -684,6 +731,8 @@ fn compile_profile_source(
                 Some(UpstreamDescriptors {
                     media: imported.media,
                     fonts: imported.fonts,
+                    name: imported.name,
+                    vendor: imported.vendor,
                 }),
             ))
         }
@@ -860,6 +909,30 @@ fn resolve_geometry(
             dpi_y: dpi,
         }
     })
+}
+
+/// Fills `vendor`/`model` catalog metadata from the upstream entry's
+/// `vendor`/`name` fields. Display-only: it does not affect rendering, but is
+/// still layered explicit → upstream-derived like every other field
+/// (DD-031/DD-032). Both are required on the compiled profile: `model` has a
+/// final fallback to the profile id, so it always resolves; `vendor` has no
+/// such fallback — an upstream source always supplies one, so only a
+/// `reference`-source enrichment that forgot to state `vendor` can fail here.
+fn resolve_vendor_model(
+    vendor: Option<String>,
+    model: Option<String>,
+    upstream: Option<&UpstreamDescriptors>,
+    profile_id: &str,
+) -> Result<(String, String), CompileProfileError> {
+    let vendor = vendor
+        .or_else(|| upstream.and_then(|upstream| upstream.vendor.clone()))
+        .ok_or_else(|| CompileProfileError::MissingVendor {
+            profile: profile_id.to_owned(),
+        })?;
+    let model = model
+        .or_else(|| upstream.and_then(|upstream| upstream.name.clone()))
+        .unwrap_or_else(|| profile_id.to_owned());
+    Ok((vendor, model))
 }
 
 /// Fills an omitted `motion` table from the resolved geometry's DPI, per
@@ -1200,6 +1273,8 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
         fonts: &profile.fonts,
         features: &profile.features,
         code_pages: &profile.code_pages,
+        vendor: &profile.vendor,
+        model: &profile.model,
     };
     let normalized = serde_json::to_vec(&content)?;
     Ok(hash_bytes(&normalized))

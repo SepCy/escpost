@@ -325,6 +325,19 @@ capabilities are added to the canonical schema with the renderer behavior that
 consumes them. A reference profile must explicitly fill every current feature
 instead of overriding an imported baseline.
 
+`vendor` and `model` in the enrichment are optional overrides for catalog
+metadata — the manufacturer and model name, e.g. `Epson` and `TM-T88III` —
+for a future `escpost profiles` command to display and search. On the
+compiled profile both are required: `model` resolves as enrichment `model` →
+upstream `name` → the profile id itself, so it always resolves; `vendor`
+resolves as enrichment `vendor` → upstream `vendor`, with no further
+fallback, so compilation rejects a `reference`-source profile that states
+neither — an upstream source always supplies one, so `REFERENCE` states its
+own `vendor = "ESCPost"` and `model = "Reference"` directly in its
+enrichment. Both fields are display-only and never affect rendering, but are
+still included in the canonical hash like every other canonical field — kept
+simple, with no special exclusion (DD-031, DD-032).
+
 The upstream database represents each `GS k` Function A/B family with one
 boolean. The canonical profile stores exact barcode systems. An upstream true
 value expands only to the established legacy systems; model-dependent systems
@@ -368,7 +381,9 @@ Compilation rejects:
 - a default code-page slot absent from the selected source;
 - a default international set the renderer does not implement;
 - a barcode system without a command number in the selected Function A/B
-  framing; and
+  framing;
+- a profile with no resolvable `vendor` (an upstream source always supplies
+  one; only a `reference`-source profile that omits it can fail this); and
 - invalid canonical JSON or a canonical hash mismatch.
 
 Validation grows with implemented behavior. The schema does not reserve fields
@@ -385,12 +400,14 @@ typed source, including the resolved upstream SHA-256 when applicable
 runtime geometry, cutter, motion, column-image, commands, defaults, and fonts
 implemented capabilities
 code-page mappings
+vendor and model catalog metadata
 canonical-profile SHA-256
 ```
 
-The canonical hash covers every field that can affect rendering, except the
-hash field itself. It is the exact profile identity used in render metadata
-and cache keys.
+The canonical hash covers every field except the hash field itself, including
+`vendor`/`model`, which are display-only catalog metadata and never affect
+rendering — kept simple, with no special exclusion. It is the exact profile
+identity used in render metadata and cache keys.
 
 The generated pack is committed because Python wheels embed it directly. Tests
 regenerate every reviewed and synthesizable profile and require the result to

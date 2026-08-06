@@ -63,7 +63,9 @@
       "code_pages": {
         "0": "OXHOO-EUROPEAN"
       },
-      "canonical_profile_sha256": "68790734f4f61891ddac70646c4e7a0ea2a5a05d9c1ea6d854f395701cdfcfd4"
+      "vendor": "Oxhoo",
+      "model": "AF-240 Customer Display",
+      "canonical_profile_sha256": "5714262dc5820e3d54752c51b88ce3ce9f7afaa70b97ee61aae6da068dc83c95"
     },
     "CT-S651": {
       "schema_version": 1,
@@ -166,7 +168,9 @@
         "40": "CP864",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "ee7678e041e038b54cd1b57a76590468f0bc4e9cce9033669df0709deddfdcd6"
+      "vendor": "Citizen",
+      "model": "CT-S651",
+      "canonical_profile_sha256": "d5d5bb1ebf2ea36b41a63e2a88d84d4ba7ceec51bfc1eb29f6bce77602494239"
     },
     "ITPP047": {
       "schema_version": 1,
@@ -264,7 +268,9 @@
         "20": "Unknown",
         "21": "Unknown"
       },
-      "canonical_profile_sha256": "560caebc025e64f0c2cfe3f3ce03bf1d8a03693a5e976e1ceebf962e3235ae2a"
+      "vendor": "Munbyn",
+      "model": "ITPP047",
+      "canonical_profile_sha256": "9d31b00910ac63eaf4dc695f54abb9b3dd6af1c888ef6db3b1bdf7af169397c5"
     },
     "KR-306": {
       "schema_version": 1,
@@ -416,7 +422,9 @@
         "69": "Unknown",
         "70": "CP1256"
       },
-      "canonical_profile_sha256": "c821a529079a04c5196ac38e1a46a65330f0745154d160034e009438f3429219"
+      "vendor": "Kefar",
+      "model": "KR-306",
+      "canonical_profile_sha256": "3178d3900b9c05f952f0d36e9c5f75565fe8813081b66aa10ccf410c86ebf3a2"
     },
     "NT-5890K": {
       "schema_version": 1,
@@ -565,7 +573,9 @@
         "96": "Unknown",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "de7d6d69020902541cb1737f25c70147dd510da8679e990ed169953e08c9fc83"
+      "vendor": "Netum",
+      "model": "NT-5890K",
+      "canonical_profile_sha256": "adb73de3fcb6a76e939ad65ccb1a043d8b5c39aee8d29faec1c77c5850c31512"
     },
     "NT-80-V-UL": {
       "schema_version": 1,
@@ -714,7 +724,9 @@
         "96": "Unknown",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "7656fba0c4980cf041b30ae10b0e6233608ed6d03f5f17e324a27684e3e4e452"
+      "vendor": "Netum",
+      "model": "80-V-UL",
+      "canonical_profile_sha256": "f4cb8be2a1053b205b58ede2d2e798899f787ebd1f9d42ca13b3a656b656d6bc"
     },
     "OCD-100": {
       "schema_version": 1,
@@ -796,7 +808,9 @@
         "17": "CP1253",
         "19": "CP858"
       },
-      "canonical_profile_sha256": "d0f37687bc980edb7b5cd45b3102c33bf647718caeaa44517a866ec46ac7f243"
+      "vendor": "Aures",
+      "model": "OCD-100 Customer Display",
+      "canonical_profile_sha256": "c2ae8306d19d237e3e79eac80d72ff7c45189effb57417a1076b91bb978eeefb"
     },
     "OCD-300": {
       "schema_version": 1,
@@ -880,7 +894,9 @@
         "19": "CP858",
         "20": "Unknown"
       },
-      "canonical_profile_sha256": "95ef80593d4d8f242608e903b6a0f774a41d4e082c9e026a95c4a0f9419ead08"
+      "vendor": "Aures",
+      "model": "OCD-300 Customer Display",
+      "canonical_profile_sha256": "d83aa2f9df4a6bb520eed84f2cc356fb4d5c44233f88e7bf66b00a2726d75099"
     },
     "P822D": {
       "schema_version": 1,
@@ -1032,7 +1048,9 @@
         "89": "CP3041",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "b5c5c05be64b24f4a37645064161e71d52e0f8c2ace32d07da4f12c17e242c50"
+      "vendor": "PBM",
+      "model": "P822D",
+      "canonical_profile_sha256": "10f73b754c7c1b403cd1b843e36f5bb513d918f4854a5e8df3869da27e03452e"
     },
     "POS-5890": {
       "schema_version": 1,
@@ -1163,7 +1181,9 @@
         "96": "Unknown",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "437b1f5631428666e6b06720a4eaccada044fcd8aee195dce6babf01e5f35e38"
+      "vendor": "Zjiang",
+      "model": "POS5890 Series",
+      "canonical_profile_sha256": "dc219f10209a82e2a3580ad07689947ee71796ccce048604b758712169dc483e"
     },
     "REFERENCE": {
       "schema_version": 1,
@@ -1278,7 +1298,9 @@
         "25": "CP1257",
         "26": "CP1258"
       },
-      "canonical_profile_sha256": "fdbd1bfb009fc2b72cfe987cc5303cb756b122c5ae057a287befc27742b82b2c"
+      "vendor": "ESCPost",
+      "model": "Reference",
+      "canonical_profile_sha256": "1c1e7436231d5312b5fa526f28a71b62ad3799e34fd28ddc2b217fa2e9ee70c0"
     },
     "RP-F10-58mm": {
       "schema_version": 1,
@@ -1378,7 +1400,9 @@
         "48": "CP1254",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "03ce32738e89b604a17564cd15ea21c93877e82be5b6849b7e3208e655a38237"
+      "vendor": "Seiko",
+      "model": "RP-F10",
+      "canonical_profile_sha256": "016898f11a27c0c4fe8c63d3e6b33b49e8dd56dd39c6074d94eb652e8d1f6bdc"
     },
     "RP-F10-80mm": {
       "schema_version": 1,
@@ -1478,7 +1502,9 @@
         "48": "CP1254",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "3c4a745d1e4d6a290ffeeb850fd3ab1f6e220cb1bf196370ad80a6a3efa28052"
+      "vendor": "Seiko",
+      "model": "RP-F10",
+      "canonical_profile_sha256": "3386619b8a9dbdabae2d8b33b8f8cc40bc1ca3bcf3bab54efd90d851443ee28d"
     },
     "SRP-S300": {
       "schema_version": 1,
@@ -1591,7 +1617,9 @@
         "50": "CP1256",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "f36ed77be028ab5b95d911018c50e728701908e328feef18032b5c51996ac425"
+      "vendor": "Bixolon",
+      "model": "SRP-S300",
+      "canonical_profile_sha256": "c1d93719f84c0bdfcb2531904b700ea3afd784bbc06dbe75cc3f7e085cf42707"
     },
     "Sunmi-V2": {
       "schema_version": 1,
@@ -1690,7 +1718,9 @@
         "37": "CP864",
         "254": "CP855"
       },
-      "canonical_profile_sha256": "b96ab53cf8da02a7fe64121b2f87347377ac78a488c338ebddb28fa63fbb21c2"
+      "vendor": "Sunmi",
+      "model": "Sunmi V2",
+      "canonical_profile_sha256": "7f9c44e9fa1cc37e7e26cda255da31d5c337542bfb5a914fd309ce31c856b6e9"
     },
     "T-1": {
       "schema_version": 1,
@@ -1779,7 +1809,9 @@
         "19": "CP858",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "b8518181e5f3558625e6e2e8aca032a089c0e7ef02e9c557cfd0988f5e28e5a0"
+      "vendor": "Metapace",
+      "model": "T-1",
+      "canonical_profile_sha256": "ed0eb1a42fdd011e521f70a04500e18d1b72aa43e7a7cf4151fd61ee7d10da1b"
     },
     "TH230": {
       "schema_version": 1,
@@ -1887,7 +1919,9 @@
         "28": "CP1257",
         "29": "Unknown"
       },
-      "canonical_profile_sha256": "7edc239669663d7df9548a6264099c5da1e830416f3ee46799b57aa4ebaa407d"
+      "vendor": "Wincor Nixdorf",
+      "model": "TH230",
+      "canonical_profile_sha256": "6f4cd243ba3e2cbdaae5dd52bf0d7b5cf5ffd1a0a4a92bd8df7f44a4709cab0d"
     },
     "TH230Plus": {
       "schema_version": 1,
@@ -1995,7 +2029,9 @@
         "28": "CP1257",
         "29": "Unknown"
       },
-      "canonical_profile_sha256": "d75ba5950be5599fdb442ac72ac18390b573dece00df8a40310e846b387e4c26"
+      "vendor": "Wincor Nixdorf",
+      "model": "TH230+",
+      "canonical_profile_sha256": "c96a48a57090cea7e9614a82a467fd19e6348f9af0a2a64ce95c26d2a36bdac9"
     },
     "TM-L90": {
       "schema_version": 1,
@@ -2123,7 +2159,9 @@
         "53": "RK1048",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "0aebdbd5cda6ad7fe514783468b65a94e533880aa2000e4ff0596181b5bdb871"
+      "vendor": "Epson",
+      "model": "TM-L90",
+      "canonical_profile_sha256": "dd83df41841b2b23c9577c46ebf9909f0f3ea4e277d978e3c5632ab92b94cf89"
     },
     "TM-P80": {
       "schema_version": 1,
@@ -2266,7 +2304,9 @@
         "254": "Unknown",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "c5a1c18c29cf13683a0d60f8abb4572ff2889bf19a8ba3efb957dcdf307a1c03"
+      "vendor": "Epson",
+      "model": "TM-P80",
+      "canonical_profile_sha256": "713b8b43bd3e06fafe7279288bc70a8f58da1b274adf287f1731d2fb36a5c1c7"
     },
     "TM-P80-42col": {
       "schema_version": 1,
@@ -2409,7 +2449,9 @@
         "254": "Unknown",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "b19ae6b1e079cc93cfdc264dcb2807262c70c0efd222be69f2fe88b480e6ecf0"
+      "vendor": "Epson",
+      "model": "TM-P80 (42 column mode)",
+      "canonical_profile_sha256": "35d635ef57e85070b517ac84d71e7dd8cb4d007dc4b400019af6841177c16cea"
     },
     "TM-T20II": {
       "schema_version": 1,
@@ -2528,7 +2570,9 @@
         "53": "RK1048",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "62e27417b4ddf568461c1135c0487d485f16f222bc0d20ca24b9485ea5d7ec61"
+      "vendor": "Epson",
+      "model": "TM-T20II",
+      "canonical_profile_sha256": "89ea392a9a8242aa6c77bbc95aea9ca206ef18800d9d78d23470369263732bf2"
     },
     "TM-T20II-42col": {
       "schema_version": 1,
@@ -2647,7 +2691,9 @@
         "53": "RK1048",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "1a294a795060e396c6124dce2ca75f30a2cd156ccdfcb2737e93ac2d1b10ae62"
+      "vendor": "Epson",
+      "model": "TM-T20II (42 column mode)",
+      "canonical_profile_sha256": "98e54301d181e8c7a8d7c9bfee1088cda2dd71b2b894f6ea92ebe5b38ec69aa5"
     },
     "TM-T88II": {
       "schema_version": 1,
@@ -2790,7 +2836,9 @@
         "254": "Unknown",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "dbbd66da92ee9ecd83e0a69e8558bc626ce72aaa418e727c0d17a9328ec98ab5"
+      "vendor": "Epson",
+      "model": "TM-T88II",
+      "canonical_profile_sha256": "b99b48328555c4f19057492b2c37d28616db2e6871c73b26c4c1ddd200419e0b"
     },
     "TM-T88III": {
       "schema_version": 1,
@@ -2883,7 +2931,9 @@
         "19": "CP858",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "c11882621e75eeb450b414ef49f10de6202431eb827e8b87edb8723b2948a5c6"
+      "vendor": "Epson",
+      "model": "TM-T88III",
+      "canonical_profile_sha256": "32296548aa9766388b4eae42e0bd6697b353dff68802e2144675f06105fe6b00"
     },
     "TM-T88IV": {
       "schema_version": 1,
@@ -2975,7 +3025,9 @@
         "19": "CP858",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "9f468a327acac26b870096580c1ebfb26ccc8507d63aa9b7227e11e75b922097"
+      "vendor": "Epson",
+      "model": "TM-T88IV",
+      "canonical_profile_sha256": "ceddf08e1a3fcd1418a354ce24708bda172d8de49d9fca97d363fd6ce4575e30"
     },
     "TM-T88IV-SA": {
       "schema_version": 1,
@@ -3062,7 +3114,9 @@
         "30": "TCVN-3-1",
         "31": "TCVN-3-2"
       },
-      "canonical_profile_sha256": "3a316b942760b95189235702e81a09382ea51203e95df3152b4404f6a0e9772d"
+      "vendor": "Epson",
+      "model": "TM-T88IV South Asia",
+      "canonical_profile_sha256": "c360e1c367cff78ffd378f4d9059b0906d034d8cb4c89f03e1a685811ca4075b"
     },
     "TM-T88V": {
       "schema_version": 1,
@@ -3180,7 +3234,9 @@
         "53": "RK1048",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "e167043d13b885aad771eefbf2947aebb5d4869b6328ae50b72e856d749ff629"
+      "vendor": "Epson",
+      "model": "TM-T88V",
+      "canonical_profile_sha256": "630437bf7fc05dbbe7a926c69cf72056f562bbbb51c6fca0795cd3baa080ebd1"
     },
     "TM-U220": {
       "schema_version": 1,
@@ -3244,7 +3300,9 @@
       "code_pages": {
         "0": "CP437"
       },
-      "canonical_profile_sha256": "d30367d6e9ef6ccc92a3da9c9fc14041383ed2514648329a7f5e3ed6e1db12e3"
+      "vendor": "Epson",
+      "model": "TM-U220",
+      "canonical_profile_sha256": "03019edb5fec0cccf847a8204927e60ed1e23ecafb997f94eefb673bd28e4363"
     },
     "TM-U220B": {
       "schema_version": 1,
@@ -3308,7 +3366,9 @@
       "code_pages": {
         "0": "CP437"
       },
-      "canonical_profile_sha256": "4eaf1c114dac2cd4156c1353d987cc9f8d1ad653bc9dee3cd36a576a9ca833c5"
+      "vendor": "Epson",
+      "model": "TM-U220B",
+      "canonical_profile_sha256": "8ec4c8d4b116199c5fb02dc185f1613e387db92c501e9042134d50227c7bdac7"
     },
     "TSP600": {
       "schema_version": 1,
@@ -3438,7 +3498,9 @@
         "102": "Unknown",
         "255": "Unknown"
       },
-      "canonical_profile_sha256": "d022f13d87482ff45477c4e8a2ab3cf021adc56bfc5ff00e93cdfdb16e379297"
+      "vendor": "Star Micronics",
+      "model": "TSP600 Series",
+      "canonical_profile_sha256": "56256a7a48a97b1dfb5fd0503e1059fd4d3c31cef6b16160a7f5967b14344a55"
     },
     "ZJ-5870": {
       "schema_version": 1,
@@ -3510,7 +3572,9 @@
         "17": "CP866",
         "18": "CP852"
       },
-      "canonical_profile_sha256": "f1c2f7bfd85cff8a18119874bac4a14b2841d73c40df8524605fbaf91b01edcd"
+      "vendor": "ZiJiang",
+      "model": "ZJ-5870 Thermal Receipt Printer",
+      "canonical_profile_sha256": "b0391680fc14165cb25ef082ec9ac41c74a1e66bece13f0a4824c6519ef9cef9"
     }
   }
 }

@@ -1,5 +1,7 @@
 schema_version = 1
 profile = "REFERENCE"
+vendor = "ESCPost"
+model = "Reference"
 
 sources = [
     "manual:epson-escpos",

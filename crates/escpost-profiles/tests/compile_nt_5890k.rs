@@ -134,10 +134,9 @@ fn imported_barcode_flags_expand_only_to_the_legacy_systems_they_describe() {
     let table_start = ENRICHMENT_TOML
         .find("[features.barcodes]")
         .expect("the fixture should contain barcode enrichment");
-    let table_end = ENRICHMENT_TOML[table_start..]
-        .find("[[approximations]]")
-        .map(|offset| table_start + offset)
-        .expect("the barcode table should end before approximations");
+    // `[features.barcodes]` is the last table in the fixture, so the slice to
+    // strip runs to the end of the string.
+    let table_end = ENRICHMENT_TOML.len();
     let without_barcode_enrichment = format!(
         "{}{}",
         &ENRICHMENT_TOML[..table_start],

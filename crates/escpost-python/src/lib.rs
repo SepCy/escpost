@@ -1,9 +1,7 @@
 //! Python bindings for ESCPost.
 
 use escpost::{DeviceEvent, RenderResult, RenderWarning, render as render_escpos};
-use escpost_profiles::{
-    Approximation, PrinterProfile, ProfilePack, from_canonical_profile_pack_json,
-};
+use escpost_profiles::{PrinterProfile, ProfilePack, from_canonical_profile_pack_json};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
@@ -87,10 +85,6 @@ fn render_result_to_python<'py>(
         device_events_to_python(py, &rendered.device_events)?,
     )?;
     result.set_item("warnings", warnings_to_python(py, &rendered.warnings)?)?;
-    result.set_item(
-        "approximations",
-        approximations_to_python(py, &rendered.approximations)?,
-    )?;
     result.set_item("metadata", metadata_to_python(py, rendered)?)?;
     Ok(result)
 }
@@ -139,20 +133,6 @@ fn device_events_to_python<'py>(
                 item.set_item("off_time_units", off_time_units)?;
             }
         }
-        result.append(item)?;
-    }
-    Ok(result)
-}
-
-fn approximations_to_python<'py>(
-    py: Python<'py>,
-    approximations: &[Approximation],
-) -> PyResult<Bound<'py, PyList>> {
-    let result = PyList::empty(py);
-    for approximation in approximations {
-        let item = PyDict::new(py);
-        item.set_item("field", &approximation.field)?;
-        item.set_item("reason", &approximation.reason)?;
         result.append(item)?;
     }
     Ok(result)

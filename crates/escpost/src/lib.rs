@@ -17,7 +17,7 @@ pub use error::{LimitKind, RenderError, RenderWarning};
 pub use surface::MonoSurface;
 
 use command::{execute_esc_command, execute_gs_command};
-use escpost_profiles::{Approximation, PrinterProfile};
+use escpost_profiles::PrinterProfile;
 use state::PrinterState;
 use surface::encode_png;
 
@@ -74,7 +74,6 @@ pub struct RenderResult {
     /// Non-fatal diagnostics from an otherwise successful render, such as a cut
     /// requested on a profile whose printer has no cutter.
     pub warnings: Vec<RenderWarning>,
-    pub approximations: Vec<Approximation>,
     pub metadata: RenderMetadata,
 }
 
@@ -156,7 +155,6 @@ pub fn render_with_options(
         sheets,
         device_events,
         warnings,
-        approximations: profile.approximations.clone(),
         metadata: RenderMetadata {
             renderer_version: env!("CARGO_PKG_VERSION"),
             profile_id: profile.id.clone(),

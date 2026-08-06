@@ -51,7 +51,7 @@ line_spacing_dots = 30
 code_page = 0
 international_character_set = 0
 # Most horizontal thermal printers ignore CR while auto line feed is disabled.
-# Keep this assumption visible below until the connected NT-5890K is probed.
+# Assumed until the connected NT-5890K is physically probed.
 carriage_return = "ignored"
 
 [fonts.a]
@@ -91,15 +91,3 @@ function_b = [
     "code_93",
     "code_128",
 ]
-
-[[approximations]]
-field = "fonts.resident_glyph_shapes"
-reason = "Representative glyphs will be used instead of printer ROM glyphs"
-
-[[approximations]]
-field = "defaults.carriage_return"
-reason = "Assumes auto line feed is disabled until CR behavior is physically verified"
-
-[[approximations]]
-field = "column_bit_image.trailing_line"
-reason = "Connected firmware adds a faint trailing line after 8-dot ESC * images; the renderer omits this incidental artifact"

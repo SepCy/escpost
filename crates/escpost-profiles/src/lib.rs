@@ -52,7 +52,6 @@ pub struct PrinterProfile {
     pub features: Features,
     /// Maps each profile-specific `ESC t n` slot to a named encoding.
     pub code_pages: BTreeMap<u8, String>,
-    pub approximations: Vec<Approximation>,
     pub canonical_profile_sha256: String,
 }
 
@@ -235,13 +234,6 @@ pub enum BarcodeSystem {
     Code128Auto,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Approximation {
-    pub field: String,
-    pub reason: String,
-}
-
 #[derive(Debug, Error)]
 pub enum CompileProfileError {
     #[error("invalid upstream capabilities JSON")]
@@ -371,9 +363,6 @@ struct Enrichment {
     #[serde(default)]
     features: FeatureOverrides,
     code_pages: Option<BTreeMap<u8, String>>,
-    /// A minimal upstream enrichment discloses no approximations of its own.
-    #[serde(default)]
-    approximations: Vec<Approximation>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -482,7 +471,6 @@ struct CanonicalProfileContent<'a> {
     fonts: &'a Fonts,
     features: &'a Features,
     code_pages: &'a BTreeMap<u8, String>,
-    approximations: &'a [Approximation],
 }
 
 pub fn compile_profile(
@@ -532,7 +520,6 @@ pub fn compile_profile(
         fonts: resolved.fonts,
         features,
         code_pages,
-        approximations: enrichment.approximations,
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
@@ -600,7 +587,6 @@ pub fn synthesize_profile(
         fonts: resolved.fonts,
         features,
         code_pages,
-        approximations: Vec::new(),
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
@@ -1167,7 +1153,6 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
         fonts: &profile.fonts,
         features: &profile.features,
         code_pages: &profile.code_pages,
-        approximations: &profile.approximations,
     };
     let normalized = serde_json::to_vec(&content)?;
     Ok(hash_bytes(&normalized))

@@ -117,11 +117,3 @@ function_b = [
 24 = "CP1256"
 25 = "CP1257"
 26 = "CP1258"
-
-[[approximations]]
-field = "fonts.resident_glyph_shapes"
-reason = "Representative bundled glyphs are used because a virtual profile has no printer ROM"
-
-[[approximations]]
-field = "geometry"
-reason = "ESC/POS does not define paper width or print-head-to-cutter distance; REFERENCE selects deterministic virtual values"

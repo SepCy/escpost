@@ -148,21 +148,7 @@
         "96": "Unknown",
         "255": "Unknown"
       },
-      "approximations": [
-        {
-          "field": "fonts.resident_glyph_shapes",
-          "reason": "Representative glyphs will be used instead of printer ROM glyphs"
-        },
-        {
-          "field": "defaults.carriage_return",
-          "reason": "Assumes auto line feed is disabled until CR behavior is physically verified"
-        },
-        {
-          "field": "column_bit_image.trailing_line",
-          "reason": "Connected firmware adds a faint trailing line after 8-dot ESC * images; the renderer omits this incidental artifact"
-        }
-      ],
-      "canonical_profile_sha256": "021d5a3063aa611290a4dc5a5a2ee3eff3d644193be493b228ab0f5ee7fe3326"
+      "canonical_profile_sha256": "de7d6d69020902541cb1737f25c70147dd510da8679e990ed169953e08c9fc83"
     },
     "REFERENCE": {
       "schema_version": 1,
@@ -277,17 +263,7 @@
         "25": "CP1257",
         "26": "CP1258"
       },
-      "approximations": [
-        {
-          "field": "fonts.resident_glyph_shapes",
-          "reason": "Representative bundled glyphs are used because a virtual profile has no printer ROM"
-        },
-        {
-          "field": "geometry",
-          "reason": "ESC/POS does not define paper width or print-head-to-cutter distance; REFERENCE selects deterministic virtual values"
-        }
-      ],
-      "canonical_profile_sha256": "d2b16d5f2481bed8c5329967fe920b864296450496b065fed4940ec910faec28"
+      "canonical_profile_sha256": "fdbd1bfb009fc2b72cfe987cc5303cb756b122c5ae057a287befc27742b82b2c"
     }
   }
 }

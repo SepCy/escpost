@@ -151,11 +151,13 @@ early rather than overrunning a narrower physical sheet than assumed.
 `printable_width_dots` — not a millimeter paper size — is the authoritative
 geometry unit, because printable dots are not paper millimeters times DPI.
 Print heads leave inactive margins that a paper-size label does not capture:
-`TM-T88III` ships 80 mm paper, yet its upstream-reported printable width is
-512 dots (≈64 mm at 203 DPI), well short of the 640 dots a naive mm × DPI
-conversion would predict. Consuming `printable_width_dots` directly is
-required precision, not a simplification, and it is why the geometry table
-carries dots rather than millimeters.
+`TM-T88III` ships 80 mm paper at its upstream-reported 180 DPI, which a naive
+mm × DPI conversion would predict as ≈567 dots (80 mm × 180 DPI ÷ 25.4). Its
+actual upstream-reported printable width is only 512 dots (≈72 mm at 180
+DPI) — the gap is head margin the paper-size number does not capture.
+Consuming `printable_width_dots` directly is required precision, not a
+simplification, and it is why the geometry table carries dots rather than
+millimeters.
 
 ## `dpi` versus `motion`
 

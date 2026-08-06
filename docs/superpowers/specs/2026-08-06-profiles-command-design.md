@@ -14,21 +14,28 @@ Scope is the CLI only; it reads the existing embedded profile pack through
 
 The catalog wants to show paper size in millimetres, but the canonical profile
 currently stores only `printable_width_dots` + `dpi`. Import upstream
-`media.width.mm` as a **required** `paper_width_mm: u32` field on
-`PrinterProfile`, using the same pattern already applied to `vendor`/`model`:
+`media.width.mm` as a **required, fixed-point** field
+`paper_width_tenths_mm: u32` on `PrinterProfile` (tenths of a mm — `575` = 57.5
+mm), following the `vendor`/`model` pattern. Upstream mm is fractional for 9/32
+entries (NT-5890K is 57.5), so fixed-point tenths keeps the value **lossless**
+while keeping the canonical profile all-integer (the byte-exact drift guard
+stays stable — no floats in canonical JSON).
 
-- Read it in the upstream import; fill order `enrichment ?? upstream ?? error`.
-- Included in the canonical hash (consistent with the "keep it simple, hashes
-  may change" decision for vendor/model).
-- `profiles/REFERENCE/profile.toml` sets `paper_width_mm = 80` (virtual).
+- Enrichment authors write `paper_width_mm` as a decimal (`Option<f64>`, e.g.
+  `80.0`); upstream mm and the enrichment value convert to tenths via
+  `round(mm × 10)`. Fill order `enrichment ?? upstream ?? error`.
+- Included in the canonical hash.
+- `profiles/REFERENCE/profile.toml` sets `paper_width_mm = 80.0` (virtual).
 - Regenerate `profiles/.generated/profiles.json` (drift test enforces it).
 
-Verified safe as a required field: in `capabilities.json` every entry with a
-numeric `media.width.pixels` also has a numeric `media.width.mm` (the only
-`Unknown` mm values belong to the widthless generics we already skip).
+Verified safe as required: every entry with a numeric `media.width.pixels` also
+has a numeric `media.width.mm` (the only `Unknown` mm belong to the widthless
+generics we skip).
 
-`printable_width_mm` is **not stored** — it is derived at display time as
-`printable_width_dots ÷ dpi_x × 25.4`.
+Neither width in mm is a rendering input — both are display metadata. The CLI
+presents `paper_width_mm` as a decimal (`tenths ÷ 10`). `printable_width_mm` is
+**not stored** — it is derived at display time as
+`printable_width_dots ÷ dpi_x × 25.4` and shown as a decimal.
 
 ## Calibration vocabulary (the honesty signal)
 
@@ -118,8 +125,8 @@ compact projection of it.
   "vendor": "Epson",
   "model": "TM-T88III",
   "source": "synthesized",
-  "paper_width_mm": 80,
-  "printable_width_mm": 72,
+  "paper_width_mm": 80.0,
+  "printable_width_mm": 72.2,
   "printable_width_dots": 512,
   "dpi_x": 180,
   "dpi_y": 180,
@@ -140,8 +147,9 @@ compact projection of it.
 }
 ```
 
-`printable_width_mm` is rounded to the nearest integer. Barcode systems use the
-canonical snake_case names (`upc_a`, `code_128`, …).
+`paper_width_mm` and `printable_width_mm` are decimals (one place); the compact
+`list` table rounds them to whole mm, while `show`/`--json` keep the decimal.
+Barcode systems use the canonical snake_case names (`upc_a`, `code_128`, …).
 
 ## Errors & exit codes
 

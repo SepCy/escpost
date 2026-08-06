@@ -39,16 +39,19 @@
 
 **Files:** Modify `crates/escpost-profiles/src/lib.rs`, `profiles/REFERENCE/profile.toml`, regenerate `profiles/.generated/profiles.json`; Test in `crates/escpost-profiles/tests/synthesize_upstream.rs`.
 
-**Interfaces:** Produces `PrinterProfile.paper_width_mm: u32`.
+**Interfaces:** Produces `PrinterProfile.paper_width_tenths_mm: u32` (tenths of a mm; 575 = 57.5 mm — lossless fixed-point).
 
 - [ ] **Step 1: Write the failing test**
 
 Add to `synthesize_upstream.rs`:
 ```rust
 #[test]
-fn synthesizes_nominal_paper_width_mm() {
-    let p = synthesize_profile(CAPABILITIES, "TM-T88III").unwrap().unwrap();
-    assert_eq!(p.paper_width_mm, 80);
+fn synthesizes_nominal_paper_width_in_tenths_mm() {
+    let tm = synthesize_profile(CAPABILITIES, "TM-T88III").unwrap().unwrap();
+    assert_eq!(tm.paper_width_tenths_mm, 800);
+    // NT-5890K upstream mm is fractional (57.5) — lossless in tenths:
+    let nt = synthesize_profile(CAPABILITIES, "NT-5890K").unwrap().unwrap();
+    assert_eq!(nt.paper_width_tenths_mm, 575);
 }
 ```
 
@@ -58,7 +61,7 @@ fn synthesizes_nominal_paper_width_mm() {
 
 - [ ] **Step 3: Implement**
 
-Mirror exactly how `vendor`/`model` were added (search the file for `vendor` to find every site): add `paper_width_mm: u32` to `PrinterProfile` and `CanonicalProfileContent` (hashed); read upstream `media.width.mm` in the import (it lives next to `pixels` in `ImportedMedia` — add `width_mm: Option<u32>` with the same lenient `"Unknown"`→None parse); add optional `paper_width_mm: Option<u32>` to `Enrichment`; fill `enrichment ?? upstream.width_mm ?? Err(MissingPaperWidth{profile})` (add the error variant, modeled on `MissingVendor`). Set `paper_width_mm = 80` in `profiles/REFERENCE/profile.toml`.
+Mirror how `vendor`/`model` were added (search the file for `vendor`): add `paper_width_tenths_mm: u32` to `PrinterProfile` and `CanonicalProfileContent` (hashed); read upstream `media.width.mm` as `Option<f64>` in the import (next to `pixels` in `ImportedMedia`, lenient `"Unknown"`→None); add `paper_width_mm: Option<f64>` to `Enrichment`; fill `tenths = round(mm × 10)` where `mm = enrichment ?? upstream.width_mm ?? Err(MissingPaperWidth{profile})` (variant modeled on `MissingVendor`). Set `paper_width_mm = 80.0` in `profiles/REFERENCE/profile.toml` (TOML float for the f64 field).
 
 - [ ] **Step 4: Regenerate the pack + run GREEN**
 
@@ -91,8 +94,8 @@ fn view_maps_source_and_derived_mm() {
     let p = resolver::resolve("TM-T88III").unwrap();
     let v = ProfileView::from_profile(p);
     assert_eq!(v.source, "synthesized");
-    assert_eq!(v.paper_width_mm, 80);
-    assert_eq!(v.printable_width_mm, 72); // round(512/180*25.4)
+    assert_eq!(v.paper_width_mm, 80.0);                       // f64 from tenths ÷ 10
+    assert!((v.printable_width_mm - 72.2).abs() < 0.05);      // 512/180*25.4
     assert_eq!(v.dpi_x, 180);
     // JSON round-trips with snake_case keys:
     let j = serde_json::to_value(&v).unwrap();

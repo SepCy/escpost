@@ -40,6 +40,22 @@ fn synthesizes_vendor_and_model_catalog_metadata() {
 }
 
 #[test]
+fn synthesizes_nominal_paper_width_in_tenths_mm() {
+    let p = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+        .unwrap()
+        .unwrap();
+    assert_eq!(p.paper_width_tenths_mm, 800);
+
+    // NT-5890K's upstream media width is fractional (57.5 mm): the
+    // fixed-point representation must preserve it losslessly rather than
+    // rounding to a whole millimeter.
+    let nt = synthesize_profile(CAPABILITIES_JSON, "NT-5890K")
+        .unwrap()
+        .unwrap();
+    assert_eq!(nt.paper_width_tenths_mm, 575);
+}
+
+#[test]
 fn synthesized_upstream_default_profile_round_trips_through_canonical_json() {
     let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
         .expect("import ok")

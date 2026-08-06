@@ -2,6 +2,7 @@ schema_version = 1
 profile = "REFERENCE"
 vendor = "ESCPost"
 model = "Reference"
+paper_width_mm = 80.0
 
 sources = [
     "manual:epson-escpos",

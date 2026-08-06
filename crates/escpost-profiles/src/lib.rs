@@ -57,6 +57,12 @@ pub struct PrinterProfile {
     /// printer model name, from enrichment or the upstream `name` field,
     /// falling back to the profile id.
     pub model: String,
+    /// Nominal paper width in tenths of a millimeter (e.g. `575` for
+    /// 57.5 mm), from enrichment or the upstream `media.width.mm` field.
+    /// Fixed-point rather than a rounded whole `u32` so a fractional
+    /// upstream width (e.g. NT-5890K's 57.5 mm) survives losslessly.
+    /// Required: every width-bearing entry we emit states it.
+    pub paper_width_tenths_mm: u32,
     pub canonical_profile_sha256: String,
 }
 
@@ -265,6 +271,12 @@ pub enum CompileProfileError {
     )]
     MissingVendor { profile: String },
 
+    #[error(
+        "profile {profile:?} has no paper_width_mm: an upstream source always supplies one, so \
+         state `paper_width_mm` in the enrichment"
+    )]
+    MissingPaperWidth { profile: String },
+
     #[error("an upstream profile cannot replace imported code-page mappings")]
     UpstreamCodePagesOverride,
 
@@ -381,6 +393,10 @@ struct Enrichment {
     /// Catalog metadata (display-only). Absent when the upstream `name`
     /// field should fill it.
     model: Option<String>,
+    /// Nominal paper width in millimeters, written as a decimal (e.g.
+    /// `80.0`). Descriptor, hashed like every other canonical field. Absent
+    /// when the upstream `media.width.mm` field should fill it.
+    paper_width_mm: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -421,16 +437,54 @@ struct ImportedProfile {
 /// Upstream media descriptors. Fields are `Option` because the pinned
 /// `capabilities.json` represents unknown values with the literal string
 /// `"Unknown"` (or omits the key entirely) rather than `null`.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default)]
 pub struct ImportedMedia {
-    #[serde(default, deserialize_with = "deserialize_lenient_u32")]
     pub dpi: Option<u32>,
-    #[serde(
-        rename = "width",
-        default,
-        deserialize_with = "deserialize_lenient_width_pixels"
-    )]
     pub width_pixels: Option<u32>,
+    /// Raw upstream millimeter width, kept as `f64` (not rounded) because
+    /// upstream reports some widths fractionally (e.g. `57.5`); rounding
+    /// happens once, downstream, when resolving `paper_width_tenths_mm`.
+    pub width_mm: Option<f64>,
+}
+
+/// Hand-written: `width_pixels` and `width_mm` both come from the same
+/// nested `width` object. Two `#[serde(rename = "width")]` derive fields
+/// would silently leave one unpopulated — only the first field matching a
+/// given JSON key receives the map entry — so this reads `width` once and
+/// splits it into both.
+impl<'de> Deserialize<'de> for ImportedMedia {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Raw {
+            #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+            dpi: Option<u32>,
+            #[serde(default)]
+            width: Option<Width>,
+        }
+
+        #[derive(Deserialize)]
+        struct Width {
+            #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+            pixels: Option<u32>,
+            /// Upstream states some widths as fractional millimeters (e.g.
+            /// `57.5`), unlike every other lenient field, which is always a
+            /// whole number when present. Kept as `f64` here — no rounding
+            /// at import time — so the fraction survives losslessly into
+            /// `paper_width_tenths_mm`.
+            #[serde(default, deserialize_with = "deserialize_lenient_f64")]
+            mm: Option<f64>,
+        }
+
+        let raw = Raw::deserialize(deserializer)?;
+        Ok(ImportedMedia {
+            dpi: raw.dpi,
+            width_pixels: raw.width.as_ref().and_then(|width| width.pixels),
+            width_mm: raw.width.and_then(|width| width.mm),
+        })
+    }
 }
 
 /// Upstream font descriptors, keyed by the same font index as `fonts.<n>`.
@@ -438,21 +492,6 @@ pub struct ImportedMedia {
 pub struct ImportedFont {
     #[serde(default, deserialize_with = "deserialize_lenient_u32")]
     pub columns: Option<u32>,
-}
-
-/// `media.width.pixels` is nested one level deeper than the other lenient
-/// fields, so it needs its own deserializer instead of `deserialize_lenient_u32`.
-fn deserialize_lenient_width_pixels<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    struct Width {
-        #[serde(default, deserialize_with = "deserialize_lenient_u32")]
-        pixels: Option<u32>,
-    }
-
-    Option::<Width>::deserialize(deserializer).map(|width| width.and_then(|width| width.pixels))
 }
 
 /// Deserializes a `u32` that upstream may represent as the literal string
@@ -465,6 +504,17 @@ where
     Ok(Value::deserialize(deserializer)?
         .as_u64()
         .and_then(|value| u32::try_from(value).ok()))
+}
+
+/// Like `deserialize_lenient_u32`, but keeps a fractional JSON number
+/// (upstream reports some widths as fractional millimeters) instead of
+/// requiring a whole one. Anything but a JSON number — including the
+/// literal string `"Unknown"` — maps to `None`.
+fn deserialize_lenient_f64<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Value::deserialize(deserializer)?.as_f64())
 }
 
 #[derive(Debug, Deserialize)]
@@ -497,6 +547,7 @@ struct CanonicalProfileContent<'a> {
     code_pages: &'a BTreeMap<u8, String>,
     vendor: &'a str,
     model: &'a str,
+    paper_width_tenths_mm: u32,
 }
 
 pub fn compile_profile(
@@ -539,6 +590,11 @@ pub fn compile_profile(
         upstream.as_ref(),
         &enrichment.profile,
     )?;
+    let paper_width_tenths_mm = resolve_paper_width_tenths_mm(
+        enrichment.paper_width_mm,
+        upstream.as_ref(),
+        &enrichment.profile,
+    )?;
 
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
@@ -555,6 +611,7 @@ pub fn compile_profile(
         code_pages,
         vendor,
         model,
+        paper_width_tenths_mm,
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
@@ -612,6 +669,7 @@ pub fn synthesize_profile(
     validate_cutter_capabilities(None, &features)?;
 
     let (vendor, model) = resolve_vendor_model(None, None, Some(&upstream), id)?;
+    let paper_width_tenths_mm = resolve_paper_width_tenths_mm(None, Some(&upstream), id)?;
 
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
@@ -628,6 +686,7 @@ pub fn synthesize_profile(
         code_pages,
         vendor,
         model,
+        paper_width_tenths_mm,
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
@@ -933,6 +992,28 @@ fn resolve_vendor_model(
         .or_else(|| upstream.and_then(|upstream| upstream.name.clone()))
         .unwrap_or_else(|| profile_id.to_owned());
     Ok((vendor, model))
+}
+
+/// Fills `paper_width_tenths_mm` from an explicit enrichment millimeter
+/// value or the upstream entry's `media.width.mm` field, layered explicit →
+/// upstream-derived like every other descriptor (DD-031/DD-032), then
+/// converts the resolved millimeter value to fixed-point tenths of a
+/// millimeter so a fractional upstream width (e.g. NT-5890K's 57.5 mm)
+/// survives losslessly rather than being rounded away. Required on the
+/// compiled profile with no further fallback: an upstream source always
+/// supplies one, so only a `reference`-source enrichment that forgot to
+/// state `paper_width_mm` can fail here.
+fn resolve_paper_width_tenths_mm(
+    paper_width_mm: Option<f64>,
+    upstream: Option<&UpstreamDescriptors>,
+    profile_id: &str,
+) -> Result<u32, CompileProfileError> {
+    let mm = paper_width_mm
+        .or_else(|| upstream.and_then(|upstream| upstream.media.width_mm))
+        .ok_or_else(|| CompileProfileError::MissingPaperWidth {
+            profile: profile_id.to_owned(),
+        })?;
+    Ok((mm * 10.0).round() as u32)
 }
 
 /// Fills an omitted `motion` table from the resolved geometry's DPI, per
@@ -1275,6 +1356,7 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
         code_pages: &profile.code_pages,
         vendor: &profile.vendor,
         model: &profile.model,
+        paper_width_tenths_mm: profile.paper_width_tenths_mm,
     };
     let normalized = serde_json::to_vec(&content)?;
     Ok(hash_bytes(&normalized))

@@ -69,6 +69,38 @@ fn profiles_list_json_parses_as_an_array_of_profile_objects() {
 }
 
 #[test]
+fn profiles_list_json_with_no_matches_prints_an_empty_json_array() {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "profiles",
+            "list",
+            "--json",
+            "--vendor",
+            "definitely-not-a-vendor",
+        ])
+        .output()
+        .expect("the escpost command should finish");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(
+        output.status.success(),
+        "an empty match set is not an error:\n{stdout}"
+    );
+    assert_eq!(
+        stdout.trim(),
+        "[]",
+        "--json must always emit a JSON array, even when empty:\n{stdout}"
+    );
+    let value: serde_json::Value =
+        serde_json::from_str(stdout.trim()).expect("stdout should be valid JSON");
+    assert_eq!(
+        value.as_array().expect("--json output should be an array"),
+        &Vec::<serde_json::Value>::new(),
+        "the array should be empty"
+    );
+}
+
+#[test]
 fn profiles_list_with_no_matches_exits_cleanly_with_a_stderr_note() {
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args(["profiles", "list", "--vendor", "doesnotexist"])

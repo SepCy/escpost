@@ -30,23 +30,14 @@ pub(crate) fn run(arguments: ProfilesArgs, non_interactive: bool) -> Result<(), 
 /// the `--vendor`/`--source`/`--search` filters (AND), then prints either the
 /// compact table or `--json`.
 fn run_list(arguments: ListProfilesArgs) -> Result<(), CliError> {
-    let ids = resolver::available_ids().map_err(map_resolve_error)?;
-    let mut views = ids
-        .iter()
-        .map(|id| {
-            resolver::resolve(id)
-                .map(ProfileView::from_profile)
-                .map_err(map_resolve_error)
-        })
-        .collect::<Result<Vec<ProfileView>, CliError>>()?;
-    views.sort_by(|left, right| left.id.cmp(&right.id));
+    let views = all_views()?;
 
     let filtered: Vec<ProfileView> = views
         .into_iter()
         .filter(|view| matches_filters(view, &arguments))
         .collect();
 
-    if filtered.is_empty() {
+    if filtered.is_empty() && !arguments.json {
         eprintln!("no profiles match");
         return Ok(());
     }
@@ -57,6 +48,23 @@ fn run_list(arguments: ListProfilesArgs) -> Result<(), CliError> {
         println!("{}", render_table(&filtered));
     }
     Ok(())
+}
+
+/// Gathers every embedded profile, resolved and projected through
+/// `ProfileView::from_profile`, sorted by id. Shared by `list` and `find` so
+/// the gather-resolve-project-sort pipeline lives in exactly one place.
+fn all_views() -> Result<Vec<ProfileView>, CliError> {
+    let ids = resolver::available_ids().map_err(map_resolve_error)?;
+    let mut views = ids
+        .iter()
+        .map(|id| {
+            resolver::resolve(id)
+                .map(ProfileView::from_profile)
+                .map_err(map_resolve_error)
+        })
+        .collect::<Result<Vec<ProfileView>, CliError>>()?;
+    views.sort_by(|left, right| left.id.cmp(&right.id));
+    Ok(views)
 }
 
 /// Handles `escpost profiles show <id>`: resolves the profile, then prints
@@ -84,16 +92,7 @@ fn run_find(_arguments: FindProfileArgs, non_interactive: bool) -> Result<(), Cl
         return Err(CliError::InteractiveFindUnavailable);
     }
 
-    let ids = resolver::available_ids().map_err(map_resolve_error)?;
-    let mut views = ids
-        .iter()
-        .map(|id| {
-            resolver::resolve(id)
-                .map(ProfileView::from_profile)
-                .map_err(map_resolve_error)
-        })
-        .collect::<Result<Vec<ProfileView>, CliError>>()?;
-    views.sort_by(|left, right| left.id.cmp(&right.id));
+    let views = all_views()?;
 
     let options: Vec<(String, String)> = views
         .into_iter()
@@ -115,7 +114,7 @@ fn run_find(_arguments: FindProfileArgs, non_interactive: bool) -> Result<(), Cl
         .into_iter()
         .find(|(label, _)| *label == chosen)
         .map(|(_, id)| id)
-        .unwrap_or(chosen);
+        .expect("inquire returns one of the supplied labels");
     println!("{id}");
     Ok(())
 }

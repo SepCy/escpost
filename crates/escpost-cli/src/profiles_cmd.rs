@@ -1,12 +1,97 @@
-//! `ProfileView` data and rendering for the `escpost profiles` catalog
-//! commands. Pure data + format layer: no clap, no I/O. `list`/`show`/`find`
-//! (later tasks) call `ProfileView::from_profile` and the `render_*`
-//! functions in this module.
+//! `ProfileView` data, rendering, and command handlers for the `escpost
+//! profiles` catalog commands (`list`, and `show`/`find` in later tasks).
+//! `run` dispatches each `ProfilesCommand`; each handler gathers profiles via
+//! `escpost_profiles::resolver`, projects them through `ProfileView::from_profile`,
+//! and prints either `render_table`/`render_detail` or `--json`.
 
 use std::collections::BTreeSet;
 
+use escpost_profiles::resolver::{self, ResolveError};
 use escpost_profiles::{BarcodeSystem, Font, PrinterProfile, ProfileSource};
 use serde::Serialize;
+
+use crate::cli::{ListProfilesArgs, ProfilesArgs, ProfilesCommand, SourceFilter};
+use crate::error::CliError;
+
+/// Dispatches `escpost profiles <subcommand>`.
+pub(crate) fn run(arguments: ProfilesArgs) -> Result<(), CliError> {
+    match arguments.command {
+        ProfilesCommand::List(list_arguments) => run_list(list_arguments),
+    }
+}
+
+/// Handles `escpost profiles list`: gathers every embedded profile, applies
+/// the `--vendor`/`--source`/`--search` filters (AND), then prints either the
+/// compact table or `--json`.
+fn run_list(arguments: ListProfilesArgs) -> Result<(), CliError> {
+    let ids = resolver::available_ids().map_err(map_resolve_error)?;
+    let mut views = ids
+        .iter()
+        .map(|id| {
+            resolver::resolve(id)
+                .map(ProfileView::from_profile)
+                .map_err(map_resolve_error)
+        })
+        .collect::<Result<Vec<ProfileView>, CliError>>()?;
+    views.sort_by(|left, right| left.id.cmp(&right.id));
+
+    let filtered: Vec<ProfileView> = views
+        .into_iter()
+        .filter(|view| matches_filters(view, &arguments))
+        .collect();
+
+    if filtered.is_empty() {
+        eprintln!("no profiles match");
+        return Ok(());
+    }
+
+    if arguments.json {
+        println!("{}", serde_json::to_string_pretty(&filtered)?);
+    } else {
+        println!("{}", render_table(&filtered));
+    }
+    Ok(())
+}
+
+fn matches_filters(view: &ProfileView, arguments: &ListProfilesArgs) -> bool {
+    let vendor_matches = arguments
+        .vendor
+        .as_deref()
+        .is_none_or(|vendor| contains_ignore_case(&view.vendor, vendor));
+
+    let source_matches = arguments.source.as_ref().is_none_or(|source| {
+        view.source
+            .eq_ignore_ascii_case(source_filter_label(*source))
+    });
+
+    let search_matches = arguments.search.as_deref().is_none_or(|search| {
+        contains_ignore_case(&view.id, search)
+            || contains_ignore_case(&view.vendor, search)
+            || contains_ignore_case(&view.model, search)
+    });
+
+    vendor_matches && source_matches && search_matches
+}
+
+fn contains_ignore_case(haystack: &str, needle: &str) -> bool {
+    haystack.to_lowercase().contains(&needle.to_lowercase())
+}
+
+fn source_filter_label(filter: SourceFilter) -> &'static str {
+    match filter {
+        SourceFilter::Calibrated => "calibrated",
+        SourceFilter::Synthesized => "synthesized",
+        SourceFilter::Virtual => "virtual",
+    }
+}
+
+/// Mirrors `crate::profiles::load`'s `ResolveError` → `CliError` mapping.
+fn map_resolve_error(error: ResolveError) -> CliError {
+    match error {
+        ResolveError::UnknownProfile(id) => CliError::UnknownProfile(id),
+        ResolveError::LoadPack(message) => CliError::LoadProfiles(message),
+    }
+}
 
 /// Maps a profile's provenance to the catalog's calibration vocabulary: how
 /// its physical fidelity was obtained (see the profiles-command design doc).

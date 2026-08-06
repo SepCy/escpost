@@ -1,4 +1,39 @@
-use escpost_profiles::defaults;
+use escpost_profiles::{ProfileSource, defaults, synthesize_profile};
+
+const CAPABILITIES_JSON: &[u8] =
+    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+
+#[test]
+fn synthesizes_a_width_bearing_upstream_profile() {
+    let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+        .expect("import ok")
+        .expect("TM-T88III has a width, so it synthesizes");
+    assert_eq!(profile.id, "TM-T88III");
+    assert_eq!(profile.geometry.printable_width_dots, 512);
+    assert_eq!(profile.geometry.dpi_x, 180);
+    assert_eq!(profile.fonts.a.cell_width_dots, 512 / 42);
+    assert!(matches!(
+        profile.source,
+        ProfileSource::UpstreamDefault { .. }
+    ));
+    assert_eq!(
+        profile.code_pages.get(&0).map(String::as_str),
+        Some("CP437")
+    );
+    // Deviations conformant:
+    assert_eq!(profile.commands.esc_j, escpost_profiles::FeedBehavior::Feed);
+}
+
+#[test]
+fn declines_to_synthesize_a_widthless_generic() {
+    for id in ["default", "safe", "simple"] {
+        assert_eq!(
+            synthesize_profile(CAPABILITIES_JSON, id).expect("import ok"),
+            None,
+            "{id} states no width and must not synthesize"
+        );
+    }
+}
 
 #[test]
 fn documented_constants_match_the_reference_baseline() {

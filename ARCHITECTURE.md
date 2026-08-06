@@ -239,9 +239,13 @@ Profiles provide behavior that cannot be derived from ESC/POS bytes:
 - reset line spacing, code page, international set, and carriage-return mode;
 - Font A/B cell size and baseline;
 - imported or self-contained code-page slots;
-- capabilities used by implemented command handlers;
-- exact `GS k` systems supported by Function A and Function B; and
-- explicit fidelity approximations.
+- capabilities used by implemented command handlers; and
+- exact `GS k` systems supported by Function A and Function B.
+
+Each field is a descriptor (an intrinsic physical fact) or a deviation (a
+confirmed departure from documented ESC/POS baseline behavior); every field
+is optional, and stating one is itself the confirmation (DD-031). See
+[`PROFILE_SCHEMA.md`](PROFILE_SCHEMA.md) for the full model.
 
 Physical profiles use the upstream `escpos-printer-db` repository as a Git
 submodule. Its gitlink pins the complete upstream snapshot. Each upstream
@@ -274,9 +278,10 @@ then applies only its profile-selected explicit feed behavior.
 
 Each canonical profile carries:
 
-- a typed source, including the resolved profile SHA-256 for upstream sources;
-  and
-- a canonical-profile SHA-256 covering every runtime field and approximation.
+- a typed source — `Reference`, hash-pinned `Upstream`, or synthesized
+  `UpstreamDefault` — including the resolved profile SHA-256 for upstream
+  sources; and
+- a canonical-profile SHA-256 covering every runtime field.
 
 The canonical hash is the profile's rendering identity. Manually maintained
 profile revisions and duplicate repository provenance are intentionally absent.
@@ -321,15 +326,20 @@ Successful rendering returns:
 RenderResult
 ├── sheets
 ├── device_events
-├── profile approximations
+├── warnings
 └── metadata
     ├── renderer version
     ├── profile id
     └── canonical profile SHA-256
 ```
 
-Approximations describe known fidelity boundaries of the selected profile.
-They are not parser diagnostics.
+Warnings are non-fatal diagnostics from an otherwise successful render, such
+as a cut requested on a profile whose printer has no cutter. Known fidelity
+boundaries of the renderer itself — representative glyphs, QR mask choice,
+unmodeled thermal artifacts — are documented divergences (DD-002, DD-007,
+DD-023, DD-024, DD-025) rather than a render-time channel; a profile's
+`source` marker signals whether its own descriptors and deviations are
+calibrated or synthesized (`PROFILE_SCHEMA.md`).
 
 Device events describe supported non-printing commands and do not make the PNG
 incomplete. Callers that care about those actions inspect the event list.

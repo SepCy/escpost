@@ -29,7 +29,7 @@ Important examples include:
 - byte layout, bit order, coordinate systems, and unit conversions;
 - rounding, clipping, scaling, and cursor-advance rules;
 - values that come from a printer profile rather than the ESC/POS standard;
-- deliberate approximations or differences from physical hardware; and
+- deliberate documented divergences from physical hardware behavior; and
 - code that prevents a subtle regression or unsafe parse.
 
 Use plain language. A short explanation near the relevant code is usually

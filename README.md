@@ -60,8 +60,8 @@ sheets = render(escpos_bytes, profile="REFERENCE")
 When the target printer is known, select its physical profile instead so the
 preview includes that device's geometry, capabilities, and calibrated quirks.
 
-The Rust result includes bounded rendering, device events, profile
-approximations, and reproducible renderer/profile identity. Canonical profile
+The Rust result includes bounded rendering, device events, non-fatal
+warnings, and reproducible renderer/profile identity. Canonical profile
 JSON verifies its content hash when loaded.
 
 This is not yet a general-purpose ESC/POS renderer. Unsupported data and

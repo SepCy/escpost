@@ -51,8 +51,12 @@ pub fn default_printer_defaults() -> PrinterDefaults {
 
 /// Derive cell width in dots from printable width and column count.
 ///
-/// Computes the character cell width: `(width_dots / columns).max(1)`.
-/// Returns at least 1 to avoid division by zero and zero-width cells.
+/// Computes the character cell width: `(width_dots / columns).max(1)` when columns > 0.
+/// Guards against zero columns by returning 1 (minimum safe cell width).
 pub fn derive_cell_width(width_dots: u32, columns: u32) -> u32 {
-    (width_dots / columns).max(1)
+    if columns == 0 {
+        1
+    } else {
+        (width_dots / columns).max(1)
+    }
 }

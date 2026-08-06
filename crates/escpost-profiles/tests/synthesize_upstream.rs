@@ -22,4 +22,5 @@ fn documented_constants_match_the_reference_baseline() {
         (9, 17, 14)
     );
     assert_eq!(defaults::derive_cell_width(512, 42), 12);
+    assert_eq!(defaults::derive_cell_width(384, 0), 1);
 }

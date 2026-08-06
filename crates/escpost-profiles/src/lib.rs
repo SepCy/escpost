@@ -595,6 +595,55 @@ pub fn synthesize_profile(
     Ok(Some(profile))
 }
 
+/// The result of compiling every curated enrichment plus every width-bearing
+/// upstream id that has no curated enrichment (DD-031/DD-032).
+pub struct CompileAllOutcome {
+    pub profiles: Vec<PrinterProfile>,
+    /// Upstream ids that stated no printable width and were skipped rather
+    /// than synthesized. The caller (the `compile-profile-pack` bin) logs
+    /// these; the library itself never writes to stderr.
+    pub skipped_upstream: Vec<String>,
+}
+
+/// Compiles the full profile pack: every curated enrichment TOML in
+/// `enrichment_tomls`, plus every upstream id in `capabilities_json` that
+/// synthesizes (has a printable width) and is not already produced by a
+/// curated enrichment. Curated enrichments always win over synthesis for the
+/// same id. Widthless generics (e.g. `default`/`safe`/`simple`) are skipped
+/// and reported in `skipped_upstream` rather than logged directly, keeping
+/// this library free of `std::fs`/stderr so it stays portable to wasm
+/// (DD-027).
+pub fn compile_all(
+    capabilities_json: &[u8],
+    enrichment_tomls: &[String],
+) -> Result<CompileAllOutcome, CompileProfileError> {
+    let mut profiles = Vec::with_capacity(enrichment_tomls.len());
+    let mut curated_ids = BTreeSet::new();
+    for enrichment_toml in enrichment_tomls {
+        let profile = compile_profile(capabilities_json, enrichment_toml)?;
+        curated_ids.insert(profile.id.clone());
+        profiles.push(profile);
+    }
+
+    let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
+        .map_err(CompileProfileError::InvalidCapabilities)?;
+    let mut skipped_upstream = Vec::new();
+    for id in capabilities.profiles.keys() {
+        if curated_ids.contains(id) {
+            continue;
+        }
+        match synthesize_profile(capabilities_json, id)? {
+            Some(profile) => profiles.push(profile),
+            None => skipped_upstream.push(id.clone()),
+        }
+    }
+
+    Ok(CompileAllOutcome {
+        profiles,
+        skipped_upstream,
+    })
+}
+
 /// The upstream descriptors available to fill an omitted enrichment field
 /// (DD-031/DD-032). Only an upstream source carries them; a reference profile
 /// is fully self-contained and resolves every descriptor from its enrichment.

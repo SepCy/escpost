@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use escpost_profiles::{compile_profile, to_canonical_profile_pack_json};
+use escpost_profiles::{compile_all, to_canonical_profile_pack_json};
 
 struct Paths {
     capabilities: PathBuf,
@@ -17,14 +17,17 @@ fn main() -> Result<(), Box<dyn Error>> {
     let paths = parse_paths()?;
     let capabilities = fs::read(&paths.capabilities)?;
     let enrichment_paths = find_profile_files(&paths.profiles)?;
-    let mut profiles = Vec::with_capacity(enrichment_paths.len());
-
+    let mut enrichment_tomls = Vec::with_capacity(enrichment_paths.len());
     for enrichment_path in enrichment_paths {
-        let enrichment = fs::read_to_string(&enrichment_path)?;
-        profiles.push(compile_profile(&capabilities, &enrichment)?);
+        enrichment_tomls.push(fs::read_to_string(&enrichment_path)?);
     }
 
-    let json = to_canonical_profile_pack_json(profiles)?;
+    let outcome = compile_all(&capabilities, &enrichment_tomls)?;
+    for id in &outcome.skipped_upstream {
+        eprintln!("skipping {id}: upstream media width unknown");
+    }
+
+    let json = to_canonical_profile_pack_json(outcome.profiles)?;
     if let Some(parent) = paths.output.parent() {
         fs::create_dir_all(parent)?;
     }

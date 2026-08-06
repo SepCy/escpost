@@ -147,8 +147,9 @@ compact projection of it.
 }
 ```
 
-`paper_width_mm` and `printable_width_mm` are decimals (one place); the compact
-`list` table rounds them to whole mm, while `show`/`--json` keep the decimal.
+`paper_width_mm` and `printable_width_mm` are decimals (one place) everywhere —
+the `list` table, `show`, and `--json` all keep the tenth (no rounding to whole
+mm), consistent with the lossless fixed-point storage.
 Barcode systems use the canonical snake_case names (`upc_a`, `code_128`, …).
 
 ## Errors & exit codes

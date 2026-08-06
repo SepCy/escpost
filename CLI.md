@@ -567,13 +567,14 @@ escpost profiles find
 
 ```text
 PROFILE      VENDOR   MODEL       CAL  PAPER  PRINT  DOTS  DPI  CUT  BC   QR
-NT-5890K     Netum    NT-5890K    ✓    58     48     384   203  –    A·B  ✓
-TM-T88III    Epson    TM-T88III   ~    80     72     512   180  ✓    A·B  ✓
-REFERENCE    ESCPost  Reference   ○    80     72     576   203  ✓    A·B  ✓
+NT-5890K     Netum    NT-5890K    ✓    57.5   48.0   384   203  –    A·B  ✓
+TM-T88III    Epson    TM-T88III   ~    80.0   72.2   512   180  ✓    A·B  ✓
+REFERENCE    ESCPost  Reference   ○    80.0   72.1   576   203  ✓    A·B  ✓
 ```
 
 Columns: `PROFILE` is the id passed to `--profile`; `PAPER` is the paper's
-nominal width and `PRINT` the printable width, both whole millimeters; `DOTS`
+nominal width and `PRINT` the printable width, both in millimeters to one
+decimal (e.g. `57.5`); `DOTS`
 is the printable width in dots; `DPI` is the horizontal resolution; `CUT`,
 `BC` (barcode: `A·B`, `A`, `B`, or `–`), and `QR` are compact capability
 flags.

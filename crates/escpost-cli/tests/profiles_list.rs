@@ -14,6 +14,12 @@ fn profiles_list_shows_known_ids_and_the_calibration_legend() {
         stdout.contains("CAL: "),
         "missing calibration legend:\n{stdout}"
     );
+    // The table shows tenth precision (NT-5890K's paper width is 57.5 mm), not
+    // a rounded whole mm, matching the lossless fixed-point storage.
+    assert!(
+        stdout.contains("57.5"),
+        "expected tenth-precision paper width (57.5) in the table:\n{stdout}"
+    );
 }
 
 #[test]

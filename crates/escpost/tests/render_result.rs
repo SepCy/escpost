@@ -38,18 +38,6 @@ fn reports_the_renderer_and_canonical_profile_identity() {
     assert_eq!(rendered.metadata.canonical_profile_sha256.len(), 64);
 }
 
-#[test]
-fn exposes_profile_approximations_directly() {
-    let profile = test_profile();
-
-    let rendered = render(&[LF], &profile).expect("the blank line should render");
-
-    assert!(rendered.approximations.iter().any(|approximation| {
-        approximation.field == "fonts.resident_glyph_shapes"
-            && approximation.reason.contains("Representative glyphs")
-    }));
-}
-
 fn test_profile() -> escpost_profiles::PrinterProfile {
     compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }

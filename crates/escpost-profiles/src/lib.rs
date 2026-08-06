@@ -2,6 +2,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+pub mod defaults;
+pub mod resolver;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -47,14 +50,23 @@ pub struct PrinterProfile {
     pub features: Features,
     /// Maps each profile-specific `ESC t n` slot to a named encoding.
     pub code_pages: BTreeMap<u8, String>,
-    pub approximations: Vec<Approximation>,
     pub canonical_profile_sha256: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProfileSource {
-    Upstream { profile_sha256: String },
+    Upstream {
+        profile_sha256: String,
+    },
+    /// A profile synthesized from an upstream entry with no hand-authored
+    /// enrichment (DD-032): every deviation is conformant, and every
+    /// descriptor comes from the upstream entry or a documented constant.
+    /// `profile_sha256` records the resolved upstream hash for drift
+    /// detection; unlike `Upstream`, it is never compared against a pin.
+    UpstreamDefault {
+        profile_sha256: String,
+    },
     Reference,
 }
 
@@ -220,13 +232,6 @@ pub enum BarcodeSystem {
     Code128Auto,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Approximation {
-    pub field: String,
-    pub reason: String,
-}
-
 #[derive(Debug, Error)]
 pub enum CompileProfileError {
     #[error("invalid upstream capabilities JSON")]
@@ -249,6 +254,9 @@ pub enum CompileProfileError {
 
     #[error("an upstream profile cannot replace imported code-page mappings")]
     UpstreamCodePagesOverride,
+
+    #[error("profile enrichment source cannot be {kind:?}: it is produced only by synthesis")]
+    InvalidEnrichmentSource { kind: &'static str },
 
     #[error("{font} baseline {baseline_dots} must be inside its {cell_height_dots}-dot-high cell")]
     InvalidFontBaseline {
@@ -335,17 +343,24 @@ struct Enrichment {
     /// Authoring evidence is validated as strings but does not enter runtime profiles.
     #[serde(rename = "sources")]
     _sources: Vec<String>,
-    geometry: Geometry,
+    /// Descriptor: absent when the upstream entry's media width/DPI (or the
+    /// documented constant defaults) should fill it (DD-031/DD-032).
+    geometry: Option<Geometry>,
     cutter: Option<CutterGeometry>,
-    motion: MotionUnits,
-    column_bit_image: ColumnBitImage,
-    commands: CommandBehavior,
-    defaults: PrinterDefaults,
-    fonts: Fonts,
+    /// Descriptor: absent when the resolved geometry DPI should fill it.
+    motion: Option<MotionUnits>,
+    /// Deviation: absent when the Epson baseline pitch should fill it.
+    column_bit_image: Option<ColumnBitImage>,
+    /// Deviation: absent when the conformant defaults should fill it.
+    commands: Option<CommandBehavior>,
+    /// Deviation: absent when the conformant defaults should fill it.
+    defaults: Option<PrinterDefaults>,
+    /// Descriptor: absent when upstream font columns (or the documented
+    /// constant defaults) should fill it.
+    fonts: Option<Fonts>,
     #[serde(default)]
     features: FeatureOverrides,
     code_pages: Option<BTreeMap<u8, String>>,
-    approximations: Vec<Approximation>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -371,6 +386,59 @@ struct ImportedProfile {
     features: ImportedFeatures,
     #[serde(rename = "codePages")]
     code_pages: BTreeMap<String, String>,
+    #[serde(default)]
+    media: ImportedMedia,
+    #[serde(default)]
+    fonts: BTreeMap<u8, ImportedFont>,
+}
+
+/// Upstream media descriptors. Fields are `Option` because the pinned
+/// `capabilities.json` represents unknown values with the literal string
+/// `"Unknown"` (or omits the key entirely) rather than `null`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ImportedMedia {
+    #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+    pub dpi: Option<u32>,
+    #[serde(
+        rename = "width",
+        default,
+        deserialize_with = "deserialize_lenient_width_pixels"
+    )]
+    pub width_pixels: Option<u32>,
+}
+
+/// Upstream font descriptors, keyed by the same font index as `fonts.<n>`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ImportedFont {
+    #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+    pub columns: Option<u32>,
+}
+
+/// `media.width.pixels` is nested one level deeper than the other lenient
+/// fields, so it needs its own deserializer instead of `deserialize_lenient_u32`.
+fn deserialize_lenient_width_pixels<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Width {
+        #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+        pixels: Option<u32>,
+    }
+
+    Option::<Width>::deserialize(deserializer).map(|width| width.and_then(|width| width.pixels))
+}
+
+/// Deserializes a `u32` that upstream may represent as the literal string
+/// `"Unknown"` (or any other non-numeric JSON value) instead of a number,
+/// mapping anything but a JSON number to `None`.
+fn deserialize_lenient_u32<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Value::deserialize(deserializer)?
+        .as_u64()
+        .and_then(|value| u32::try_from(value).ok()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -401,7 +469,6 @@ struct CanonicalProfileContent<'a> {
     fonts: &'a Fonts,
     features: &'a Features,
     code_pages: &'a BTreeMap<u8, String>,
-    approximations: &'a [Approximation],
 }
 
 pub fn compile_profile(
@@ -412,26 +479,45 @@ pub fn compile_profile(
         toml::from_str(enrichment_toml).map_err(CompileProfileError::InvalidEnrichment)?;
 
     validate_schema_version(enrichment.schema_version)?;
-    validate_profile_values(&enrichment)?;
 
-    let (source, code_pages, features) = compile_profile_source(capabilities_json, &enrichment)?;
-    validate_default_code_page(enrichment.defaults.code_page, &code_pages)?;
+    let (source, code_pages, features, upstream) =
+        compile_profile_source(capabilities_json, &enrichment)?;
+
+    let resolved = resolve_profile_fields(
+        enrichment.geometry,
+        enrichment.motion,
+        enrichment.column_bit_image,
+        enrichment.commands,
+        enrichment.defaults,
+        enrichment.fonts,
+        upstream.as_ref(),
+    );
+
+    validate_profile_values(
+        &resolved.geometry,
+        &resolved.motion,
+        &resolved.column_bit_image,
+        &resolved.printer_defaults,
+        &resolved.fonts,
+        &enrichment.features,
+        enrichment.cutter.as_ref(),
+    )?;
+    validate_default_code_page(resolved.printer_defaults.code_page, &code_pages)?;
     validate_cutter_capabilities(enrichment.cutter.as_ref(), &features)?;
 
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: enrichment.profile,
         source,
-        geometry: enrichment.geometry,
+        geometry: resolved.geometry,
         cutter: enrichment.cutter,
-        motion: enrichment.motion,
-        column_bit_image: enrichment.column_bit_image,
-        commands: enrichment.commands,
-        defaults: enrichment.defaults,
-        fonts: enrichment.fonts,
+        motion: resolved.motion,
+        column_bit_image: resolved.column_bit_image,
+        commands: resolved.commands,
+        defaults: resolved.printer_defaults,
+        fonts: resolved.fonts,
         features,
         code_pages,
-        approximations: enrichment.approximations,
         canonical_profile_sha256: String::new(),
     };
     profile.canonical_profile_sha256 =
@@ -440,10 +526,142 @@ pub fn compile_profile(
     Ok(profile)
 }
 
+/// Synthesizes a renderable profile for an upstream entry that has no
+/// hand-authored enrichment (DD-032): every deviation stays conformant, and
+/// every descriptor is filled from the upstream entry or a documented
+/// constant default via the same layered fill `compile_profile` uses.
+///
+/// Returns `Ok(None)` when the upstream entry states no printable width —
+/// width is never fabricated for a real-named printer, only assumed by a
+/// human-authored enrichment that chooses to omit it.
+pub fn synthesize_profile(
+    capabilities_json: &[u8],
+    id: &str,
+) -> Result<Option<PrinterProfile>, CompileProfileError> {
+    let (imported, upstream_profile) = import_upstream(capabilities_json, id)?;
+    if imported.media.width_pixels.is_none() {
+        return Ok(None);
+    }
+
+    let profile_sha256 = hash_resolved_profile(&upstream_profile)?;
+    let code_pages = import_code_pages(&imported)?;
+    let mut features = apply_feature_overrides(imported.features, &FeatureOverrides::default());
+    // Cutter geometry has no upstream source and no documented constant
+    // (DD-026), and a synthesized profile has no enrichment to state it. A
+    // cut capability the upstream entry claims cannot be backed by a
+    // descriptor, so it is conservatively withheld until a hand-authored
+    // enrichment states the cutter distance (DD-032).
+    features.paper_full_cut = false;
+    features.paper_part_cut = false;
+
+    let upstream = UpstreamDescriptors {
+        media: imported.media,
+        fonts: imported.fonts,
+    };
+    let resolved = resolve_profile_fields(None, None, None, None, None, None, Some(&upstream));
+
+    validate_profile_values(
+        &resolved.geometry,
+        &resolved.motion,
+        &resolved.column_bit_image,
+        &resolved.printer_defaults,
+        &resolved.fonts,
+        &FeatureOverrides::default(),
+        None,
+    )?;
+    validate_default_code_page(resolved.printer_defaults.code_page, &code_pages)?;
+    validate_cutter_capabilities(None, &features)?;
+
+    let mut profile = PrinterProfile {
+        schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
+        id: id.to_owned(),
+        source: ProfileSource::UpstreamDefault { profile_sha256 },
+        geometry: resolved.geometry,
+        cutter: None,
+        motion: resolved.motion,
+        column_bit_image: resolved.column_bit_image,
+        commands: resolved.commands,
+        defaults: resolved.printer_defaults,
+        fonts: resolved.fonts,
+        features,
+        code_pages,
+        canonical_profile_sha256: String::new(),
+    };
+    profile.canonical_profile_sha256 =
+        hash_canonical_profile(&profile).map_err(CompileProfileError::NormalizeCanonicalProfile)?;
+
+    Ok(Some(profile))
+}
+
+/// The result of compiling every curated enrichment plus every width-bearing
+/// upstream id that has no curated enrichment (DD-031/DD-032).
+pub struct CompileAllOutcome {
+    pub profiles: Vec<PrinterProfile>,
+    /// Upstream ids that stated no printable width and were skipped rather
+    /// than synthesized. The caller (the `compile-profile-pack` bin) logs
+    /// these; the library itself never writes to stderr.
+    pub skipped_upstream: Vec<String>,
+}
+
+/// Compiles the full profile pack: every curated enrichment TOML in
+/// `enrichment_tomls`, plus every upstream id in `capabilities_json` that
+/// synthesizes (has a printable width) and is not already produced by a
+/// curated enrichment. Curated enrichments always win over synthesis for the
+/// same id. Widthless generics (e.g. `default`/`safe`/`simple`) are skipped
+/// and reported in `skipped_upstream` rather than logged directly, keeping
+/// this library free of `std::fs`/stderr so it stays portable to wasm
+/// (DD-027).
+pub fn compile_all(
+    capabilities_json: &[u8],
+    enrichment_tomls: &[String],
+) -> Result<CompileAllOutcome, CompileProfileError> {
+    let mut profiles = Vec::with_capacity(enrichment_tomls.len());
+    let mut curated_ids = BTreeSet::new();
+    for enrichment_toml in enrichment_tomls {
+        let profile = compile_profile(capabilities_json, enrichment_toml)?;
+        curated_ids.insert(profile.id.clone());
+        profiles.push(profile);
+    }
+
+    let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
+        .map_err(CompileProfileError::InvalidCapabilities)?;
+    let mut skipped_upstream = Vec::new();
+    for id in capabilities.profiles.keys() {
+        if curated_ids.contains(id) {
+            continue;
+        }
+        match synthesize_profile(capabilities_json, id)? {
+            Some(profile) => profiles.push(profile),
+            None => skipped_upstream.push(id.clone()),
+        }
+    }
+
+    Ok(CompileAllOutcome {
+        profiles,
+        skipped_upstream,
+    })
+}
+
+/// The upstream descriptors available to fill an omitted enrichment field
+/// (DD-031/DD-032). Only an upstream source carries them; a reference profile
+/// is fully self-contained and resolves every descriptor from its enrichment.
+struct UpstreamDescriptors {
+    media: ImportedMedia,
+    fonts: BTreeMap<u8, ImportedFont>,
+}
+
 fn compile_profile_source(
     capabilities_json: &[u8],
     enrichment: &Enrichment,
-) -> Result<(ProfileSource, BTreeMap<u8, String>, Features), CompileProfileError> {
+) -> Result<
+    (
+        ProfileSource,
+        BTreeMap<u8, String>,
+        Features,
+        Option<UpstreamDescriptors>,
+    ),
+    CompileProfileError,
+> {
     match &enrichment.source {
         ProfileSource::Upstream {
             profile_sha256: expected_hash,
@@ -451,18 +669,10 @@ fn compile_profile_source(
             if enrichment.code_pages.is_some() {
                 return Err(CompileProfileError::UpstreamCodePagesOverride);
             }
-            let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
-                .map_err(CompileProfileError::InvalidCapabilities)?;
-            let upstream_profile =
-                capabilities
-                    .profiles
-                    .get(&enrichment.profile)
-                    .ok_or_else(|| CompileProfileError::UnknownUpstreamProfile {
-                        profile: enrichment.profile.clone(),
-                    })?;
-            let actual_hash = hash_resolved_profile(upstream_profile)?;
+            let (imported, upstream_profile) =
+                import_upstream(capabilities_json, &enrichment.profile)?;
+            let actual_hash = hash_resolved_profile(&upstream_profile)?;
             validate_upstream_hash(&enrichment.profile, expected_hash, &actual_hash)?;
-            let imported = import_upstream_profile(upstream_profile, &enrichment.profile)?;
             let code_pages = import_code_pages(&imported)?;
             let features = apply_feature_overrides(imported.features, &enrichment.features);
             Ok((
@@ -471,7 +681,16 @@ fn compile_profile_source(
                 },
                 code_pages,
                 features,
+                Some(UpstreamDescriptors {
+                    media: imported.media,
+                    fonts: imported.fonts,
+                }),
             ))
+        }
+        ProfileSource::UpstreamDefault { .. } => {
+            Err(CompileProfileError::InvalidEnrichmentSource {
+                kind: "upstream_default",
+            })
         }
         ProfileSource::Reference => {
             let code_pages = enrichment.code_pages.clone().ok_or(
@@ -480,7 +699,7 @@ fn compile_profile_source(
                 },
             )?;
             let features = compile_reference_features(&enrichment.features)?;
-            Ok((ProfileSource::Reference, code_pages, features))
+            Ok((ProfileSource::Reference, code_pages, features, None))
         }
     }
 }
@@ -545,6 +764,149 @@ fn import_upstream_profile(
             source,
         }
     })
+}
+
+/// Imports an upstream profile's media (display width in pixels, dpi) and
+/// per-font column counts, tolerating the literal string `"Unknown"` (and
+/// absent keys) as `None`. Later synthesis tasks use these descriptors to
+/// derive geometry for profiles that have no hand-authored enrichment.
+pub fn import_upstream_descriptors(
+    capabilities_json: &[u8],
+    id: &str,
+) -> Result<(ImportedMedia, BTreeMap<u8, ImportedFont>), CompileProfileError> {
+    let (imported, _) = import_upstream(capabilities_json, id)?;
+    Ok((imported.media, imported.fonts))
+}
+
+/// Locates and imports the upstream `capabilities.json` entry for `id`,
+/// alongside the raw JSON value the resolved-profile hash is computed from.
+fn import_upstream(
+    capabilities_json: &[u8],
+    id: &str,
+) -> Result<(ImportedProfile, Value), CompileProfileError> {
+    let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
+        .map_err(CompileProfileError::InvalidCapabilities)?;
+    let upstream_profile = capabilities
+        .profiles
+        .get(id)
+        .ok_or_else(|| CompileProfileError::UnknownUpstreamProfile {
+            profile: id.to_owned(),
+        })?
+        .clone();
+    let imported = import_upstream_profile(&upstream_profile, id)?;
+    Ok((imported, upstream_profile))
+}
+
+/// The resolved (post-fill) descriptor and deviation values shared by
+/// `compile_profile` and `synthesize_profile`.
+struct ResolvedFields {
+    geometry: Geometry,
+    motion: MotionUnits,
+    column_bit_image: ColumnBitImage,
+    commands: CommandBehavior,
+    printer_defaults: PrinterDefaults,
+    fonts: Fonts,
+}
+
+/// Layered fill for every descriptor/deviation field an enrichment leaves
+/// absent (or, for a synthesized profile, that no enrichment exists to
+/// state): explicit value → upstream-derived value → documented constant
+/// default (DD-031/DD-032).
+fn resolve_profile_fields(
+    geometry: Option<Geometry>,
+    motion: Option<MotionUnits>,
+    column_bit_image: Option<ColumnBitImage>,
+    commands: Option<CommandBehavior>,
+    printer_defaults: Option<PrinterDefaults>,
+    fonts: Option<Fonts>,
+    upstream: Option<&UpstreamDescriptors>,
+) -> ResolvedFields {
+    let geometry = resolve_geometry(geometry, upstream);
+    let motion = resolve_motion(motion, &geometry);
+    let column_bit_image = column_bit_image.unwrap_or(ColumnBitImage {
+        eight_dot_vertical_pitch_dots: defaults::DEFAULT_EIGHT_DOT_VERTICAL_PITCH_DOTS,
+    });
+    let commands = commands.unwrap_or_else(defaults::default_commands);
+    let printer_defaults = printer_defaults.unwrap_or_else(defaults::default_printer_defaults);
+    let fonts = resolve_fonts(fonts, geometry.printable_width_dots, upstream);
+    ResolvedFields {
+        geometry,
+        motion,
+        column_bit_image,
+        commands,
+        printer_defaults,
+        fonts,
+    }
+}
+
+/// Fills an omitted `geometry` table from the upstream entry's media
+/// descriptors, falling back to the documented constant defaults
+/// (DD-031/DD-032). Both DPI axes take the single reported upstream value.
+fn resolve_geometry(
+    geometry: Option<Geometry>,
+    upstream: Option<&UpstreamDescriptors>,
+) -> Geometry {
+    geometry.unwrap_or_else(|| {
+        let media = upstream.map(|upstream| &upstream.media);
+        let width = media
+            .and_then(|media| media.width_pixels)
+            .unwrap_or(defaults::DEFAULT_WIDTH_DOTS);
+        let dpi = media
+            .and_then(|media| media.dpi)
+            .unwrap_or(defaults::DEFAULT_DPI);
+        Geometry {
+            printable_width_dots: width,
+            dpi_x: dpi,
+            dpi_y: dpi,
+        }
+    })
+}
+
+/// Fills an omitted `motion` table from the resolved geometry's DPI, per
+/// axis (DD-031/DD-032).
+fn resolve_motion(motion: Option<MotionUnits>, geometry: &Geometry) -> MotionUnits {
+    motion.unwrap_or(MotionUnits {
+        horizontal_units_per_inch: geometry.dpi_x,
+        vertical_units_per_inch: geometry.dpi_y,
+    })
+}
+
+/// Fills an omitted `fonts` table font-by-font: a font whose upstream column
+/// count is known derives its cell width from the resolved printable width,
+/// keeping the documented default height/baseline; a font with no known
+/// column count falls back to the documented default cell entirely
+/// (DD-031/DD-032).
+fn resolve_fonts(
+    fonts: Option<Fonts>,
+    printable_width_dots: u32,
+    upstream: Option<&UpstreamDescriptors>,
+) -> Fonts {
+    fonts.unwrap_or_else(|| {
+        let upstream_fonts = upstream.map(|upstream| &upstream.fonts);
+        let default_fonts = defaults::default_fonts();
+        Fonts {
+            a: resolve_font(default_fonts.a, 0, printable_width_dots, upstream_fonts),
+            b: resolve_font(default_fonts.b, 1, printable_width_dots, upstream_fonts),
+        }
+    })
+}
+
+fn resolve_font(
+    default: Font,
+    key: u8,
+    printable_width_dots: u32,
+    upstream_fonts: Option<&BTreeMap<u8, ImportedFont>>,
+) -> Font {
+    let columns = upstream_fonts
+        .and_then(|fonts| fonts.get(&key))
+        .and_then(|font| font.columns);
+    match columns {
+        Some(columns) => Font {
+            cell_width_dots: defaults::derive_cell_width(printable_width_dots, columns),
+            ..default
+        },
+        None => default,
+    }
 }
 
 fn apply_feature_overrides(imported: ImportedFeatures, overrides: &FeatureOverrides) -> Features {
@@ -678,19 +1040,22 @@ fn validate_schema_version(schema_version: u32) -> Result<(), CompileProfileErro
     })
 }
 
-fn validate_profile_values(enrichment: &Enrichment) -> Result<(), CompileProfileError> {
-    validate_runtime_values(
-        &enrichment.geometry,
-        &enrichment.motion,
-        &enrichment.column_bit_image,
-        &enrichment.defaults,
-        &enrichment.fonts,
-        None,
-    )?;
-    if let Some(barcodes) = &enrichment.features.barcodes {
+/// Validates the resolved (post-fill) descriptor and deviation values, never
+/// the raw `Option`s an enrichment may have omitted (DD-031/DD-032).
+fn validate_profile_values(
+    geometry: &Geometry,
+    motion: &MotionUnits,
+    column_bit_image: &ColumnBitImage,
+    defaults: &PrinterDefaults,
+    fonts: &Fonts,
+    features: &FeatureOverrides,
+    cutter: Option<&CutterGeometry>,
+) -> Result<(), CompileProfileError> {
+    validate_runtime_values(geometry, motion, column_bit_image, defaults, fonts, None)?;
+    if let Some(barcodes) = &features.barcodes {
         validate_barcode_capabilities(barcodes)?;
     }
-    if let Some(cutter) = &enrichment.cutter {
+    if let Some(cutter) = cutter {
         validate_positive(
             "cutter.print_head_to_cutter_dots",
             cutter.print_head_to_cutter_dots,
@@ -821,7 +1186,7 @@ fn hash_resolved_profile(profile: &Value) -> Result<String, CompileProfileError>
 
 fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json::Error> {
     // The stored hash cannot cover itself. Every other canonical field affects
-    // rendering behavior or the fidelity disclosure returned with a render.
+    // rendering behavior.
     let content = CanonicalProfileContent {
         schema_version: profile.schema_version,
         id: &profile.id,
@@ -835,7 +1200,6 @@ fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json
         fonts: &profile.fonts,
         features: &profile.features,
         code_pages: &profile.code_pages,
-        approximations: &profile.approximations,
     };
     let normalized = serde_json::to_vec(&content)?;
     Ok(hash_bytes(&normalized))

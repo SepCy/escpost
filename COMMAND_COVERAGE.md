@@ -68,9 +68,9 @@ graphics and symbol family. See
 `ESC R` implements Epson's common international sets 0–17 and resets to the
 profile default on `ESC @`. The additional Indic sets 66–75 and 82 remain
 post-v1 because the representative glyph asset does not yet cover those
-scripts. The NT-5890K currently assumes that auto line feed is disabled, so
-its ignored-`CR` behavior remains an explicit profile approximation until a
-physical probe confirms it.
+scripts. The NT-5890K is modeled with auto line feed disabled, so its
+ignored-`CR` behavior is stated as an explicit `defaults.carriage_return`
+value.
 
 `ESC t` decodes the profile's supported single-byte tables. Printable ASCII
 `20h`–`7Eh` remains available after selecting a known post-v1 multibyte table;

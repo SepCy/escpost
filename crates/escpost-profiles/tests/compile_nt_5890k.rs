@@ -134,10 +134,9 @@ fn imported_barcode_flags_expand_only_to_the_legacy_systems_they_describe() {
     let table_start = ENRICHMENT_TOML
         .find("[features.barcodes]")
         .expect("the fixture should contain barcode enrichment");
-    let table_end = ENRICHMENT_TOML[table_start..]
-        .find("[[approximations]]")
-        .map(|offset| table_start + offset)
-        .expect("the barcode table should end before approximations");
+    // `[features.barcodes]` is the last table in the fixture, so the slice to
+    // strip runs to the end of the string.
+    let table_end = ENRICHMENT_TOML.len();
     let without_barcode_enrichment = format!(
         "{}{}",
         &ENRICHMENT_TOML[..table_start],
@@ -294,7 +293,8 @@ fn generated_profile_pack_matches_the_reviewed_sources() {
 
     assert_eq!(pack.get("NT-5890K"), Some(&profile));
     assert_eq!(pack.get("REFERENCE"), Some(&reference));
-    assert_eq!(pack.profiles().count(), 2);
+    assert!(pack.profiles().count() > 2);
+    assert!(pack.get("TM-T88III").is_some());
 }
 
 #[test]
@@ -502,4 +502,58 @@ fn profiles_reject_unknown_feature_overrides() {
         .expect_err("a misspelled capability must not silently enter the profile");
 
     assert!(matches!(error, CompileProfileError::InvalidEnrichment(_)));
+}
+
+#[test]
+fn upstream_enrichment_may_omit_descriptors_and_deviations() {
+    // Minimal upstream enrichment: only identity + pinned source.
+    let sha = RESOLVED_PROFILE_SHA256;
+    let minimal = format!(
+        "schema_version = 1\nprofile = \"NT-5890K\"\nsources = []\n\n[source]\ntype = \"upstream\"\nprofile_sha256 = \"{sha}\"\n"
+    );
+    let profile = compile_profile(CAPABILITIES_JSON, &minimal)
+        .expect("a minimal upstream enrichment should compile via defaults");
+    // Width unknown upstream for NT-5890K → 58 mm fallback; deviations conformant.
+    assert_eq!(profile.geometry.printable_width_dots, 384);
+    assert_eq!(
+        profile.defaults.carriage_return,
+        CarriageReturnMode::Ignored
+    );
+    assert_eq!(profile.commands.esc_j, FeedBehavior::Feed); // conformant default, not the measured Ignored
+    assert_eq!(profile.column_bit_image.eight_dot_vertical_pitch_dots, 3); // Epson baseline default
+}
+
+#[test]
+fn enrichment_cannot_state_an_upstream_default_source() {
+    // `upstream_default` is produced only by synthesis (DD-032); a
+    // hand-authored enrichment must not be able to claim it.
+    let sha = "0".repeat(64);
+    let minimal = format!(
+        "schema_version = 1\nprofile = \"X\"\nsources = []\n\n[source]\ntype = \"upstream_default\"\nprofile_sha256 = \"{sha}\"\n"
+    );
+
+    let error = compile_profile(CAPABILITIES_JSON, &minimal)
+        .expect_err("an enrichment cannot claim the synthesis-only source kind");
+
+    assert!(matches!(
+        error,
+        CompileProfileError::InvalidEnrichmentSource {
+            kind: "upstream_default"
+        }
+    ));
+}
+
+#[test]
+fn upstream_media_and_font_columns_parse_with_unknown_as_absent() {
+    use escpost_profiles::import_upstream_descriptors;
+    let (media, fonts) = import_upstream_descriptors(CAPABILITIES_JSON, "TM-T88III")
+        .expect("TM-T88III should import");
+    assert_eq!(media.width_pixels, Some(512));
+    assert_eq!(media.dpi, Some(180));
+    assert_eq!(fonts.get(&0).and_then(|f| f.columns), Some(42));
+
+    let (generic, _) =
+        import_upstream_descriptors(CAPABILITIES_JSON, "default").expect("default should import");
+    assert_eq!(generic.width_pixels, None);
+    assert_eq!(generic.dpi, None);
 }

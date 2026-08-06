@@ -27,18 +27,12 @@ class RenderBindingTest(unittest.TestCase):
         self.assertIsInstance(sheets[0], bytes)
         self.assertEqual(_read_png_header(sheets[0]), (384, 30, 1, 0))
 
-    def test_render_result_preserves_approximations_and_rendering_identity(self):
+    def test_render_result_reports_rendering_identity(self):
         rendered = render_result(b"\n", profile="NT-5890K")
 
         self.assertEqual(len(rendered["sheets"]), 1)
         self.assertEqual(rendered["device_events"], [])
         self.assertEqual(rendered["warnings"], [])
-        self.assertTrue(
-            any(
-                approximation["field"] == "fonts.resident_glyph_shapes"
-                for approximation in rendered["approximations"]
-            )
-        )
         self.assertEqual(rendered["metadata"]["profile_id"], "NT-5890K")
         self.assertEqual(
             len(rendered["metadata"]["canonical_profile_sha256"]),

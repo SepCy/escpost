@@ -36,7 +36,7 @@ They assert observable results:
 - decoded output pixels or logical dots;
 - feeds and cuts;
 - device events;
-- profile approximations; and
+- non-fatal render warnings; and
 - reproducibility metadata.
 
 These tests should survive refactoring of tokenizers, command handlers,
@@ -79,7 +79,7 @@ Binding tests prove that Python callers receive the same behavior as Rust
 callers. They cover:
 
 - byte input and profile selection;
-- PNG, approximation, event, and metadata results;
+- PNG, warning, event, and metadata results;
 - Rust error conversion to documented Python exceptions; and
 - repeated or concurrent calls.
 
@@ -248,8 +248,8 @@ docker compose run --rm test \
 ```
 
 `notes.md` explains the behavior under test, relevant commands, manual
-references, intentional approximations, and physical observations. It should
-not be required for executing the test.
+references, intentional documented divergences, and physical observations. It
+should not be required for executing the test.
 
 Cases with multiple cuts contain one expected PNG per sheet.
 
@@ -497,7 +497,7 @@ Hardware evidence can justify:
 - correcting profile geometry or defaults;
 - documenting a firmware or compatibility-mode variant;
 - adding a model-specific command quirk;
-- correcting a profile capability or approximation; or
+- correcting a profile capability or a documented divergence; or
 - filing an upstream printer-database correction.
 
 It does not justify changing Epson command framing or another model's behavior
@@ -514,8 +514,8 @@ Golden images are updated deliberately:
 
 1. Explain which documented behavior or physical evidence changed.
 2. Render the affected case to a separate actual-output path.
-3. Review dimensions, pixel differences, approximations, and unrelated
-   regions.
+3. Review dimensions, pixel differences, documented divergences, and
+   unrelated regions.
 4. Replace the golden only after the new result is accepted.
 5. Commit the input, manifest, expected image, and notes together.
 

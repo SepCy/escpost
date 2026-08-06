@@ -295,7 +295,7 @@ Diagnostics must keep these cases separate:
 - a valid command unavailable on the selected printer profile;
 - a command ignored because of its parameters or the current printer state;
 - clipped or out-of-area output;
-- a documented profile approximation; and
+- a profile-confirmed deviation from documented ESC/POS behavior; and
 - input after the last safely framed command which cannot be parsed reliably.
 
 Strict rendering must continue to stop rather than guess after unsafe framing.
@@ -451,7 +451,8 @@ artifacts; revisit storage only when real usage proves that inadequate.
 - [ ] Report content outside the printable area.
 - [ ] Report cutter commands for profiles without a cutter.
 - [ ] Report model-dependent behavior which can materially change layout.
-- [ ] Compare sheet count, dimensions, events, diagnostics, and approximations.
+- [ ] Compare sheet count, dimensions, events, diagnostics, and profile
+      deviations.
 - [ ] Render the same capture side by side for selected profiles.
 - [ ] Keep portability warnings separate from invalid-input errors.
 

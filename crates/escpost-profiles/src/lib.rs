@@ -371,6 +371,59 @@ struct ImportedProfile {
     features: ImportedFeatures,
     #[serde(rename = "codePages")]
     code_pages: BTreeMap<String, String>,
+    #[serde(default)]
+    media: ImportedMedia,
+    #[serde(default)]
+    fonts: BTreeMap<u8, ImportedFont>,
+}
+
+/// Upstream media descriptors. Fields are `Option` because the pinned
+/// `capabilities.json` represents unknown values with the literal string
+/// `"Unknown"` (or omits the key entirely) rather than `null`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ImportedMedia {
+    #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+    pub dpi: Option<u32>,
+    #[serde(
+        rename = "width",
+        default,
+        deserialize_with = "deserialize_lenient_width_pixels"
+    )]
+    pub width_pixels: Option<u32>,
+}
+
+/// Upstream font descriptors, keyed by the same font index as `fonts.<n>`.
+#[derive(Debug, Default, Deserialize)]
+pub struct ImportedFont {
+    #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+    pub columns: Option<u32>,
+}
+
+/// `media.width.pixels` is nested one level deeper than the other lenient
+/// fields, so it needs its own deserializer instead of `deserialize_lenient_u32`.
+fn deserialize_lenient_width_pixels<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    struct Width {
+        #[serde(default, deserialize_with = "deserialize_lenient_u32")]
+        pixels: Option<u32>,
+    }
+
+    Option::<Width>::deserialize(deserializer).map(|width| width.and_then(|width| width.pixels))
+}
+
+/// Deserializes a `u32` that upstream may represent as the literal string
+/// `"Unknown"` (or any other non-numeric JSON value) instead of a number,
+/// mapping anything but a JSON number to `None`.
+fn deserialize_lenient_u32<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Value::deserialize(deserializer)?
+        .as_u64()
+        .and_then(|value| u32::try_from(value).ok()))
 }
 
 #[derive(Debug, Deserialize)]
@@ -545,6 +598,25 @@ fn import_upstream_profile(
             source,
         }
     })
+}
+
+/// Imports an upstream profile's media (display width in pixels, dpi) and
+/// per-font column counts, tolerating the literal string `"Unknown"` (and
+/// absent keys) as `None`. Later synthesis tasks use these descriptors to
+/// derive geometry for profiles that have no hand-authored enrichment.
+pub fn import_upstream_descriptors(
+    capabilities_json: &[u8],
+    id: &str,
+) -> Result<(ImportedMedia, BTreeMap<u8, ImportedFont>), CompileProfileError> {
+    let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
+        .map_err(CompileProfileError::InvalidCapabilities)?;
+    let upstream_profile = capabilities.profiles.get(id).ok_or_else(|| {
+        CompileProfileError::UnknownUpstreamProfile {
+            profile: id.to_owned(),
+        }
+    })?;
+    let imported = import_upstream_profile(upstream_profile, id)?;
+    Ok((imported.media, imported.fonts))
 }
 
 fn apply_feature_overrides(imported: ImportedFeatures, overrides: &FeatureOverrides) -> Features {

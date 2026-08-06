@@ -503,3 +503,18 @@ fn profiles_reject_unknown_feature_overrides() {
 
     assert!(matches!(error, CompileProfileError::InvalidEnrichment(_)));
 }
+
+#[test]
+fn upstream_media_and_font_columns_parse_with_unknown_as_absent() {
+    use escpost_profiles::import_upstream_descriptors;
+    let (media, fonts) = import_upstream_descriptors(CAPABILITIES_JSON, "TM-T88III")
+        .expect("TM-T88III should import");
+    assert_eq!(media.width_pixels, Some(512));
+    assert_eq!(media.dpi, Some(180));
+    assert_eq!(fonts.get(&0).and_then(|f| f.columns), Some(42));
+
+    let (generic, _) =
+        import_upstream_descriptors(CAPABILITIES_JSON, "default").expect("default should import");
+    assert_eq!(generic.width_pixels, None);
+    assert_eq!(generic.dpi, None);
+}

@@ -9,12 +9,12 @@ executable; there is no separate Python command family.
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
 be reviewed. `render`, named USB and RAW-network `print`, USB and
-configured-network `printers list`, and USB/network registration through
-`printers add` are implemented. An initial `serve` captures RAW TCP jobs framed
-by connection close and previews the most recent one; its job history,
-`FF`/cut boundary handling, and limits remain planned, as do the other
-top-level commands. `README.md` describes what works today, while `TODO.md` is
-the single implementation checklist.
+configured-network `printers list`, USB/network registration through
+`printers add`, and `profiles` (`list`, `show`, `find`) are implemented. An
+initial `serve` captures RAW TCP jobs framed by connection close and previews
+the most recent one; its job history, `FF`/cut boundary handling, and limits
+remain planned, as do the other top-level commands. `README.md` describes what
+works today, while `TODO.md` is the single implementation checklist.
 
 Stable requirement identifiers appear in the final section. Keep an identifier
 when wording is clarified so tests, issues, and roadmap items can continue to
@@ -32,6 +32,7 @@ escpost replay       Resend a captured job
 escpost diff         Compare jobs or renderings
 escpost lint         Find portability and profile problems
 escpost printers     List available printers and manage discovery or pairing
+escpost profiles     Discover supported printer profiles (list, show, find)
 escpost calibrate    Compare rendering with physical hardware
 escpost doctor       Diagnose the local ESCPost environment
 ```
@@ -548,6 +549,85 @@ The current Rust implementation lists attached USB printer-class interfaces.
 Bluetooth, network, spooler, `scan`, and `pair` support can be added without
 renaming the inventory command or changing its read-only meaning.
 
+## `escpost profiles`
+
+`profiles` browses the embedded catalog of supported printer profiles — the
+same identifiers accepted by `--profile` elsewhere. It is read-only and does
+not touch `printers.toml` or any physical device.
+
+```text
+escpost profiles list [--vendor <NAME>] [--source <SOURCE>] [--search <TEXT>] [--json]
+escpost profiles show <ID> [--json]
+escpost profiles find
+```
+
+### `profiles list`
+
+`list` prints one row per embedded profile, sorted by id:
+
+```text
+PROFILE      VENDOR   MODEL       CAL  PAPER  PRINT  DOTS  DPI  CUT  BC   QR
+NT-5890K     Netum    NT-5890K    ✓    58     48     384   203  –    A·B  ✓
+TM-T88III    Epson    TM-T88III   ~    80     72     512   180  ✓    A·B  ✓
+REFERENCE    ESCPost  Reference   ○    80     72     576   203  ✓    A·B  ✓
+```
+
+Columns: `PROFILE` is the id passed to `--profile`; `PAPER` is the paper's
+nominal width and `PRINT` the printable width, both whole millimeters; `DOTS`
+is the printable width in dots; `DPI` is the horizontal resolution; `CUT`,
+`BC` (barcode: `A·B`, `A`, `B`, or `–`), and `QR` are compact capability
+flags.
+
+`CAL` is the calibration marker, ESCPost's honesty signal about how a
+profile's physical fidelity was obtained:
+
+- `✓` **calibrated** — hash-pinned upstream data, enrichment measured against
+  real hardware.
+- `~` **synthesized** — real capabilities and width from upstream, but
+  physical metrics (font cells, baselines, and similar) default rather than
+  being measured.
+- `○` **virtual** — an idealized profile such as `REFERENCE`; not a real
+  printer.
+
+Filters compose with AND:
+
+- `--vendor <NAME>` narrows by a case-insensitive substring of the vendor.
+- `--source calibrated|synthesized|virtual` narrows by the calibration marker
+  above.
+- `--search <TEXT>` narrows by a case-insensitive substring of id, vendor, or
+  model.
+
+A filter combination that matches nothing is not an error: `list` exits `0`
+and prints a note to stderr instead of a table. `--json` prints the same
+filtered set as a JSON array instead of a table, one full profile object per
+entry (see `profiles show` for the shape).
+
+### `profiles show <id>`
+
+`show` prints every field ESCPost tracks for one profile: identity (id,
+vendor, model), provenance (the calibration label and marker, plus the
+canonical profile's content hash), geometry (paper and printable width in
+millimeters, printable width in dots, horizontal and vertical DPI), Font A and
+B cell size and baseline, the code page count, and features (graphics, full
+and partial cut, QR, drawer pulse, and the Function A/Function B barcode
+systems). `--json` prints the same data as one JSON object. An unknown id is
+an error with a nonzero exit.
+
+### `profiles find`
+
+`find` is an interactive substring picker over the same catalog: type to
+filter by id, vendor, or model, and press Enter to select. Unlike `list` and
+`show`, it prints nothing but the chosen id to stdout, so it composes into a
+shell command:
+
+```bash
+escpost render receipt.bin --profile "$(escpost profiles find)" -o receipt.png
+```
+
+`find` requires an interactive terminal. It errors under the global
+`--non-interactive` flag or when stdin is not a terminal, pointing at
+`profiles list --search <text>` as the scriptable equivalent.
+
 ## `escpost serve`
 
 `serve` listens for future RAW print jobs and displays captured jobs in the
@@ -600,6 +680,8 @@ output, and error conventions where they apply.
 - `lint` reports portability and profile-specific problems without conflating
   them with invalid input.
 - `printers` lists usable printers and owns explicit scanning and pairing.
+- `profiles` browses, inspects, and interactively picks supported printer
+  profiles.
 - `calibrate` renders and physically prints the same version-controlled input.
 - `doctor` reports platform, configuration, transport, and permission
   problems.

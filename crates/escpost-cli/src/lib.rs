@@ -8,6 +8,7 @@ mod output;
 mod print;
 mod printers;
 mod profiles;
+pub mod profiles_cmd;
 mod render;
 mod serve;
 mod source;

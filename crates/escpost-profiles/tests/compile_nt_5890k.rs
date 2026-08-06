@@ -293,7 +293,8 @@ fn generated_profile_pack_matches_the_reviewed_sources() {
 
     assert_eq!(pack.get("NT-5890K"), Some(&profile));
     assert_eq!(pack.get("REFERENCE"), Some(&reference));
-    assert_eq!(pack.profiles().count(), 2);
+    assert!(pack.profiles().count() > 2);
+    assert!(pack.get("TM-T88III").is_some());
 }
 
 #[test]

@@ -1,6 +1,423 @@
 {
   "schema_version": 1,
   "profiles": {
+    "AF-240": {
+      "schema_version": 1,
+      "id": "AF-240",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "9ee9ca2dc979db06d803a2ad92ba2fe20f2de74d3fbd70b41b9325b0b2142cc5"
+      },
+      "geometry": {
+        "printable_width_dots": 100,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 5,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": false,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "OXHOO-EUROPEAN"
+      },
+      "canonical_profile_sha256": "68790734f4f61891ddac70646c4e7a0ea2a5a05d9c1ea6d854f395701cdfcfd4"
+    },
+    "CT-S651": {
+      "schema_version": 1,
+      "id": "CT-S651",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "3877107addc8343355ff6a1dac0986766eec1bfb2020f0d089334f726f50fb0c"
+      },
+      "geometry": {
+        "printable_width_dots": 640,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP852",
+        "7": "CP866",
+        "8": "CP857",
+        "9": "CP1252",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "40": "CP864",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "ee7678e041e038b54cd1b57a76590468f0bc4e9cce9033669df0709deddfdcd6"
+    },
+    "ITPP047": {
+      "schema_version": 1,
+      "id": "ITPP047",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "95c6019bdf2b4f493d75ddb5abf7cc7d5e72c8ccdd2b3038ec3c4cf34e0b8e3c"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP1252",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "Unknown",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown"
+      },
+      "canonical_profile_sha256": "560caebc025e64f0c2cfe3f3ce03bf1d8a03693a5e976e1ceebf962e3235ae2a"
+    },
+    "KR-306": {
+      "schema_version": 1,
+      "id": "KR-306",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "62f8e3bcb979621a2b8cbc2be06b4da1b3174346b29891c46edc4341fabdc025"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "11": "CP1252",
+        "12": "CP866",
+        "13": "CP852",
+        "14": "CP858",
+        "15": "Unknown",
+        "16": "Unknown",
+        "17": "Unknown",
+        "18": "Unknown",
+        "19": "CP747",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "Unknown",
+        "23": "CP864",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "27": "CP1255",
+        "28": "CP437",
+        "29": "KATAKANA",
+        "30": "CP437",
+        "31": "CP858",
+        "32": "CP852",
+        "33": "CP860",
+        "34": "CP861",
+        "35": "CP863",
+        "36": "CP865",
+        "37": "CP866",
+        "38": "CP855",
+        "39": "CP857",
+        "40": "CP862",
+        "41": "CP864",
+        "42": "CP737",
+        "43": "CP851",
+        "44": "CP869",
+        "45": "CP928",
+        "46": "CP772",
+        "47": "CP774",
+        "48": "CP874",
+        "49": "CP1252",
+        "50": "CP1250",
+        "51": "CP1251",
+        "52": "CP3840",
+        "53": "CP3841",
+        "54": "CP3843",
+        "55": "CP3844",
+        "56": "CP3845",
+        "57": "CP3846",
+        "58": "CP3847",
+        "59": "CP3848",
+        "60": "CP1001",
+        "61": "CP2001",
+        "62": "CP3001",
+        "63": "CP3002",
+        "64": "CP3011",
+        "65": "CP3012",
+        "66": "CP3021",
+        "67": "CP3041",
+        "68": "CP852",
+        "69": "Unknown",
+        "70": "CP1256"
+      },
+      "canonical_profile_sha256": "c821a529079a04c5196ac38e1a46a65330f0745154d160034e009438f3429219"
+    },
     "NT-5890K": {
       "schema_version": 1,
       "id": "NT-5890K",
@@ -150,6 +567,604 @@
       },
       "canonical_profile_sha256": "de7d6d69020902541cb1737f25c70147dd510da8679e990ed169953e08c9fc83"
     },
+    "NT-80-V-UL": {
+      "schema_version": 1,
+      "id": "NT-80-V-UL",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "901dc3e7c58922eca86bec63c747227ad7989d184a829b4633a838aef02b1e53"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 48,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 64,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "Unknown",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "ISO_8859-6",
+        "23": "Unknown",
+        "24": "CP747",
+        "25": "CP1257",
+        "27": "Unknown",
+        "28": "CP864",
+        "31": "Unknown",
+        "32": "CP1255",
+        "50": "CP437",
+        "52": "CP437",
+        "53": "CP858",
+        "54": "CP852",
+        "55": "CP860",
+        "56": "CP861",
+        "57": "CP863",
+        "58": "CP865",
+        "59": "CP866",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "63": "CP864",
+        "64": "CP737",
+        "65": "CP851",
+        "66": "CP869",
+        "68": "CP772",
+        "69": "CP774",
+        "71": "CP1252",
+        "72": "CP1250",
+        "73": "CP1251",
+        "74": "CP3840",
+        "76": "CP3843",
+        "77": "CP3844",
+        "78": "CP3845",
+        "79": "CP3846",
+        "80": "CP3847",
+        "81": "CP3848",
+        "83": "CP2001",
+        "84": "CP3001",
+        "85": "CP3002",
+        "86": "CP3011",
+        "87": "CP3012",
+        "88": "CP3021",
+        "89": "CP3041",
+        "90": "CP1253",
+        "91": "CP1254",
+        "92": "CP1256",
+        "93": "CP720",
+        "94": "CP1258",
+        "95": "CP775",
+        "96": "Unknown",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "7656fba0c4980cf041b30ae10b0e6233608ed6d03f5f17e324a27684e3e4e452"
+    },
+    "OCD-100": {
+      "schema_version": 1,
+      "id": "OCD-100",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "c5d67cd6e256d4c924b0549812bde6cf725cb815d31713af6c6f35aa835fcaa1"
+      },
+      "geometry": {
+        "printable_width_dots": 100,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 5,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": false,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "CP852",
+        "10": "CP862",
+        "11": "CP866",
+        "12": "CP1251",
+        "13": "CP1254",
+        "14": "CP1255",
+        "15": "CP1257",
+        "16": "CP1252",
+        "17": "CP1253",
+        "19": "CP858"
+      },
+      "canonical_profile_sha256": "d0f37687bc980edb7b5cd45b3102c33bf647718caeaa44517a866ec46ac7f243"
+    },
+    "OCD-300": {
+      "schema_version": 1,
+      "id": "OCD-300",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "9a766d0a602b0d429c60492dd0a75e91ac3ef535ae67375eb47d294421af1945"
+      },
+      "geometry": {
+        "printable_width_dots": 240,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": false,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "CP852",
+        "10": "CP862",
+        "11": "CP866",
+        "12": "CP1251",
+        "13": "CP1254",
+        "14": "CP1255",
+        "15": "CP1257",
+        "16": "CP1252",
+        "17": "CP1253",
+        "18": "CP1250",
+        "19": "CP858",
+        "20": "Unknown"
+      },
+      "canonical_profile_sha256": "95ef80593d4d8f242608e903b6a0f774a41d4e082c9e026a95c4a0f9419ead08"
+    },
+    "P822D": {
+      "schema_version": 1,
+      "id": "P822D",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "d5fa47d07a426c6f71641f1757ee0ee4268c1bec8ab48dc95f045ec4b0828642"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "CP747",
+        "25": "CP1257",
+        "27": "Unknown",
+        "28": "CP864",
+        "29": "CP1001",
+        "30": "Unknown",
+        "31": "Unknown",
+        "32": "CP1255",
+        "33": "CP720",
+        "34": "CP1256",
+        "35": "CP1257",
+        "50": "CP437",
+        "51": "Unknown",
+        "52": "CP437",
+        "53": "CP858",
+        "54": "CP852",
+        "55": "CP860",
+        "56": "CP861",
+        "57": "CP863",
+        "58": "CP865",
+        "59": "CP866",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "63": "CP864",
+        "64": "CP737",
+        "65": "CP851",
+        "66": "CP869",
+        "67": "CP928",
+        "68": "CP772",
+        "69": "CP774",
+        "70": "CP874",
+        "71": "CP1252",
+        "72": "CP1250",
+        "73": "CP1251",
+        "74": "CP3840",
+        "75": "CP3841",
+        "76": "CP3843",
+        "77": "CP3844",
+        "78": "CP3845",
+        "79": "CP3846",
+        "80": "CP3847",
+        "81": "CP3848",
+        "82": "CP1001",
+        "83": "CP2001",
+        "84": "CP3001",
+        "85": "CP3002",
+        "86": "CP3011",
+        "87": "CP3012",
+        "88": "CP3021",
+        "89": "CP3041",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "b5c5c05be64b24f4a37645064161e71d52e0f8c2ace32d07da4f12c17e242c50"
+    },
+    "POS-5890": {
+      "schema_version": 1,
+      "id": "POS-5890",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "94824de507ebbc5a5eb4000f4356d381de8e30e4679b7136ece5cef34b6457a6"
+      },
+      "geometry": {
+        "printable_width_dots": 384,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "CP747",
+        "25": "CP1257",
+        "27": "CP1258",
+        "28": "CP864",
+        "31": "Unknown",
+        "32": "CP1255",
+        "50": "CP437",
+        "52": "CP437",
+        "53": "CP858",
+        "54": "CP852",
+        "55": "CP860",
+        "56": "CP861",
+        "57": "CP863",
+        "58": "CP865",
+        "59": "CP866",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "63": "CP864",
+        "64": "CP737",
+        "65": "CP851",
+        "66": "CP869",
+        "68": "CP772",
+        "69": "CP774",
+        "71": "CP1252",
+        "72": "CP1250",
+        "73": "CP1251",
+        "74": "CP3840",
+        "76": "CP3843",
+        "77": "CP3844",
+        "78": "CP3845",
+        "79": "CP3846",
+        "80": "CP3847",
+        "81": "CP3848",
+        "83": "CP2001",
+        "84": "CP3001",
+        "85": "CP3002",
+        "86": "CP3011",
+        "87": "CP3012",
+        "88": "CP3021",
+        "89": "CP3041",
+        "90": "CP1253",
+        "91": "CP1254",
+        "92": "CP1256",
+        "93": "CP720",
+        "94": "CP1258",
+        "95": "CP775",
+        "96": "Unknown",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "437b1f5631428666e6b06720a4eaccada044fcd8aee195dce6babf01e5f35e38"
+    },
     "REFERENCE": {
       "schema_version": 1,
       "id": "REFERENCE",
@@ -264,6 +1279,2238 @@
         "26": "CP1258"
       },
       "canonical_profile_sha256": "fdbd1bfb009fc2b72cfe987cc5303cb756b122c5ae057a287befc27742b82b2c"
+    },
+    "RP-F10-58mm": {
+      "schema_version": 1,
+      "id": "RP-F10-58mm",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "b5f02596c10d03e7e5f32198df6ce01631ac94b47780b6137ea62be2d4650cf4"
+      },
+      "geometry": {
+        "printable_width_dots": 432,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 8,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "13": "CP857",
+        "14": "CP737",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "34": "CP855",
+        "37": "CP864",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "03ce32738e89b604a17564cd15ea21c93877e82be5b6849b7e3208e655a38237"
+    },
+    "RP-F10-80mm": {
+      "schema_version": 1,
+      "id": "RP-F10-80mm",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "4455daa5297e31ee6748bb80d75bf5b3c58d290d29e73809170e6fb268b476f2"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 8,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "13": "CP857",
+        "14": "CP737",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "34": "CP855",
+        "37": "CP864",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "3c4a745d1e4d6a290ffeeb850fd3ab1f6e220cb1bf196370ad80a6a3efa28052"
+    },
+    "SRP-S300": {
+      "schema_version": 1,
+      "id": "SRP-S300",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "138c8e111edb1e713f87dc3cd7942ead75a5305dcc3f47af23d73a3137155674"
+      },
+      "geometry": {
+        "printable_width_dots": 640,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "47": "CP1253",
+        "49": "CP1255",
+        "50": "CP1256",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "f36ed77be028ab5b95d911018c50e728701908e328feef18032b5c51996ac425"
+    },
+    "Sunmi-V2": {
+      "schema_version": 1,
+      "id": "Sunmi-V2",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "ca82a80d760cbfa743226a62dad983c671ffe8e7b34e337e461d0036d111ccb2"
+      },
+      "geometry": {
+        "printable_width_dots": 384,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "21": "CP874",
+        "33": "CP775",
+        "34": "CP855",
+        "36": "CP862",
+        "37": "CP864",
+        "254": "CP855"
+      },
+      "canonical_profile_sha256": "b96ab53cf8da02a7fe64121b2f87347377ac78a488c338ebddb28fa63fbb21c2"
+    },
+    "T-1": {
+      "schema_version": 1,
+      "id": "T-1",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "86948ebd007f3f5849776793558f04e5dd5f153b81c5e87d1b57343dc9997362"
+      },
+      "geometry": {
+        "printable_width_dots": 504,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "19": "CP858",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "b8518181e5f3558625e6e2e8aca032a089c0e7ef02e9c557cfd0988f5e28e5a0"
+    },
+    "TH230": {
+      "schema_version": 1,
+      "id": "TH230",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "64d6d0861c15af334daef99c9089be63a8e42d0afcfae1aed667473896f1c6b8"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP850",
+        "2": "CP852",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP858",
+        "7": "CP866",
+        "8": "CP1252",
+        "9": "CP862",
+        "10": "CP737",
+        "11": "CP874",
+        "12": "CP857",
+        "16": "CP1254",
+        "17": "CP1250",
+        "18": "Unknown",
+        "19": "Unknown",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "CP864",
+        "23": "CP720",
+        "24": "CP1256",
+        "25": "Unknown",
+        "26": "KATAKANA",
+        "27": "CP775",
+        "28": "CP1257",
+        "29": "Unknown"
+      },
+      "canonical_profile_sha256": "7edc239669663d7df9548a6264099c5da1e830416f3ee46799b57aa4ebaa407d"
+    },
+    "TH230Plus": {
+      "schema_version": 1,
+      "id": "TH230Plus",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "90acded6cf79638b58ca556f8213d7931b2c00d2c5941ab6bf273fe072e567ae"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP850",
+        "2": "CP852",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP858",
+        "7": "CP866",
+        "8": "CP1252",
+        "9": "CP862",
+        "10": "CP737",
+        "11": "CP874",
+        "12": "CP857",
+        "16": "CP1254",
+        "17": "CP1250",
+        "18": "Unknown",
+        "19": "Unknown",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "CP864",
+        "23": "CP720",
+        "24": "CP1256",
+        "25": "Unknown",
+        "26": "KATAKANA",
+        "27": "CP775",
+        "28": "CP1257",
+        "29": "Unknown"
+      },
+      "canonical_profile_sha256": "d75ba5950be5599fdb442ac72ac18390b573dece00df8a40310e846b387e4c26"
+    },
+    "TM-L90": {
+      "schema_version": 1,
+      "id": "TM-L90",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "8d9dfd6f8113ed6cdf627c6191e403e9ba52d73c8192344dca45bbcd407bd37d"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "0aebdbd5cda6ad7fe514783468b65a94e533880aa2000e4ff0596181b5bdb871"
+    },
+    "TM-P80": {
+      "schema_version": 1,
+      "id": "TM-P80",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "63b9ea7fa66aea84c4a4dc9781bf776765341619be09486b315ed6a9fd4327db"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "66": "Unknown",
+        "67": "Unknown",
+        "68": "Unknown",
+        "69": "Unknown",
+        "70": "Unknown",
+        "71": "Unknown",
+        "72": "Unknown",
+        "73": "Unknown",
+        "74": "Unknown",
+        "75": "Unknown",
+        "82": "Unknown",
+        "254": "Unknown",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "c5a1c18c29cf13683a0d60f8abb4572ff2889bf19a8ba3efb957dcdf307a1c03"
+    },
+    "TM-P80-42col": {
+      "schema_version": 1,
+      "id": "TM-P80-42col",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "be705b56258eff1334acae72ece4441c67b86462f7cdf2259ef383163f5cb28d"
+      },
+      "geometry": {
+        "printable_width_dots": 546,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "66": "Unknown",
+        "67": "Unknown",
+        "68": "Unknown",
+        "69": "Unknown",
+        "70": "Unknown",
+        "71": "Unknown",
+        "72": "Unknown",
+        "73": "Unknown",
+        "74": "Unknown",
+        "75": "Unknown",
+        "82": "Unknown",
+        "254": "Unknown",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "b19ae6b1e079cc93cfdc264dcb2807262c70c0efd222be69f2fe88b480e6ecf0"
+    },
+    "TM-T20II": {
+      "schema_version": 1,
+      "id": "TM-T20II",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "6afb7851ca94977c37265b3c0fe9773adf41eaf4bb3f093c84c58a4c906e0c41"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "62e27417b4ddf568461c1135c0487d485f16f222bc0d20ca24b9485ea5d7ec61"
+    },
+    "TM-T20II-42col": {
+      "schema_version": 1,
+      "id": "TM-T20II-42col",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "c1b5e08de839ad94ad163ee8e48ce58fcea8cc0fa623ca4655df2afb2335662c"
+      },
+      "geometry": {
+        "printable_width_dots": 546,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "1a294a795060e396c6124dce2ca75f30a2cd156ccdfcb2737e93ac2d1b10ae62"
+    },
+    "TM-T88II": {
+      "schema_version": 1,
+      "id": "TM-T88II",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "2dc38049edeb28e2d2fa05ac42b7bcab902c94bced2b8e453e2abbc510488987"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "11": "Unknown",
+        "12": "Unknown",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "Unknown",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "Unknown",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "Unknown",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "66": "Unknown",
+        "67": "Unknown",
+        "68": "Unknown",
+        "69": "Unknown",
+        "70": "Unknown",
+        "71": "Unknown",
+        "72": "Unknown",
+        "73": "Unknown",
+        "74": "Unknown",
+        "75": "Unknown",
+        "82": "Unknown",
+        "254": "Unknown",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "dbbd66da92ee9ecd83e0a69e8558bc626ce72aaa418e727c0d17a9328ec98ab5"
+    },
+    "TM-T88III": {
+      "schema_version": 1,
+      "id": "TM-T88III",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "9dfd6eacb0fb8010746f6fa6def18d476539e9213b46efc87f83a620d9762bbe"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP1251",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP862",
+        "19": "CP858",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "c11882621e75eeb450b414ef49f10de6202431eb827e8b87edb8723b2948a5c6"
+    },
+    "TM-T88IV": {
+      "schema_version": 1,
+      "id": "TM-T88IV",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "a48d99812083c8b3372e2e9e68cab71ba41283c3ef97804bc1286768ebf903c6"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "9f468a327acac26b870096580c1ebfb26ccc8507d63aa9b7227e11e75b922097"
+    },
+    "TM-T88IV-SA": {
+      "schema_version": 1,
+      "id": "TM-T88IV-SA",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "e3fe58f5e95edaa6443426ffafa3cbfd65a0132b1a5c1f6936b8f1a6eec68000"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "20": "Unknown",
+        "21": "CP874",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2"
+      },
+      "canonical_profile_sha256": "3a316b942760b95189235702e81a09382ea51203e95df3152b4404f6a0e9772d"
+    },
+    "TM-T88V": {
+      "schema_version": 1,
+      "id": "TM-T88V",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "79d34d2e65cd19ffc70b003e772a61a28eac643910ff5e3e9932cfaa7f848310"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "e167043d13b885aad771eefbf2947aebb5d4869b6328ae50b72e856d749ff629"
+    },
+    "TM-U220": {
+      "schema_version": 1,
+      "id": "TM-U220",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "b4725835930c1d79d16ca826c110124b6a7c93ecb63455844fe712a07cb656a1"
+      },
+      "geometry": {
+        "printable_width_dots": 400,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 7,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437"
+      },
+      "canonical_profile_sha256": "d30367d6e9ef6ccc92a3da9c9fc14041383ed2514648329a7f5e3ed6e1db12e3"
+    },
+    "TM-U220B": {
+      "schema_version": 1,
+      "id": "TM-U220B",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "27c9f8f98c8889066abb9c86e2d50fc6c0252d2461adcf60a2bea6ede5b6b7b9"
+      },
+      "geometry": {
+        "printable_width_dots": 400,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 7,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437"
+      },
+      "canonical_profile_sha256": "4eaf1c114dac2cd4156c1353d987cc9f8d1ad653bc9dee3cd36a576a9ca833c5"
+    },
+    "TSP600": {
+      "schema_version": 1,
+      "id": "TSP600",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "15f1d6f06ead4fcf9f6a0e029df46a9f0639d3acf8d9df902eeaf2dd6c50eda7"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP437",
+        "2": "CP932",
+        "3": "CP437",
+        "4": "CP858",
+        "5": "CP852",
+        "6": "CP860",
+        "7": "CP861",
+        "8": "CP863",
+        "9": "CP865",
+        "10": "CP866",
+        "11": "CP855",
+        "12": "CP857",
+        "13": "CP862",
+        "14": "CP864",
+        "15": "CP737",
+        "16": "CP851",
+        "17": "CP869",
+        "18": "CP928",
+        "19": "CP772",
+        "20": "CP774",
+        "21": "CP874",
+        "32": "CP1252",
+        "33": "CP1250",
+        "34": "CP1251",
+        "64": "CP3840",
+        "65": "CP3841",
+        "66": "CP3843",
+        "67": "CP3844",
+        "68": "CP3845",
+        "69": "CP3846",
+        "70": "CP3847",
+        "71": "CP3848",
+        "72": "CP1001",
+        "73": "CP2001",
+        "74": "CP3001",
+        "75": "CP3002",
+        "76": "CP3011",
+        "77": "CP3012",
+        "78": "CP3021",
+        "79": "CP3041",
+        "96": "Unknown",
+        "97": "Unknown",
+        "98": "Unknown",
+        "99": "Unknown",
+        "100": "Unknown",
+        "101": "Unknown",
+        "102": "Unknown",
+        "255": "Unknown"
+      },
+      "canonical_profile_sha256": "d022f13d87482ff45477c4e8a2ab3cf021adc56bfc5ff00e93cdfdb16e379297"
+    },
+    "ZJ-5870": {
+      "schema_version": 1,
+      "id": "ZJ-5870",
+      "source": {
+        "type": "upstream_default",
+        "profile_sha256": "a77f7ebb80667af3b724ef3081a8831118dd2fa2a32f81d8a0f02bdbf3d2883e"
+      },
+      "geometry": {
+        "printable_width_dots": 384,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852"
+      },
+      "canonical_profile_sha256": "f1c2f7bfd85cff8a18119874bac4a14b2841d73c40df8524605fbaf91b01edcd"
     }
   }
 }

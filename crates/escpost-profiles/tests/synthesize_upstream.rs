@@ -1,4 +1,6 @@
-use escpost_profiles::{ProfileSource, defaults, synthesize_profile};
+use escpost_profiles::{
+    ProfileSource, defaults, from_canonical_json, synthesize_profile, to_canonical_json,
+};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -22,6 +24,22 @@ fn synthesizes_a_width_bearing_upstream_profile() {
     );
     // Deviations conformant:
     assert_eq!(profile.commands.esc_j, escpost_profiles::FeedBehavior::Feed);
+    // Cut capability is conservatively withheld: no descriptor backs a cutter
+    // distance for a synthesized profile (DD-032).
+    assert!(!profile.features.paper_full_cut);
+    assert!(!profile.features.paper_part_cut);
+}
+
+#[test]
+fn synthesized_upstream_default_profile_round_trips_through_canonical_json() {
+    let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+        .expect("import ok")
+        .expect("TM-T88III has a width, so it synthesizes");
+    let json = to_canonical_json(&profile).expect("a synthesized profile should serialize");
+    assert_eq!(
+        from_canonical_json(&json).expect("the canonical profile should verify"),
+        profile
+    );
 }
 
 #[test]

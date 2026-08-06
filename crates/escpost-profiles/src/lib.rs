@@ -12,9 +12,6 @@ use thiserror::Error;
 
 const ENRICHMENT_SCHEMA_VERSION: u32 = 1;
 const CANONICAL_PROFILE_SCHEMA_VERSION: u32 = 1;
-/// Epson's documented 8-dot `ESC *` vertical pitch baseline (DD-031/DD-032):
-/// three printer dots between adjacent source rows at 203 DPI.
-const DEFAULT_EIGHT_DOT_VERTICAL_PITCH_DOTS: u32 = 3;
 const LEGACY_FUNCTION_A_SYSTEMS: [BarcodeSystem; 7] = [
     BarcodeSystem::UpcA,
     BarcodeSystem::UpcE,
@@ -827,7 +824,7 @@ fn resolve_profile_fields(
     let geometry = resolve_geometry(geometry, upstream);
     let motion = resolve_motion(motion, &geometry);
     let column_bit_image = column_bit_image.unwrap_or(ColumnBitImage {
-        eight_dot_vertical_pitch_dots: DEFAULT_EIGHT_DOT_VERTICAL_PITCH_DOTS,
+        eight_dot_vertical_pitch_dots: defaults::DEFAULT_EIGHT_DOT_VERTICAL_PITCH_DOTS,
     });
     let commands = commands.unwrap_or_else(defaults::default_commands);
     let printer_defaults = printer_defaults.unwrap_or_else(defaults::default_printer_defaults);
@@ -1189,7 +1186,7 @@ fn hash_resolved_profile(profile: &Value) -> Result<String, CompileProfileError>
 
 fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json::Error> {
     // The stored hash cannot cover itself. Every other canonical field affects
-    // rendering behavior or the fidelity disclosure returned with a render.
+    // rendering behavior.
     let content = CanonicalProfileContent {
         schema_version: profile.schema_version,
         id: &profile.id,

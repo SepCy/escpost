@@ -11,6 +11,10 @@ pub const DEFAULT_WIDTH_DOTS: u32 = 384;
 /// Default print media DPI (203 DPI, standard for Epson thermal printers).
 pub const DEFAULT_DPI: u32 = 203;
 
+/// Epson's documented 8-dot `ESC *` vertical pitch baseline (DD-031/DD-032):
+/// three printer dots between adjacent source rows at 203 DPI.
+pub const DEFAULT_EIGHT_DOT_VERTICAL_PITCH_DOTS: u32 = 3;
+
 /// Default font metrics for Font A and Font B (REFERENCE-derived baseline).
 pub fn default_fonts() -> Fonts {
     Fonts {

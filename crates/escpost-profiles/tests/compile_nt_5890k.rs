@@ -524,6 +524,26 @@ fn upstream_enrichment_may_omit_descriptors_and_deviations() {
 }
 
 #[test]
+fn enrichment_cannot_state_an_upstream_default_source() {
+    // `upstream_default` is produced only by synthesis (DD-032); a
+    // hand-authored enrichment must not be able to claim it.
+    let sha = "0".repeat(64);
+    let minimal = format!(
+        "schema_version = 1\nprofile = \"X\"\nsources = []\n\n[source]\ntype = \"upstream_default\"\nprofile_sha256 = \"{sha}\"\n"
+    );
+
+    let error = compile_profile(CAPABILITIES_JSON, &minimal)
+        .expect_err("an enrichment cannot claim the synthesis-only source kind");
+
+    assert!(matches!(
+        error,
+        CompileProfileError::InvalidEnrichmentSource {
+            kind: "upstream_default"
+        }
+    ));
+}
+
+#[test]
 fn upstream_media_and_font_columns_parse_with_unknown_as_absent() {
     use escpost_profiles::import_upstream_descriptors;
     let (media, fonts) = import_upstream_descriptors(CAPABILITIES_JSON, "TM-T88III")

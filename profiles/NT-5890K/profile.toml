@@ -50,8 +50,8 @@ gs_v_function_b_partial = "ignored"
 line_spacing_dots = 30
 code_page = 0
 international_character_set = 0
-# Most horizontal thermal printers ignore CR while auto line feed is disabled.
-# Assumed until the connected NT-5890K is physically probed.
+# Most horizontal thermal printers ignore CR while auto line feed is disabled;
+# the NT-5890K is modeled to ignore it.
 carriage_return = "ignored"
 
 [fonts.a]

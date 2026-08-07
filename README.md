@@ -15,14 +15,14 @@ physical USB and network printers from the same CLI.
 ## Your complete ESC/POS Toolbox
 
 <p align="center">
-  <img src="docs/assets/readme/features.png" alt="Overview of ESCPost's six core features" width="600">
+  <img src="docs/assets/readme/features.png" alt="Overview of ESCPost's six core features" width="800">
 </p>
 
 | Feature | What it provides |
 |---|---|
 | **CLI and libraries** | A Rust CLI, reusable crates for processing ESC/POS data and printer profiles, and a Python API. |
-| **Virtual IP printer** | Redirect an ERP or POS application to ESCPost as a RAW TCP network printer, then capture and inspect its print jobs in the browser workbench. |
-| **USB and IP printers** | Named USB and RAW TCP targets with discovery, connection checks, and delivery of the exact source bytes. |
+| **Virtual IP printer** | Redirect an ERP or POS application to ESCPost as a RAW TCP network printer, then capture and inspect its print jobs in your browser, in real time. |
+| **USB and IP printers** | Automatically discover connected USB printers, configure IP network printers, and test and calibrate each printer's profile. |
 | **Printer profiles** | Device-specific geometry, capabilities, defaults, and calibrated behavior. |
 | **PNG and web preview** | Printer-resolution PNG previews, multi-sheet jobs, integer zoom, antialiasing, and file watching. |
 | **Cloud printing** | Planned native integration with [Receiptful](https://receiptful.io); today, Receiptful is available separately for thermal-printer delivery, job history, and managed cloud printing. |
@@ -42,7 +42,8 @@ escpost render receipt.bin \
   --non-interactive
 ```
 
-Use the embedded browser workbench and rerender when the source changes:
+Preview receipts and labels in your browser and rerender when the source
+changes:
 
 ```bash
 escpost render receipt.hex --profile REFERENCE --web --watch
@@ -61,10 +62,10 @@ escpost serve
 
 ## Supported ESC/POS features
 
-ESCPost currently handles profile-driven text and layout, common single-byte
-code pages, bit and raster images, native one-dimensional barcodes, GS1-128,
-automatic Code 128, Model 2 QR codes, feeds, and cuts. Supported cuts produce
-separate ordered sheets.
+ESCPost currently implements all commonly used ESC/POS commands, including
+profile-driven text and layout, common single-byte code pages, bit and raster
+images, native one-dimensional barcodes, GS1-128, automatic Code 128, Model 2
+QR codes, feeds, and cuts. Supported cuts produce separate ordered sheets.
 
 Previews reproduce printable geometry and precise placement at the printer's
 native resolution—not paper texture or an exact reproduction of proprietary

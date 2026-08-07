@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="700" viewBox="0 0 1800 700" role="img" aria-labelledby="title desc">
+  <title id="title">ESCPost hero image placeholder</title>
+  <desc id="desc">Replace this file with the final ESCPost hero artwork.</desc>
+  <rect width="1800" height="700" fill="#07182d"/>
+  <rect x="40" y="40" width="1720" height="620" fill="none" stroke="#21d5c6" stroke-width="2" stroke-dasharray="12 12"/>
+  <text x="900" y="305" fill="#ffffff" font-family="monospace" font-size="74" font-weight="700" text-anchor="middle">ESCPost</text>
+  <text x="900" y="390" fill="#21d5c6" font-family="monospace" font-size="32" text-anchor="middle">HERO IMAGE PLACEHOLDER · 1800 × 700</text>
+</svg>

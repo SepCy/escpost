@@ -1,10 +1,10 @@
-# ESCPost
-
 <p align="center">
-  <img src="docs/assets/readme/hero.svg" alt="ESCPost — the most complete ESC/POS developer toolbox" width="100%">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/readme/hero_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/readme/hero_light.png">
+    <img src="docs/assets/readme/hero_light.png" alt="ESCPost — the most complete ESC/POS developer toolbox" width="640">
+  </picture>
 </p>
-
-**The most complete ESC/POS developer toolbox.**
 
 ESCPost is a Rust-based toolkit for building, testing, and debugging ESC/POS
 integrations. Render byte streams without a printer, capture jobs through a
@@ -14,7 +14,7 @@ renderer in Rust or Python applications.
 ## What ESCPost provides
 
 <p align="center">
-  <img src="docs/assets/readme/features.svg" alt="Overview of ESCPost's six core features" width="100%">
+  <img src="docs/assets/readme/features.png" alt="Overview of ESCPost's six core features" width="860">
 </p>
 
 | | Feature | What it provides |

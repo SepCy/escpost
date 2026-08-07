@@ -24,13 +24,6 @@
         margin-bottom: 20px;
       }
 
-      .toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 16px;
-      }
-
       /* Title on the left, server status centred on the first line. */
       .bar {
         display: grid;
@@ -170,13 +163,20 @@
         font-size: 13px;
       }
 
-      header label {
+      /* Paper-margin toggle pinned to the bottom-right corner of the viewport. */
+      #viewOptions {
+        position: absolute;
+        right: 24px;
+        bottom: 24px;
+      }
+
+      #viewOptions label {
         display: inline-flex;
         align-items: center;
         gap: 6px;
       }
 
-      header input {
+      #viewOptions input {
         margin: 0;
       }
 
@@ -186,6 +186,7 @@
       }
 
       #viewport {
+        position: relative;
         overflow: auto;
         min-height: 160px;
         padding: 24px;
@@ -231,15 +232,17 @@
         display: block;
         max-width: none;
         /* Reserve blank paper on top/left/right at all times so toggling the
-           margin only changes its colour and never shifts the receipt. The
-           bottom is left flush because receipt paper feeds continuously. */
+           margin only changes its colour and shadow and never shifts the
+           receipt. The bottom is left flush because receipt paper feeds
+           continuously. */
         padding: 16px 16px 0;
         background-color: transparent;
         /* Faithful 1-bit dots stay crisp under nearest-neighbour scaling. */
         image-rendering: pixelated;
         image-rendering: crisp-edges;
-        box-shadow: 0 3px 16px rgb(0 0 0 / 45%);
-        transition: background-color 150ms ease;
+        transition:
+          background-color 150ms ease,
+          box-shadow 150ms ease;
       }
 
       /* An anti-aliased preview is a supersampled grayscale image, so let the
@@ -249,9 +252,12 @@
         image-rendering: auto;
       }
 
-      /* The reserved padding reads as unprinted receipt paper when enabled. */
+      /* The reserved padding reads as unprinted receipt paper when enabled, and
+         the sheet gains a drop shadow so it looks like a physical sheet. With
+         the margin off there is no paper frame, so no shadow either. */
       #sheets.paper-margin .receipt {
         background-color: white;
+        box-shadow: 0 3px 16px rgb(0 0 0 / 45%);
       }
 
       /* Briefly tint the margin on enable so its extent is visible. */
@@ -322,12 +328,6 @@
           </span>
         </div>
       </div>
-      <div class="toolbar">
-        <label>
-          <input type="checkbox" id="margin">
-          Paper margin
-        </label>
-      </div>
     </header>
 
     <main id="viewport">
@@ -338,6 +338,12 @@
         <span id="receiving">Receiving a job…</span>
       </div>
       <div id="sheets" aria-live="polite"></div>
+      <div id="viewOptions">
+        <label>
+          <input type="checkbox" id="margin">
+          Paper margin
+        </label>
+      </div>
       <div id="warnings" aria-live="polite"></div>
       <p id="magnifyHint">Use your browser's zoom to magnify.</p>
       <p id="waiting" aria-live="polite"></p>

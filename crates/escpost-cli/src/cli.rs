@@ -69,9 +69,11 @@ pub(crate) struct ServeArgs {
     #[arg(long, num_args = 0..=1, default_value_t = true, default_missing_value = "true")]
     pub(crate) antialias: bool,
 
-    /// Open the web viewer in the default browser.
-    #[arg(long)]
-    pub(crate) browser: bool,
+    /// Do not open the web viewer in the default browser on startup. Auto-open
+    /// is also skipped with --non-interactive, without a terminal, or when the
+    /// BROWSER=none or CI environment variables are set.
+    #[arg(long, alias = "no-browser")]
+    pub(crate) no_open: bool,
 }
 
 #[derive(Debug, Args)]

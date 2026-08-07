@@ -113,9 +113,6 @@ pub(crate) enum CliError {
     #[error("idle timeout must be a positive number of seconds")]
     InvalidIdleTimeout,
 
-    #[error("could not open the default browser: {0}")]
-    OpenBrowser(String),
-
     #[error("watch mode requires a filesystem source, not stdin")]
     WatchStdin,
 

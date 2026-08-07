@@ -292,8 +292,8 @@ pub(crate) async fn serve(
     }
     eprintln!("Web viewer: {url}");
     eprintln!("Press Ctrl+C to stop.");
-    if open_browser {
-        webbrowser::open(&url).map_err(|error| CliError::OpenBrowser(error.to_string()))?;
+    if open_browser && let Err(error) = webbrowser::open(&url) {
+        eprintln!("warning: could not open the browser ({error}); open {url} manually");
     }
 
     let router = Router::new()

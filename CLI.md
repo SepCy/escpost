@@ -652,6 +652,12 @@ Unlike `render --web`, `serve`:
 Running `serve` already provides previews of its captured jobs. A second
 `render --web` process is not needed for those jobs.
 
+On startup, `serve` opens the web viewer in your default browser. Pass
+`--no-open` (alias `--no-browser`) to disable this; auto-open is also skipped
+when stderr is not a terminal, under `--non-interactive`, or when the
+`BROWSER=none` or `CI` environment variable is set. The viewer URL is printed
+to the terminal regardless.
+
 RAW TCP and HTTP listeners bind to loopback by default. Exposing either
 listener beyond the host must be explicit because RAW port 9100 has no
 authentication or encryption and receipt contents may be sensitive.

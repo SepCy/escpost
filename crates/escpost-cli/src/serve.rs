@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::time::Duration;
 
 use escpost::{RenderOptions, render_with_options};
@@ -15,7 +16,54 @@ use crate::{net, profiles, web};
 const FIRST_RAW_PORT: u16 = 9100;
 const LAST_RAW_PORT: u16 = 9109;
 
-pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
+/// Decide whether to auto-open the web viewer in a browser. Open by default,
+/// but stay out of the way when the user opted out (`--no-open`), when there is
+/// no interactive terminal, or in automation (`--non-interactive`, `CI`, or
+/// `BROWSER=none`).
+fn should_open_browser(
+    no_open: bool,
+    non_interactive: bool,
+    stderr_is_terminal: bool,
+    browser_env: Option<&str>,
+    ci: bool,
+) -> bool {
+    !no_open && !non_interactive && stderr_is_terminal && !ci && browser_env != Some("none")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_open_browser;
+
+    #[test]
+    fn opens_by_default_on_an_interactive_terminal() {
+        assert!(should_open_browser(false, false, true, None, false));
+        // An explicit browser choice (not "none") still opens.
+        assert!(should_open_browser(
+            false,
+            false,
+            true,
+            Some("firefox"),
+            false
+        ));
+    }
+
+    #[test]
+    fn stays_out_of_the_way_when_opted_out_or_automated() {
+        assert!(!should_open_browser(true, false, true, None, false)); // --no-open
+        assert!(!should_open_browser(false, true, true, None, false)); // --non-interactive
+        assert!(!should_open_browser(false, false, false, None, false)); // no terminal
+        assert!(!should_open_browser(
+            false,
+            false,
+            true,
+            Some("none"),
+            false
+        )); // BROWSER=none
+        assert!(!should_open_browser(false, false, true, None, true)); // CI
+    }
+}
+
+pub(crate) async fn run(arguments: ServeArgs, non_interactive: bool) -> Result<(), CliError> {
     // The profile defaults to REFERENCE, so a virtual printer previews without
     // any prompt and never needs an interactive terminal.
     let profile = profiles::load(&arguments.profile)?;
@@ -71,7 +119,14 @@ pub(crate) async fn run(arguments: ServeArgs) -> Result<(), CliError> {
         idle_timeout,
         options,
     ));
-    let result = web::serve(web_listener, jobs, arguments.browser).await;
+    let open_browser = should_open_browser(
+        arguments.no_open,
+        non_interactive,
+        std::io::stderr().is_terminal(),
+        std::env::var("BROWSER").ok().as_deref(),
+        std::env::var_os("CI").is_some(),
+    );
+    let result = web::serve(web_listener, jobs, open_browser).await;
     acceptor.abort();
     result
 }

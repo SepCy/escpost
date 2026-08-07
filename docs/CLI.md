@@ -13,8 +13,9 @@ configured-network `printers list`, USB/network registration through
 `printers add`, and `profiles` (`list`, `show`, `find`) are implemented. An
 initial `serve` captures RAW TCP jobs framed by connection close and previews
 the most recent one; its job history, `FF`/cut boundary handling, and limits
-remain planned, as do the other top-level commands. `README.md` describes what
-works today, while `TODO.md` is the single implementation checklist.
+remain planned, as do the other top-level commands. The
+[project README](../README.md) describes what works today, while `TODO.md` is
+the single implementation checklist.
 
 Stable requirement identifiers appear in the final section. Keep an identifier
 when wording is clarified so tests, issues, and roadmap items can continue to

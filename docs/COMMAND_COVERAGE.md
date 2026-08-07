@@ -63,7 +63,7 @@ Version 1 reports them as unsupported rather than guessing their behavior.
 
 `ESC a` is covered for text and every currently implemented version 1
 graphics and symbol family. See
-[`tests/INTERACTIONS.md`](tests/INTERACTIONS.md).
+[`tests/INTERACTIONS.md`](../tests/INTERACTIONS.md).
 
 `ESC R` implements Epson's common international sets 0–17 and resets to the
 profile default on `ESC @`. The additional Indic sets 66–75 and 82 remain

@@ -68,7 +68,7 @@ This makes a failed interaction easy to find without creating one large
 `render_interactions.rs` file. Each test should still explain and assert one
 observable behavior.
 
-[`tests/INTERACTIONS.md`](tests/INTERACTIONS.md) is the coverage inventory.
+[`tests/INTERACTIONS.md`](../tests/INTERACTIONS.md) is the coverage inventory.
 Add an interaction when the ESC/POS reference says commands share state, not
 merely because two commands could appear next to each other. Implement entries
 one behavior at a time as their commands become supported.
@@ -400,7 +400,7 @@ out_endpoint = "0x01"
 in_endpoint = "0x81"
 ```
 
-[`examples/printers.toml`](examples/printers.toml) is the committed template.
+[`examples/printers.toml`](../examples/printers.toml) is the committed template.
 Use native `escpost printers add` for new USB and network entries. It preserves
 comments and other printer entries and shares the legacy calibration CLI's
 resolved configuration path. The wrapper creates the local directory before

@@ -97,4 +97,4 @@ docker compose run --rm test cargo test --workspace
 
 Changes to the Python render binding should remain formatted consistently with
 the surrounding code and pass the containerized binding test suite documented
-in `README.md`.
+in the [project README](../README.md).

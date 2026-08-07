@@ -15,7 +15,7 @@ This document tracks:
 
 This is a living compatibility document, not a promise that every planned
 backend is already implemented. Current implementation status remains visible
-in `README.md` and `TODO.md`.
+in [`README.md`](../README.md) and `TODO.md`.
 
 Printer-model behavior does not belong here. Store firmware quirks and physical
 evidence under `profiles/<profile-id>/`. Store ESC/POS command coverage in

@@ -49,12 +49,13 @@ Renderer tests compare decoded pixels against version-controlled
 for calibration). Tests never rewrite expectations. When a rendering change is
 intentional, review the regenerated `local/test-output/<case>/actual-NNN.png`
 by eye, then copy it over the matching `expected-NNN.png` to accept it. Never
-bless a golden solely because the implementation produced it — see `TESTING.md`.
+bless a golden solely because the implementation produced it — see
+`docs/TESTING.md`.
 
 ## Where to read more
 
-- `ARCHITECTURE.md` — crate layout and the render pipeline.
-- `DESIGN_DECISIONS.md` — accepted decisions and their rationale (e.g. DD-023,
+- `docs/ARCHITECTURE.md` — crate layout and the render pipeline.
+- `docs/DESIGN_DECISIONS.md` — accepted decisions and their rationale (e.g. DD-023,
   the bundled-font policy).
-- `TESTING.md` — test layers, golden workflow, and physical-printer calibration.
-- `CODING_STYLE.md` — style plus the fmt/clippy/test gate.
+- `docs/TESTING.md` — test layers, golden workflow, and physical-printer calibration.
+- `docs/CODING_STYLE.md` — style plus the fmt/clippy/test gate.

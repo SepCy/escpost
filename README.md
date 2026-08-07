@@ -6,7 +6,7 @@
   </picture>
 </p>
 
-ESCPost is a Rust-based toolkit for building, testing, and debugging ESC/POS
+ESCPost is a Rust-based toolbox for building, testing, and debugging ESC/POS
 integrations. Render byte streams without a printer, capture jobs through a
 virtual RAW TCP device, manage real USB and network printers, and embed the
 renderer in Rust or Python applications.
@@ -70,7 +70,7 @@ texture or an exact reproduction of proprietary printer ROM glyphs. Use the
 virtual `REFERENCE` profile for generic previews, or a physical profile for
 device-specific geometry and capabilities.
 
-See [command coverage](COMMAND_COVERAGE.md) for the detailed implementation and
+See [command coverage](docs/COMMAND_COVERAGE.md) for the detailed implementation and
 validation matrix.
 
 ## Workspace
@@ -115,14 +115,14 @@ Additional tasks:
 
 ## Documentation
 
-- [CLI reference](CLI.md) — inputs, output modes, commands, and automation behavior
-- [Command coverage](COMMAND_COVERAGE.md) — implemented protocol surface and validation
-- [Printer profiles](PROFILE_SCHEMA.md) — profile schema, enrichment, and corrections
-- [Architecture](ARCHITECTURE.md) — crate boundaries and render pipeline
-- [Platform support](PLATFORMS.md) — release targets and transport caveats
-- [Testing and calibration](TESTING.md) — conformance cases, golden images, and physical printers
-- [Design decisions](DESIGN_DECISIONS.md) — accepted technical decisions and rationale
-- [Roadmap](TODO.md) — planned developer-tool capabilities
+- [CLI reference](docs/CLI.md) — inputs, output modes, commands, and automation behavior
+- [Command coverage](docs/COMMAND_COVERAGE.md) — implemented protocol surface and validation
+- [Printer profiles](docs/PROFILE_SCHEMA.md) — profile schema, enrichment, and corrections
+- [Architecture](docs/ARCHITECTURE.md) — crate boundaries and render pipeline
+- [Platform support](docs/PLATFORMS.md) — release targets and transport caveats
+- [Testing and calibration](docs/TESTING.md) — conformance cases, golden images, and physical printers
+- [Design decisions](docs/DESIGN_DECISIONS.md) — accepted technical decisions and rationale
+- [Roadmap](docs/TODO.md) — planned developer-tool capabilities
 
 ## License
 

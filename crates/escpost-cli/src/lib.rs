@@ -8,6 +8,7 @@ mod output;
 mod print;
 mod printers;
 mod profiles;
+pub mod profiles_cmd;
 mod render;
 mod serve;
 mod source;
@@ -38,5 +39,6 @@ async fn run(cli: Cli) -> Result<(), CliError> {
         Command::Print(arguments) => print::run(arguments, cli.non_interactive).await,
         Command::Serve(arguments) => serve::run(arguments).await,
         Command::Printers(arguments) => printers::run(arguments, cli.non_interactive).await,
+        Command::Profiles(arguments) => profiles_cmd::run(arguments, cli.non_interactive),
     }
 }

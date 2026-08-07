@@ -40,6 +40,9 @@ transports. Rust `printers add` registers either transport, including
 descriptor-based interactive USB selection, and non-interactive selection by
 USB descriptor. Rust `serve` acts as a virtual RAW TCP printer: it captures a
 print job sent to it and previews the most recent one in the same web viewer.
+Rust `profiles list`, `profiles show <id>`, and `profiles find` browse the
+embedded catalog of supported printer profiles, the same identifiers accepted
+by `--profile`.
 The developer CLI is entirely Rust. The Python binding remains available to
 applications for embedding the renderer; physical calibration uses the same
 `render` and `print` commands against the shared calibration receipt.

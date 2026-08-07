@@ -11,9 +11,6 @@ integrations. Render byte streams without a printer, capture jobs through a
 virtual RAW TCP device, manage real USB and network printers, and embed the
 renderer in Rust or Python applications.
 
-> ESCPost is under active development. Unsupported input returns an error
-> instead of producing a speculative preview.
-
 ## What ESCPost provides
 
 <p align="center">
@@ -22,17 +19,20 @@ renderer in Rust or Python applications.
 
 | | Feature | What it provides |
 |---:|---|---|
-| **01** | **CLI and libraries** | A Rust CLI, reusable renderer and profile crates, and a thin Python binding. |
+| **01** | **CLI and libraries** | A Rust CLI, reusable renderer and profile crates, and a Python API backed by the Rust renderer. |
 | **02** | **Virtual IP printer** | A loopback RAW TCP printer, starting at port 9100, with captured jobs shown in the web viewer. |
-| **03** | **USB and IP printers** | Named USB and RAW TCP targets with discovery, connection checks, and unchanged byte delivery. |
-| **04** | **Printer profiles** | Device geometry, supported symbols, defaults, and calibrated quirks in a hash-verified catalog. |
+| **03** | **USB and IP printers** | Named USB and RAW TCP targets with discovery, connection checks, and delivery of the exact source bytes. |
+| **04** | **Printer profiles** | Device-specific geometry, capabilities, defaults, and calibrated behavior. |
 | **05** | **PNG and web preview** | Dot-addressed PNG sheets, multi-sheet jobs, integer zoom, antialiasing, and file watching. |
-| **06** | **Cloud printing** | A local development path for ESC/POS integrations used with [Receiptful](https://receiptful.io). |
+| **06** | **Cloud printing** | Planned native integration with [Receiptful](https://receiptful.io); today, Receiptful is available separately for thermal-printer delivery, job history, and managed cloud printing. |
 
-## Work with known byte streams
+## Render and capture ESC/POS data
 
-Render raw bytes, readable hexadecimal input, stdin, or a conformance-case
-directory to PNG:
+ESCPost is currently built from source. Packaged releases for Homebrew and
+Cargo are planned. See [Development](#development) for the available build
+workflows.
+
+Render raw ESC/POS bytes, readable hexadecimal input, or stdin to PNG:
 
 ```bash
 escpost render receipt.bin \
@@ -81,9 +81,6 @@ validation matrix.
 | [`escpost-cli`](crates/escpost-cli) | CLI, web viewer, virtual printer, and hardware transports |
 | [`escpost-profiles`](crates/escpost-profiles) | Embedded printer-profile catalog and resolver |
 | [`escpost-python`](crates/escpost-python) | Python binding for the renderer |
-
-The renderer result includes ordered sheets, non-fatal warnings, device
-events, and reproducible renderer/profile identity.
 
 ## Development
 

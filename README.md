@@ -6,25 +6,26 @@
   </picture>
 </p>
 
-ESCPost is a Rust-based toolbox for building, testing, and debugging ESC/POS
-integrations. Render byte streams without a printer, capture jobs through a
-virtual RAW TCP device, manage real USB and network printers, and embed the
-renderer in Rust or Python applications.
+ESCPost is a Rust-based command-line toolbox and reusable library for building,
+testing, and debugging ESC/POS integrations. Render ESC/POS receipt and label
+data without a printer, or connect an ERP or POS application to ESCPost as if
+it were a network printer. Capture and preview its print jobs, then print to
+physical USB and network printers from the same CLI.
 
-## What ESCPost provides
+## Your complete ESC/POS Toolbox
 
 <p align="center">
-  <img src="docs/assets/readme/features.png" alt="Overview of ESCPost's six core features" width="860">
+  <img src="docs/assets/readme/features.png" alt="Overview of ESCPost's six core features" width="600">
 </p>
 
-| | Feature | What it provides |
-|---:|---|---|
-| **01** | **CLI and libraries** | A Rust CLI, reusable renderer and profile crates, and a Python API backed by the Rust renderer. |
-| **02** | **Virtual IP printer** | A loopback RAW TCP printer, starting at port 9100, with captured jobs shown in the web viewer. |
-| **03** | **USB and IP printers** | Named USB and RAW TCP targets with discovery, connection checks, and delivery of the exact source bytes. |
-| **04** | **Printer profiles** | Device-specific geometry, capabilities, defaults, and calibrated behavior. |
-| **05** | **PNG and web preview** | Dot-addressed PNG sheets, multi-sheet jobs, integer zoom, antialiasing, and file watching. |
-| **06** | **Cloud printing** | Planned native integration with [Receiptful](https://receiptful.io); today, Receiptful is available separately for thermal-printer delivery, job history, and managed cloud printing. |
+| Feature | What it provides |
+|---|---|
+| **CLI and libraries** | A Rust CLI, reusable crates for processing ESC/POS data and printer profiles, and a Python API. |
+| **Virtual IP printer** | Redirect an ERP or POS application to ESCPost as a RAW TCP network printer, then capture and inspect its print jobs in the browser workbench. |
+| **USB and IP printers** | Named USB and RAW TCP targets with discovery, connection checks, and delivery of the exact source bytes. |
+| **Printer profiles** | Device-specific geometry, capabilities, defaults, and calibrated behavior. |
+| **PNG and web preview** | Printer-resolution PNG previews, multi-sheet jobs, integer zoom, antialiasing, and file watching. |
+| **Cloud printing** | Planned native integration with [Receiptful](https://receiptful.io); today, Receiptful is available separately for thermal-printer delivery, job history, and managed cloud printing. |
 
 ## Render and capture ESC/POS data
 
@@ -58,29 +59,37 @@ escpost serve
   <img src="docs/assets/readme/web-preview.svg" alt="Placeholder for the ESCPost browser workbench" width="100%">
 </p>
 
-## Renderer coverage
+## Supported ESC/POS features
 
 ESCPost currently handles profile-driven text and layout, common single-byte
 code pages, bit and raster images, native one-dimensional barcodes, GS1-128,
 automatic Code 128, Model 2 QR codes, feeds, and cuts. Supported cuts produce
 separate ordered sheets.
 
-Rendering targets printable geometry and printer-dot placement—not paper
-texture or an exact reproduction of proprietary printer ROM glyphs. Use the
-virtual `REFERENCE` profile for generic previews, or a physical profile for
-device-specific geometry and capabilities.
+Previews reproduce printable geometry and precise placement at the printer's
+native resolution—not paper texture or an exact reproduction of proprietary
+printer ROM glyphs. Use the virtual `REFERENCE` profile for generic previews,
+or a physical profile for device-specific geometry and capabilities.
 
-See [command coverage](docs/COMMAND_COVERAGE.md) for the detailed implementation and
-validation matrix.
+See [command coverage](docs/COMMAND_COVERAGE.md) for the detailed implementation
+and validation matrix.
 
-## Workspace
+## Libraries
 
-| Package | Purpose |
+The CLI is backed by reusable Rust crates for applications that need to process
+ESC/POS data directly, plus a Python binding to the same preview engine. These
+packages are currently available from the source workspace and have not yet
+been published to crates.io or PyPI.
+
+| Library or API | Available today |
 |---|---|
-| [`escpost`](crates/escpost) | Dot-addressed ESC/POS renderer |
-| [`escpost-cli`](crates/escpost-cli) | CLI, web viewer, virtual printer, and hardware transports |
-| [`escpost-profiles`](crates/escpost-profiles) | Embedded printer-profile catalog and resolver |
-| [`escpost-python`](crates/escpost-python) | Python binding for the renderer |
+| [`escpost`](crates/escpost) | Convert ESC/POS data into ordered PNG sheets using a selected printer profile. Results include warnings, device events, and reproducible profile information. |
+| [`escpost-profiles`](crates/escpost-profiles) | Resolve profiles from the embedded catalog, inspect profile capabilities, and read, write, compile, or synthesize canonical profiles. |
+| [`escpost-python`](crates/escpost-python) | Call the Rust preview engine from Python and receive the rendered PNG sheets. |
+
+The virtual IP printer, browser workbench, file watching, and USB or RAW TCP
+printer management are currently CLI features; they are not yet exposed as
+reusable library APIs.
 
 ## Development
 

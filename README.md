@@ -73,29 +73,36 @@ time.
 
 ## Development
 
-All build and test commands run in the project container:
+Build, test, and run either **natively** or **in Docker** — both cover the same
+tasks, so use whichever fits:
 
-```bash
-docker compose build
-./escpost render --help
-docker compose run --rm test cargo test --workspace
-scripts/python-binding-test
-```
+- **Native** — needs a host Rust toolchain, but produces a real host binary, so
+  host-only behavior such as `serve` opening your browser works.
+- **Docker** — reproducible and needs no host toolchain; the default for tests
+  and CI (`docker compose` under the hood).
 
-Regenerate the canonical runtime profile pack after changing an enrichment or
-the pinned upstream source:
+Each task below is a `just` recipe. (No `just`? Every recipe is a one-line
+wrapper over a `docker compose …` or `cargo …` command you can run directly;
+`just --list` prints them.)
 
-```bash
-docker compose run --rm test cargo run --quiet \
-  -p escpost-profiles --bin compile-profile-pack -- \
-  profiles/.escpos-printer-db/dist/capabilities.json \
-  profiles profiles/.generated/profiles.json
-```
+| Task          | Docker                    | Native                    |
+| ------------- | ------------------------- | ------------------------- |
+| Build the CLI | `just docker-build`       | `just native-build`       |
+| Run the tests | `just docker-test`        | `just native-test`        |
+| Run the CLI   | `just docker-run serve …` | `just native-run serve …` |
 
-`./escpost` is the stable development entry point. It runs every command
-through the Rust CLI. The CLI service has USB access for physical workflows.
-The Python render binding is separate from the CLI; `scripts/python-binding-test`
-builds and exercises it in the test service.
+The native build produces `target/release/escpost`, and
+`cargo install --path crates/escpost-cli` puts `escpost` on your `PATH`.
+
+`serve`'s browser auto-open only works natively — from Docker the container
+cannot launch a host browser, so open the printed URL yourself.
+
+Two more recipes: `just pack` regenerates the canonical profile pack after
+changing an enrichment or the pinned upstream source, and `just python-test`
+builds and exercises the Python render binding.
+
+`./escpost` remains the containerized CLI entry point, with USB access for
+physical workflows.
 
 List connected USB printer-class devices:
 

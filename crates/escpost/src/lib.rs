@@ -19,7 +19,7 @@ pub use surface::MonoSurface;
 use command::{execute_esc_command, execute_gs_command};
 use escpost_profiles::PrinterProfile;
 use state::PrinterState;
-use surface::encode_png;
+use surface::{RenderSurface, encode_png};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RenderOptions {
@@ -108,12 +108,43 @@ pub fn render_with_options(
     profile: &PrinterProfile,
     options: &RenderOptions,
 ) -> Result<RenderResult, RenderError> {
+    let rendered = render_surfaces::<MonoSurface>(data, profile, options)?;
+    let mut sheets = Vec::new();
+    for surface in rendered.surfaces {
+        let png = encode_png(&surface)?;
+        sheets.push(RenderedSheet { surface, png });
+    }
+
+    Ok(RenderResult {
+        sheets,
+        device_events: rendered.device_events,
+        warnings: rendered.warnings,
+        metadata: RenderMetadata {
+            renderer_version: env!("CARGO_PKG_VERSION"),
+            profile_id: profile.id.clone(),
+            canonical_profile_sha256: profile.canonical_profile_sha256.clone(),
+        },
+    })
+}
+
+struct SurfaceRender<S> {
+    surfaces: Vec<S>,
+    device_events: Vec<DeviceEvent>,
+    warnings: Vec<RenderWarning>,
+}
+
+fn render_surfaces<S: RenderSurface>(
+    data: &[u8],
+    profile: &PrinterProfile,
+    options: &RenderOptions,
+) -> Result<SurfaceRender<S>, RenderError> {
     validate_initial_limits(data, profile, &options.limits)?;
     let mut state = PrinterState::new(profile, options.limits, options.scale, options.antialias);
     let mut offset = 0;
 
     while offset < data.len() {
         let byte = data[offset];
+        state.begin_command(offset);
         if byte != 0x0a {
             state.clear_pending_gs_v_0_lf();
         }
@@ -145,21 +176,10 @@ pub fn render_with_options(
 
     let device_events = std::mem::take(&mut state.device_events);
     let warnings = std::mem::take(&mut state.warnings);
-    let mut sheets = Vec::new();
-    for surface in state.into_surfaces()? {
-        let png = encode_png(&surface)?;
-        sheets.push(RenderedSheet { surface, png });
-    }
-
-    Ok(RenderResult {
-        sheets,
+    Ok(SurfaceRender {
+        surfaces: state.into_surfaces()?,
         device_events,
         warnings,
-        metadata: RenderMetadata {
-            renderer_version: env!("CARGO_PKG_VERSION"),
-            profile_id: profile.id.clone(),
-            canonical_profile_sha256: profile.canonical_profile_sha256.clone(),
-        },
     })
 }
 
@@ -183,4 +203,47 @@ fn validate_initial_limits(
         });
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod trace_spike_tests {
+    use super::{RenderOptions, render, render_surfaces};
+    use crate::surface::tracing::TracingSurface;
+    use escpost_profiles::compile_profile;
+
+    const CAPABILITIES_JSON: &[u8] =
+        include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+    const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
+
+    #[test]
+    fn traced_render_attributes_centered_text_to_its_input_byte() {
+        let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+            .expect("the reference profile should compile");
+        let input = [0x1b, b'a', 1, b'A', 0x0a];
+
+        let ordinary = render(&input, &profile).expect("ordinary rendering should succeed");
+        let traced = render_surfaces::<TracingSurface>(&input, &profile, &RenderOptions::default())
+            .expect("traced rendering should succeed");
+        let traced_sheet = &traced.surfaces[0];
+
+        assert_eq!(traced_sheet.inner, ordinary.sheets[0].surface);
+        let text_regions = traced_sheet
+            .painted_regions
+            .iter()
+            .filter(|region| region.command_offset == 3)
+            .collect::<Vec<_>>();
+        assert!(!text_regions.is_empty());
+        assert!(
+            text_regions
+                .iter()
+                .all(|region| region.x >= 282 && region.x < 294)
+        );
+        assert!(
+            traced_sheet
+                .painted_regions
+                .iter()
+                .all(|region| region.command_offset != 4),
+            "LF must move the text without taking ownership of its pixels"
+        );
+    }
 }

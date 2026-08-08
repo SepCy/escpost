@@ -190,11 +190,12 @@ impl<S: RenderSurface> PrinterState<S> {
 pub(crate) fn render_hri<S: RenderSurface>(
     data: &[char],
     profile_font: &ProfileFont,
+    template: &S,
     scale: u32,
     antialias: bool,
 ) -> S {
     let width = (data.len() as u32).saturating_mul(profile_font.cell_width_dots);
-    let mut surface = S::new(width, scale, antialias);
+    let mut surface = template.fork(width);
     surface.ensure_height(profile_font.cell_height_dots);
 
     // Map glyphs onto the cell exactly like printed text so HRI labels share the

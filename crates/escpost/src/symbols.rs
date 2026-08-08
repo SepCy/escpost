@@ -31,8 +31,15 @@ impl<S: RenderSurface> PrinterState<S> {
                 reason: "symbol is wider than the active print area",
             });
         }
-        let hri: Option<S> = (self.hri_position != HriPosition::None)
-            .then(|| render_hri(&barcode.hri, &self.hri_font, self.scale, self.antialias));
+        let hri: Option<S> = (self.hri_position != HriPosition::None).then(|| {
+            render_hri(
+                &barcode.hri,
+                &self.hri_font,
+                &self.roll,
+                self.scale,
+                self.antialias,
+            )
+        });
         let content_width = hri
             .as_ref()
             .map_or(barcode_width, |surface| barcode_width.max(surface.width()));

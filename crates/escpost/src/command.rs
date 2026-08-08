@@ -1,15 +1,16 @@
 //! ESC/POS command parsing and dispatch.
 
 use crate::state::{BufferedGraphics, HriPosition, Justification, PrinterState};
+use crate::surface::RenderSurface;
 use crate::{RenderError, barcode, qr};
 use escpost_profiles::BarcodeSystem;
 
 const MAX_QR_STORE_PARAMETER_BYTES: usize = 7092;
 
-pub(crate) fn execute_esc_command(
+pub(crate) fn execute_esc_command<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     let Some(command) = data.get(1).copied() else {
         return Err(RenderError::TruncatedCommand {
@@ -211,10 +212,10 @@ pub(crate) fn execute_esc_command(
     }
 }
 
-fn execute_esc_d(
+fn execute_esc_d<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     let mut columns = Vec::new();
     let mut command_length = 2;
@@ -246,10 +247,10 @@ fn execute_esc_d(
     Ok(command_length)
 }
 
-fn execute_esc_star(
+fn execute_esc_star<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     if data.len() < 5 {
         return Err(RenderError::TruncatedCommand {
@@ -284,10 +285,10 @@ fn execute_esc_star(
     Ok(command_length)
 }
 
-pub(crate) fn execute_gs_command(
+pub(crate) fn execute_gs_command<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     let Some(command) = data.get(1).copied() else {
         return Err(RenderError::TruncatedCommand {
@@ -444,10 +445,10 @@ pub(crate) fn execute_gs_command(
     }
 }
 
-fn execute_gs_k(
+fn execute_gs_k<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     let Some(system) = data.get(2).copied() else {
         return Err(RenderError::TruncatedCommand {
@@ -756,10 +757,10 @@ fn function_a_barcode_payload(
     ))
 }
 
-fn execute_gs_parenthesized_l(
+fn execute_gs_parenthesized_l<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     if data.len() < 5 || data[2] != b'L' {
         return Err(RenderError::TruncatedCommand {
@@ -781,10 +782,10 @@ fn execute_gs_parenthesized_l(
     Ok(command_length)
 }
 
-fn execute_gs_parenthesized_k(
+fn execute_gs_parenthesized_k<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     if data.len() < 5 || data[2] != b'k' {
         return Err(RenderError::TruncatedCommand {
@@ -806,10 +807,10 @@ fn execute_gs_parenthesized_k(
     Ok(command_length)
 }
 
-fn execute_qr_function(
+fn execute_qr_function<S: RenderSurface>(
     parameters: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<(), RenderError> {
     let Some((&code_type, &function)) = parameters.first().zip(parameters.get(1)) else {
         return Err(RenderError::TruncatedCommand {
@@ -932,10 +933,10 @@ fn execute_qr_function(
     }
 }
 
-fn execute_gs_8_l(
+fn execute_gs_8_l<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     if data.len() < 7 || data[2] != b'L' {
         return Err(RenderError::TruncatedCommand {
@@ -957,11 +958,11 @@ fn execute_gs_8_l(
     Ok(command_length)
 }
 
-fn execute_graphics_function(
+fn execute_graphics_function<S: RenderSurface>(
     parameters: &[u8],
     extended_length: bool,
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<(), RenderError> {
     let Some((&mode, &function)) = parameters.first().zip(parameters.get(1)) else {
         return Err(RenderError::TruncatedCommand {
@@ -993,10 +994,10 @@ fn execute_graphics_function(
     }
 }
 
-fn store_raster_graphics(
+fn store_raster_graphics<S: RenderSurface>(
     parameters: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<(), RenderError> {
     if parameters.len() < 10 {
         return Err(RenderError::InvalidGraphicsPayloadLength {
@@ -1063,10 +1064,10 @@ fn validate_graphics_parameter(
     })
 }
 
-fn execute_gs_v(
+fn execute_gs_v<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     let Some(mode) = data.get(2).copied() else {
         return Err(RenderError::TruncatedCommand {
@@ -1107,10 +1108,10 @@ fn execute_gs_v(
     }
 }
 
-fn execute_gs_v0(
+fn execute_gs_v0<S: RenderSurface>(
     data: &[u8],
     offset: usize,
-    state: &mut PrinterState,
+    state: &mut PrinterState<S>,
 ) -> Result<usize, RenderError> {
     if data.len() < 3 {
         return Err(RenderError::TruncatedCommand {

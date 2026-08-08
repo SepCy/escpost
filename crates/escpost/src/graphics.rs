@@ -2,8 +2,9 @@
 
 use crate::RenderError;
 use crate::state::{BufferedGraphics, Justification, PrinterState};
+use crate::surface::RenderSurface;
 
-impl PrinterState {
+impl<S: RenderSurface> PrinterState<S> {
     pub(crate) fn paint_bit_image(
         &mut self,
         payload: &[u8],

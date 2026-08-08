@@ -2,7 +2,7 @@
 
 use crate::font;
 use crate::state::PrinterState;
-use crate::surface::MonoSurface;
+use crate::surface::RenderSurface;
 use crate::{RenderError, international};
 use encoding_rs::{
     Encoding, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255,
@@ -14,7 +14,7 @@ use oem_cp::{
     Cp864, Cp865, Cp866, Cp869, Cp874,
 };
 
-impl PrinterState {
+impl<S: RenderSurface> PrinterState<S> {
     pub(crate) fn print_byte(&mut self, byte: u8, offset: usize) -> Result<(), RenderError> {
         // The ESC t operand is printer-specific. The profile translates that
         // numeric slot into a stable encoding name before we decode the byte.
@@ -62,7 +62,7 @@ impl PrinterState {
             .active_font
             .cell_height_dots
             .saturating_mul(self.character_height_multiplier);
-        if self.print_x.saturating_add(cell_width) > self.line.width {
+        if self.print_x.saturating_add(cell_width) > self.line.width() {
             self.line_feed()?;
         }
         self.line_height = self.line_height.max(cell_height);
@@ -187,14 +187,14 @@ impl PrinterState {
     }
 }
 
-pub(crate) fn render_hri(
+pub(crate) fn render_hri<S: RenderSurface>(
     data: &[char],
     profile_font: &ProfileFont,
     scale: u32,
     antialias: bool,
-) -> MonoSurface {
+) -> S {
     let width = (data.len() as u32).saturating_mul(profile_font.cell_width_dots);
-    let mut surface = MonoSurface::new(width, scale, antialias);
+    let mut surface = S::new(width, scale, antialias);
     surface.ensure_height(profile_font.cell_height_dots);
 
     // Map glyphs onto the cell exactly like printed text so HRI labels share the

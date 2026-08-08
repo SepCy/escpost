@@ -27,6 +27,21 @@ pub struct MonoSurface {
 /// bit in the 1-bit encoding.
 const INK_THRESHOLD: u8 = 128;
 
+/// Drawing operations required by the ESC/POS interpreter.
+///
+/// Keeping this interface private lets alternate surfaces decorate the raster
+/// surface without making rendering backends part of the public API.
+pub(crate) trait RenderSurface: Sized {
+    fn new(width: u32, scale: u32, antialias: bool) -> Self;
+    fn width(&self) -> u32;
+    fn height(&self) -> u32;
+    fn print_dot(&mut self, x: u32, y: u32);
+    fn blend_subpixel(&mut self, sx: u32, sy: u32, value: u8, add: bool);
+    fn composite_at(&mut self, source: &Self, left: u32, top: u32);
+    fn ensure_height(&mut self, height: u32);
+    fn clear(&mut self);
+}
+
 impl MonoSurface {
     #[must_use]
     pub fn width(&self) -> u32 {
@@ -51,6 +66,40 @@ impl MonoSurface {
 
     fn stride(&self) -> u32 {
         self.width * self.scale
+    }
+}
+
+impl RenderSurface for MonoSurface {
+    fn new(width: u32, scale: u32, antialias: bool) -> Self {
+        Self::new(width, scale, antialias)
+    }
+
+    fn width(&self) -> u32 {
+        self.width
+    }
+
+    fn height(&self) -> u32 {
+        self.height
+    }
+
+    fn print_dot(&mut self, x: u32, y: u32) {
+        self.print_dot(x, y);
+    }
+
+    fn blend_subpixel(&mut self, sx: u32, sy: u32, value: u8, add: bool) {
+        self.blend_subpixel(sx, sy, value, add);
+    }
+
+    fn composite_at(&mut self, source: &Self, left: u32, top: u32) {
+        self.composite_at(source, left, top);
+    }
+
+    fn ensure_height(&mut self, height: u32) {
+        self.ensure_height(height);
+    }
+
+    fn clear(&mut self) {
+        self.clear();
     }
 }
 
@@ -191,4 +240,77 @@ fn encode_grayscale(surface: &MonoSurface) -> Result<Vec<u8>, png::EncodingError
         writer.write_image_data(&pixels)?;
     }
     Ok(encoded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MonoSurface, RenderSurface};
+
+    #[derive(Debug)]
+    struct TracingSurface {
+        inner: MonoSurface,
+        painted_regions: Vec<(u32, u32, u32, u32)>,
+    }
+
+    impl RenderSurface for TracingSurface {
+        fn new(width: u32, scale: u32, antialias: bool) -> Self {
+            Self {
+                inner: MonoSurface::new(width, scale, antialias),
+                painted_regions: Vec::new(),
+            }
+        }
+
+        fn width(&self) -> u32 {
+            self.inner.width()
+        }
+
+        fn height(&self) -> u32 {
+            self.inner.height()
+        }
+
+        fn print_dot(&mut self, x: u32, y: u32) {
+            self.inner.print_dot(x, y);
+            self.painted_regions.push((x, y, 1, 1));
+        }
+
+        fn blend_subpixel(&mut self, sx: u32, sy: u32, value: u8, add: bool) {
+            self.inner.blend_subpixel(sx, sy, value, add);
+            // This proof uses scale 1, so subpixel and dot coordinates coincide.
+            self.painted_regions.push((sx, sy, 1, 1));
+        }
+
+        fn composite_at(&mut self, source: &Self, left: u32, top: u32) {
+            self.inner.composite_at(&source.inner, left, top);
+            self.painted_regions.extend(
+                source
+                    .painted_regions
+                    .iter()
+                    .map(|&(x, y, width, height)| (x + left, y + top, width, height)),
+            );
+        }
+
+        fn ensure_height(&mut self, height: u32) {
+            self.inner.ensure_height(height);
+        }
+
+        fn clear(&mut self) {
+            self.inner.clear();
+            self.painted_regions.clear();
+        }
+    }
+
+    #[test]
+    fn surface_decorator_preserves_painted_regions_through_composition() {
+        let mut line = TracingSurface::new(32, 1, false);
+        line.print_dot(3, 4);
+        line.ensure_height(9);
+        line.blend_subpixel(7, 8, 255, true);
+        let mut roll = TracingSurface::new(80, 1, false);
+
+        roll.composite_at(&line, 20, 30);
+
+        assert!(roll.inner.is_printed(23, 34));
+        assert!(roll.inner.is_printed(27, 38));
+        assert_eq!(roll.painted_regions, vec![(23, 34, 1, 1), (27, 38, 1, 1)]);
+    }
 }

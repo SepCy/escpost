@@ -16,7 +16,9 @@ mod text;
 pub use error::{LimitKind, RenderError, RenderWarning};
 pub use surface::MonoSurface;
 
-use command::{execute_esc_command, execute_gs_command};
+use command::{
+    CommandRecord, CommandSink, DecodedCommand, NoTrace, execute_esc_command, execute_gs_command,
+};
 use escpost_profiles::PrinterProfile;
 use state::PrinterState;
 use surface::{RenderSurface, encode_png};
@@ -138,13 +140,24 @@ fn render_surfaces<S: RenderSurface>(
     profile: &PrinterProfile,
     options: &RenderOptions,
 ) -> Result<SurfaceRender<S>, RenderError> {
+    render_surfaces_with_sink(data, profile, options, &mut NoTrace)
+}
+
+fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
+    data: &[u8],
+    profile: &PrinterProfile,
+    options: &RenderOptions,
+    command_sink: &mut C,
+) -> Result<SurfaceRender<S>, RenderError> {
     validate_initial_limits(data, profile, &options.limits)?;
     let mut state = PrinterState::new(profile, options.limits, options.scale, options.antialias);
     let mut offset = 0;
 
     while offset < data.len() {
         let byte = data[offset];
-        state.begin_command(offset);
+        if C::ENABLED {
+            state.begin_command(offset);
+        }
         if byte != 0x0a {
             state.clear_pending_gs_v_0_lf();
         }
@@ -156,18 +169,30 @@ fn render_surfaces<S: RenderSurface>(
             }
             0x0a => {
                 state.line_feed()?;
+                if C::ENABLED {
+                    command_sink.record(CommandRecord {
+                        byte_range: offset..offset + 1,
+                        command: DecodedCommand::LineFeed,
+                    });
+                }
                 1
             }
             0x0d => {
                 state.carriage_return()?;
                 1
             }
-            0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
+            0x1b => execute_esc_command(&data[offset..], offset, &mut state, command_sink)?,
             0x1d => execute_gs_command(&data[offset..], offset, &mut state)?,
             // ESC/POS code pages retain ASCII in 20h–7Eh and assign printable
             // characters to 80h–FFh. Control bytes remain parser input.
             byte @ (0x20..=0x7e | 0x80..=0xff) => {
                 state.print_byte(byte, offset)?;
+                if C::ENABLED {
+                    command_sink.record(CommandRecord {
+                        byte_range: offset..offset + 1,
+                        command: DecodedCommand::TextByte(byte),
+                    });
+                }
                 1
             }
             byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
@@ -207,13 +232,28 @@ fn validate_initial_limits(
 
 #[cfg(test)]
 mod trace_spike_tests {
-    use super::{RenderOptions, render, render_surfaces};
+    use super::{RenderOptions, render, render_surfaces_with_sink};
+    use crate::command::{CommandRecord, CommandSink, DecodedCommand};
+    use crate::state::Justification;
     use crate::surface::tracing::TracingSurface;
     use escpost_profiles::compile_profile;
 
     const CAPABILITIES_JSON: &[u8] =
         include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
     const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
+
+    #[derive(Default)]
+    struct RecordingSink {
+        records: Vec<CommandRecord>,
+    }
+
+    impl CommandSink for RecordingSink {
+        const ENABLED: bool = true;
+
+        fn record(&mut self, record: CommandRecord) {
+            self.records.push(record);
+        }
+    }
 
     #[test]
     fn traced_render_attributes_centered_text_to_its_input_byte() {
@@ -222,9 +262,33 @@ mod trace_spike_tests {
         let input = [0x1b, b'a', 1, b'A', 0x0a];
 
         let ordinary = render(&input, &profile).expect("ordinary rendering should succeed");
-        let traced = render_surfaces::<TracingSurface>(&input, &profile, &RenderOptions::default())
-            .expect("traced rendering should succeed");
+        let mut commands = RecordingSink::default();
+        let traced = render_surfaces_with_sink::<TracingSurface, _>(
+            &input,
+            &profile,
+            &RenderOptions::default(),
+            &mut commands,
+        )
+        .expect("traced rendering should succeed");
         let traced_sheet = &traced.surfaces[0];
+
+        assert_eq!(
+            commands.records,
+            vec![
+                CommandRecord {
+                    byte_range: 0..3,
+                    command: DecodedCommand::SetJustification(Justification::Center),
+                },
+                CommandRecord {
+                    byte_range: 3..4,
+                    command: DecodedCommand::TextByte(b'A'),
+                },
+                CommandRecord {
+                    byte_range: 4..5,
+                    command: DecodedCommand::LineFeed,
+                },
+            ]
+        );
 
         assert_eq!(traced_sheet.inner, ordinary.sheets[0].surface);
         let text_regions = traced_sheet

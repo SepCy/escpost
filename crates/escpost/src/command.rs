@@ -1,5 +1,7 @@
 //! ESC/POS command parsing and dispatch.
 
+use std::ops::Range;
+
 use crate::state::{BufferedGraphics, HriPosition, Justification, PrinterState};
 use crate::surface::RenderSurface;
 use crate::{RenderError, barcode, qr};
@@ -7,10 +9,41 @@ use escpost_profiles::BarcodeSystem;
 
 const MAX_QR_STORE_PARAMETER_BYTES: usize = 7092;
 
-pub(crate) fn execute_esc_command<S: RenderSurface>(
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DecodedCommand {
+    SetJustification(Justification),
+    TextByte(u8),
+    LineFeed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CommandRecord {
+    pub(crate) byte_range: Range<usize>,
+    pub(crate) command: DecodedCommand,
+}
+
+pub(crate) trait CommandSink {
+    const ENABLED: bool;
+
+    fn record(&mut self, record: CommandRecord);
+}
+
+pub(crate) struct NoTrace;
+
+impl CommandSink for NoTrace {
+    const ENABLED: bool = false;
+
+    #[inline]
+    fn record(&mut self, _record: CommandRecord) {
+        unreachable!("NoTrace commands are guarded by CommandSink::ENABLED")
+    }
+}
+
+pub(crate) fn execute_esc_command<S: RenderSurface, C: CommandSink>(
     data: &[u8],
     offset: usize,
     state: &mut PrinterState<S>,
+    command_sink: &mut C,
 ) -> Result<usize, RenderError> {
     let Some(command) = data.get(1).copied() else {
         return Err(RenderError::TruncatedCommand {
@@ -165,6 +198,12 @@ pub(crate) fn execute_esc_command<S: RenderSurface>(
                 }
             };
             state.set_justification(justification);
+            if C::ENABLED {
+                command_sink.record(CommandRecord {
+                    byte_range: offset..offset + 3,
+                    command: DecodedCommand::SetJustification(justification),
+                });
+            }
             Ok(3)
         }
         0x64 => {

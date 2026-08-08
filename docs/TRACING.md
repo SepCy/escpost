@@ -45,6 +45,36 @@ decorator context. The renderer uses it for temporary line buffers, resized
 print areas, HRI text, and sheets created after cuts. Trace metadata therefore
 follows the same composition and positioning operations as pixels.
 
+## Command decoding seam
+
+The current proof also has a private, compile-time `CommandSink` seam. A traced
+render specializes the interpreter with a recording sink; an ordinary render
+specializes it with `NoTrace`:
+
+```text
+render_surfaces_with_sink<S, C: CommandSink>
+                              │
+                              ├── C::ENABLED = false → NoTrace
+                              └── C::ENABLED = true  → recording sink
+```
+
+The interpreter always decodes the parameters needed to execute a command.
+It constructs the additional semantic `DecodedCommand` value and byte-range
+record only inside an `if C::ENABLED` branch. Thus the ordinary path does not
+construct decoded-command objects, call the surface command hook, allocate
+trace storage, copy payloads, format values, use dynamic dispatch, or test a
+runtime tracing flag. Static generic dispatch lets an optimized build remove
+the disabled branch entirely.
+
+This is a source-level performance contract, backed by the command-heavy
+release benchmark in `examples/render_bench.rs`. Exact machine-code identity
+is a compiler outcome rather than a Rust language guarantee, so benchmark
+comparisons remain part of changes to this seam.
+
+The proof currently models only justification, printable bytes, and line feed.
+It exists to validate the abstraction and its disabled-path cost before the
+complete command model is designed.
+
 ## Target production model
 
 The following sections specify intended production behavior. The current

@@ -1,12 +1,12 @@
-//! Test-only tracing-surface proof.
+//! Provenance-decorating surface for experimental command tracing.
 //!
 //! The types here validate command provenance through surface composition. They
-//! intentionally do not define the eventual public trace schema.
+//! are private implementation details rather than the public trace schema.
 
 use super::{MonoSurface, RenderSurface};
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct PaintedRegion {
+pub(crate) struct LogicalRegion {
     pub(crate) command_offset: usize,
     pub(crate) x: u32,
     pub(crate) y: u32,
@@ -17,7 +17,7 @@ pub(crate) struct PaintedRegion {
 #[derive(Debug)]
 pub(crate) struct TracingSurface {
     pub(crate) inner: MonoSurface,
-    pub(crate) painted_regions: Vec<PaintedRegion>,
+    pub(crate) logical_regions: Vec<LogicalRegion>,
     active_command: Option<usize>,
 }
 
@@ -25,7 +25,7 @@ impl RenderSurface for TracingSurface {
     fn new(width: u32, scale: u32, antialias: bool) -> Self {
         Self {
             inner: MonoSurface::new(width, scale, antialias),
-            painted_regions: Vec::new(),
+            logical_regions: Vec::new(),
             active_command: None,
         }
     }
@@ -33,13 +33,29 @@ impl RenderSurface for TracingSurface {
     fn fork(&self, width: u32) -> Self {
         Self {
             inner: self.inner.fork(width),
-            painted_regions: Vec::new(),
+            logical_regions: Vec::new(),
             active_command: self.active_command,
         }
     }
 
     fn begin_command(&mut self, offset: usize) {
         self.active_command = Some(offset);
+    }
+
+    fn end_command(&mut self) {
+        self.active_command = None;
+    }
+
+    fn mark_region(&mut self, x: u32, y: u32, width: u32, height: u32) {
+        if let Some(command_offset) = self.active_command {
+            self.logical_regions.push(LogicalRegion {
+                command_offset,
+                x,
+                y,
+                width,
+                height,
+            });
+        }
     }
 
     fn width(&self) -> u32 {
@@ -51,43 +67,17 @@ impl RenderSurface for TracingSurface {
     }
 
     fn print_dot(&mut self, x: u32, y: u32) {
-        let was_printed = self.inner.is_printed(x, y);
         self.inner.print_dot(x, y);
-        if !was_printed
-            && self.inner.is_printed(x, y)
-            && let Some(command_offset) = self.active_command
-        {
-            self.painted_regions.push(PaintedRegion {
-                command_offset,
-                x,
-                y,
-                width: 1,
-                height: 1,
-            });
-        }
     }
 
     fn blend_subpixel(&mut self, sx: u32, sy: u32, value: u8, add: bool) {
-        let before = self.inner.subpixel_coverage(sx, sy);
         self.inner.blend_subpixel(sx, sy, value, add);
-        let after = self.inner.subpixel_coverage(sx, sy);
-        if before != after
-            && let Some(command_offset) = self.active_command
-        {
-            self.painted_regions.push(PaintedRegion {
-                command_offset,
-                x: sx / self.inner.scale(),
-                y: sy / self.inner.scale(),
-                width: 1,
-                height: 1,
-            });
-        }
     }
 
     fn composite_at(&mut self, source: &Self, left: u32, top: u32) {
         self.inner.composite_at(&source.inner, left, top);
-        self.painted_regions
-            .extend(source.painted_regions.iter().map(|region| PaintedRegion {
+        self.logical_regions
+            .extend(source.logical_regions.iter().map(|region| LogicalRegion {
                 command_offset: region.command_offset,
                 x: region.x + left,
                 y: region.y + top,
@@ -102,45 +92,33 @@ impl RenderSurface for TracingSurface {
 
     fn clear(&mut self) {
         self.inner.clear();
-        self.painted_regions.clear();
+        self.logical_regions.clear();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PaintedRegion, RenderSurface, TracingSurface};
+    use super::{LogicalRegion, RenderSurface, TracingSurface};
 
     #[test]
-    fn surface_decorator_preserves_painted_regions_through_composition() {
+    fn surface_decorator_preserves_logical_regions_through_composition() {
         let mut line = TracingSurface::new(32, 1, false);
         line.begin_command(7);
-        line.print_dot(3, 4);
-        line.ensure_height(9);
-        line.blend_subpixel(7, 8, 255, true);
+        line.mark_region(3, 4, 12, 24);
         let mut roll = TracingSurface::new(80, 1, false);
 
         roll.composite_at(&line, 20, 30);
 
-        assert!(roll.inner.is_printed(23, 34));
-        assert!(roll.inner.is_printed(27, 38));
+        assert_eq!(roll.inner.height(), 0);
         assert_eq!(
-            roll.painted_regions,
-            vec![
-                PaintedRegion {
-                    command_offset: 7,
-                    x: 23,
-                    y: 34,
-                    width: 1,
-                    height: 1,
-                },
-                PaintedRegion {
-                    command_offset: 7,
-                    x: 27,
-                    y: 38,
-                    width: 1,
-                    height: 1,
-                },
-            ]
+            roll.logical_regions,
+            vec![LogicalRegion {
+                command_offset: 7,
+                x: 23,
+                y: 34,
+                width: 12,
+                height: 24,
+            }]
         );
     }
 }

@@ -8,7 +8,9 @@ use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use escpost::RenderResult;
+use escpost::{
+    CommandTrace, DecodedCommand, Effect, Justification, StateChange, TracedRenderResult,
+};
 use serde::Serialize;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
@@ -62,6 +64,7 @@ struct RenderedWebSheet {
     width_dots: u32,
     height_dots: u32,
     png: Vec<u8>,
+    commands: Vec<CommandResponse>,
 }
 
 #[derive(Serialize)]
@@ -96,10 +99,52 @@ struct SheetResponse {
     width_dots: u32,
     height_dots: u32,
     url: String,
+    /// Experimental subset of decoded commands associated with this sheet.
+    commands: Vec<CommandResponse>,
+}
+
+#[derive(Clone, Serialize)]
+struct CommandResponse {
+    byte_start: usize,
+    byte_end: usize,
+    name: &'static str,
+    detail: String,
+    effects: Vec<EffectResponse>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum EffectResponse {
+    StateChange {
+        state: &'static str,
+        before: &'static str,
+        after: &'static str,
+    },
+    Motion {
+        before: PositionResponse,
+        after: PositionResponse,
+    },
+    Paint {
+        bounds: RegionResponse,
+    },
+}
+
+#[derive(Clone, Serialize)]
+struct PositionResponse {
+    x: u32,
+    y: u32,
+}
+
+#[derive(Clone, Serialize)]
+struct RegionResponse {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
 }
 
 impl JobStore {
-    pub(crate) fn with_render(rendered: RenderResult, antialias: bool) -> Self {
+    pub(crate) fn with_render(rendered: TracedRenderResult, antialias: bool) -> Self {
         Self {
             state: Arc::new(RwLock::new(JobStoreState {
                 jobs: VecDeque::from([Arc::new(RenderedJob::from(rendered))]),
@@ -150,7 +195,7 @@ impl JobStore {
 
     /// Replace the preview with a render that has no capture semantics, such as
     /// `render --web`. Its source is a file, so nothing is offered for download.
-    pub(crate) async fn replace_render(&self, rendered: RenderResult) {
+    pub(crate) async fn replace_render(&self, rendered: TracedRenderResult) {
         self.store_render(rendered, None, None).await;
     }
 
@@ -159,7 +204,7 @@ impl JobStore {
     /// keeping its exact bytes for download.
     pub(crate) async fn replace_captured(
         &self,
-        rendered: RenderResult,
+        rendered: TracedRenderResult,
         completion: &'static str,
         raw_input: Vec<u8>,
     ) {
@@ -169,7 +214,7 @@ impl JobStore {
 
     async fn store_render(
         &self,
-        rendered: RenderResult,
+        rendered: TracedRenderResult,
         completion: Option<&'static str>,
         raw_input: Option<Vec<u8>>,
     ) {
@@ -231,6 +276,7 @@ impl JobStore {
                 width_dots: sheet.width_dots,
                 height_dots: sheet.height_dots,
                 url: format!("/sheets/{}.png", index + 1),
+                commands: sheet.commands.clone(),
             })
             .collect();
         RenderResponse {
@@ -249,12 +295,14 @@ impl JobStore {
     }
 }
 
-impl From<RenderResult> for RenderedJob {
-    fn from(rendered: RenderResult) -> Self {
+impl From<TracedRenderResult> for RenderedJob {
+    fn from(traced: TracedRenderResult) -> Self {
+        let TracedRenderResult { render, trace } = traced;
+        let mut trace_sheets = trace.sheets.into_iter();
         Self {
-            profile: rendered.metadata.profile_id,
-            warnings: rendered.warnings.iter().map(ToString::to_string).collect(),
-            sheets: rendered
+            profile: render.metadata.profile_id,
+            warnings: render.warnings.iter().map(ToString::to_string).collect(),
+            sheets: render
                 .sheets
                 .into_iter()
                 .enumerate()
@@ -263,9 +311,81 @@ impl From<RenderResult> for RenderedJob {
                     width_dots: sheet.surface.width(),
                     height_dots: sheet.surface.height(),
                     png: sheet.png,
+                    commands: trace_sheets
+                        .next()
+                        .map(|sheet| command_responses(sheet.commands))
+                        .unwrap_or_default(),
                 })
                 .collect(),
         }
+    }
+}
+
+fn command_responses(commands: Vec<CommandTrace>) -> Vec<CommandResponse> {
+    commands
+        .into_iter()
+        .map(|command| {
+            let (name, detail) = match command.command {
+                DecodedCommand::SetJustification(justification) => (
+                    "ESC a",
+                    format!("Set justification: {}", justification_name(justification)),
+                ),
+                DecodedCommand::TextByte(byte) => (
+                    "Text",
+                    if byte.is_ascii_graphic() || byte == b' ' {
+                        char::from(byte).to_string()
+                    } else {
+                        format!("0x{byte:02X}")
+                    },
+                ),
+                DecodedCommand::LineFeed => ("LF", "Print and line feed".to_owned()),
+            };
+            CommandResponse {
+                byte_start: command.byte_range.start,
+                byte_end: command.byte_range.end,
+                name,
+                detail,
+                effects: command.effects.into_iter().map(effect_response).collect(),
+            }
+        })
+        .collect()
+}
+
+fn effect_response(effect: Effect) -> EffectResponse {
+    match effect {
+        Effect::StateChange(StateChange::Justification { before, after }) => {
+            EffectResponse::StateChange {
+                state: "justification",
+                before: justification_name(before),
+                after: justification_name(after),
+            }
+        }
+        Effect::Motion { before, after } => EffectResponse::Motion {
+            before: PositionResponse {
+                x: before.x,
+                y: before.y,
+            },
+            after: PositionResponse {
+                x: after.x,
+                y: after.y,
+            },
+        },
+        Effect::Paint { bounds } => EffectResponse::Paint {
+            bounds: RegionResponse {
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+            },
+        },
+    }
+}
+
+fn justification_name(justification: Justification) -> &'static str {
+    match justification {
+        Justification::Left => "left",
+        Justification::Center => "center",
+        Justification::Right => "right",
     }
 }
 

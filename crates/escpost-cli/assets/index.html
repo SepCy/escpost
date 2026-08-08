@@ -207,6 +207,101 @@
         gap: 24px;
       }
 
+      #traceWorkspace {
+        display: grid;
+        grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      #traceWorkspace.trace-without-commands #sheets {
+        grid-column: 1 / -1;
+      }
+
+      #commandPanel {
+        position: sticky;
+        top: 0;
+        max-height: calc(100vh - 150px);
+        overflow: auto;
+        border: 1px solid #3a3a3a;
+        border-radius: 6px;
+        background: #1d1d1d;
+      }
+
+      #commandPanel[hidden] {
+        display: none;
+      }
+
+      #commandPanel h2 {
+        margin: 0;
+        padding: 14px 16px 10px;
+        font-size: 14px;
+      }
+
+      #commandPanel p {
+        margin: 0;
+        padding: 0 16px 12px;
+        color: #8f8f8f;
+        font-size: 11px;
+      }
+
+      #commandList {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        background: #333;
+      }
+
+      .trace-command {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 4px 10px;
+        width: 100%;
+        padding: 10px 12px;
+        border: 0;
+        color: inherit;
+        background: #252525;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .trace-command:hover,
+      .trace-command:focus-visible,
+      .trace-command.trace-active {
+        outline: none;
+        background: #383228;
+        box-shadow: inset 3px 0 #ffb454;
+      }
+
+      .trace-command-name {
+        color: #ffcf8a;
+        font-weight: 700;
+      }
+
+      .trace-command-range {
+        color: #858585;
+        font-size: 11px;
+      }
+
+      .trace-command-detail,
+      .trace-command-effects {
+        grid-column: 2;
+      }
+
+      .trace-command-detail {
+        color: #f5f5f5;
+        overflow-wrap: anywhere;
+      }
+
+      .trace-command-effects {
+        color: #a7a7a7;
+        font-size: 11px;
+      }
+
       .sheet {
         display: flex;
         flex: 0 0 auto;
@@ -243,6 +338,32 @@
         transition:
           background-color 150ms ease,
           box-shadow 150ms ease;
+      }
+
+      .receipt-layer {
+        position: relative;
+      }
+
+      .trace-overlay {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        overflow: visible;
+        shape-rendering: crispEdges;
+      }
+
+      .trace-region {
+        fill: transparent;
+        stroke: transparent;
+        stroke-width: 1px;
+        pointer-events: all;
+        cursor: pointer;
+      }
+
+      .trace-region-group:hover .trace-region,
+      .trace-region-group.trace-active .trace-region {
+        fill: rgb(255 180 84 / 32%);
+        stroke: #ffb454;
       }
 
       /* An anti-aliased preview is a supersampled grayscale image, so let the
@@ -311,8 +432,32 @@
         font-size: 13px;
       }
 
-      #sheets:empty ~ #magnifyHint {
+      #traceWorkspace:has(#sheets:empty) ~ #magnifyHint {
         display: none;
+      }
+
+      @media (max-width: 800px) {
+        body {
+          padding: 12px;
+        }
+
+        #viewport {
+          padding: 16px;
+        }
+
+        #traceWorkspace {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        #sheets {
+          order: 1;
+        }
+
+        #commandPanel {
+          position: static;
+          order: 2;
+          max-height: 45vh;
+        }
       }
     </style>
   </head>
@@ -337,7 +482,14 @@
         <a id="download" href="/job" download>Download raw input</a>
         <span id="receiving">Receiving a job…</span>
       </div>
-      <div id="sheets" aria-live="polite"></div>
+      <div id="traceWorkspace">
+        <aside id="commandPanel" aria-label="Experimental command trace" hidden>
+          <h2>Commands <small>experimental</small></h2>
+          <p>Hover or focus to preview. Click to pin a command.</p>
+          <ol id="commandList"></ol>
+        </aside>
+        <div id="sheets" aria-live="polite"></div>
+      </div>
       <div id="viewOptions">
         <label>
           <input type="checkbox" id="margin">
@@ -352,6 +504,9 @@
 
     <script>
       const sheets = document.querySelector("#sheets");
+      const traceWorkspace = document.querySelector("#traceWorkspace");
+      const commandPanel = document.querySelector("#commandPanel");
+      const commandList = document.querySelector("#commandList");
       const waiting = document.querySelector("#waiting");
       const error = document.querySelector("#error");
       const warnings = document.querySelector("#warnings");
@@ -373,6 +528,93 @@
       // The address the viewer is talking to never changes for this page.
       document.querySelector("#serverAddress").textContent = window.location.host;
       let currentRendering = "";
+      let pinnedCommand = null;
+
+      function setActiveCommand(index) {
+        document.querySelectorAll("[data-command-index]").forEach((element) => {
+          const active = index !== null && Number(element.dataset.commandIndex) === index;
+          element.classList.toggle("trace-active", active);
+          if (element.classList.contains("trace-command")) {
+            element.setAttribute("aria-pressed", String(active && pinnedCommand === index));
+          }
+        });
+      }
+
+      function previewCommand(index) {
+        if (pinnedCommand === null) {
+          setActiveCommand(index);
+        }
+      }
+
+      function togglePinnedCommand(index) {
+        pinnedCommand = pinnedCommand === index ? null : index;
+        setActiveCommand(pinnedCommand);
+      }
+
+      function activateCommand(index, revealCommand) {
+        togglePinnedCommand(index);
+        if (revealCommand) {
+          commandList
+            .querySelector(`[data-command-index="${index}"]`)
+            ?.scrollIntoView({ block: "nearest" });
+        }
+      }
+
+      function bindCommandInteraction(element, index, revealCommand = false) {
+        element.dataset.commandIndex = String(index);
+        element.addEventListener("mouseenter", () => previewCommand(index));
+        element.addEventListener("mouseleave", () => previewCommand(null));
+        element.addEventListener("focus", () => previewCommand(index));
+        element.addEventListener("blur", () => previewCommand(null));
+        element.addEventListener("click", () => activateCommand(index, revealCommand));
+      }
+
+      function effectSummary(effect) {
+        if (effect.type === "state_change") {
+          return `${effect.state}: ${effect.before} → ${effect.after}`;
+        }
+        if (effect.type === "motion") {
+          return `position: (${effect.before.x}, ${effect.before.y}) → ` +
+            `(${effect.after.x}, ${effect.after.y})`;
+        }
+        if (effect.type === "paint") {
+          return `paint bounds: ${effect.bounds.width} × ${effect.bounds.height}`;
+        }
+        return effect.type;
+      }
+
+      function createCommand(command, index) {
+        const item = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "trace-command";
+        button.setAttribute("aria-pressed", "false");
+        bindCommandInteraction(button, index);
+
+        const name = document.createElement("span");
+        name.className = "trace-command-name";
+        name.textContent = command.name;
+        const range = document.createElement("span");
+        range.className = "trace-command-range";
+        range.textContent = `${command.byte_start}..${command.byte_end}`;
+        const detail = document.createElement("span");
+        detail.className = "trace-command-detail";
+        detail.textContent = command.detail;
+        const effects = document.createElement("span");
+        effects.className = "trace-command-effects";
+        effects.textContent = command.effects.map(effectSummary).join(" · ") || "no visible effect";
+        button.append(name, range, detail, effects);
+        item.append(button);
+        return item;
+      }
+
+      function showCommands(commands) {
+        const entries = commands || [];
+        pinnedCommand = null;
+        commandPanel.hidden = entries.length === 0;
+        traceWorkspace.classList.toggle("trace-without-commands", entries.length === 0);
+        commandList.replaceChildren(...entries.map(createCommand));
+      }
 
       // Server-connection indicator: connected | error | offline. The dot colour
       // comes from the state class on #connection; this sets the state text.
@@ -472,11 +714,23 @@
         }
         currentRendering = identity;
 
-        sheets.replaceChildren(
-          ...rendering.sheets.map((sheet) =>
-            createSheet(sheet, rendering.sheets.length, cacheKey)
-          )
-        );
+        const allCommands = rendering.sheets.flatMap((sheet) => sheet.commands || []);
+        showCommands(allCommands);
+
+        let commandOffset = 0;
+        const sheetElements = rendering.sheets.map((sheet) => {
+          const commands = sheet.commands || [];
+          const element = createSheet(
+            sheet,
+            rendering.sheets.length,
+            cacheKey,
+            commands,
+            commandOffset
+          );
+          commandOffset += commands.length;
+          return element;
+        });
+        sheets.replaceChildren(...sheetElements);
       }
 
       // The profile, waiting hint, and job status reflect the latest poll rather
@@ -511,7 +765,46 @@
         }
       }
 
-      function createSheet(sheet, sheetCount, cacheKey) {
+      function createTraceOverlay(sheet, commands, commandOffset) {
+        const namespace = "http://www.w3.org/2000/svg";
+        const overlay = document.createElementNS(namespace, "svg");
+        overlay.classList.add("trace-overlay");
+        overlay.setAttribute("viewBox", `0 0 ${sheet.width_dots} ${sheet.height_dots}`);
+        overlay.setAttribute("width", String(sheet.width_dots));
+        overlay.setAttribute("height", String(sheet.height_dots));
+        overlay.setAttribute("aria-label", `Trace regions for ${sheet.name}`);
+
+        commands.forEach((command, localCommandIndex) => {
+          const paint = command.effects.find((effect) => effect.type === "paint");
+          if (!paint) {
+            return;
+          }
+          const commandIndex = commandOffset + localCommandIndex;
+          const group = document.createElementNS(namespace, "g");
+          group.classList.add("trace-region-group");
+          group.setAttribute("tabindex", "0");
+          group.setAttribute("role", "button");
+          group.setAttribute("aria-label", `Highlight ${command.name} at bytes ${command.byte_start} to ${command.byte_end}`);
+          bindCommandInteraction(group, commandIndex, true);
+          group.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              activateCommand(commandIndex, true);
+            }
+          });
+          const rectangle = document.createElementNS(namespace, "rect");
+          rectangle.classList.add("trace-region");
+          rectangle.setAttribute("x", String(paint.bounds.x));
+          rectangle.setAttribute("y", String(paint.bounds.y));
+          rectangle.setAttribute("width", String(paint.bounds.width));
+          rectangle.setAttribute("height", String(paint.bounds.height));
+          group.append(rectangle);
+          overlay.append(group);
+        });
+        return overlay;
+      }
+
+      function createSheet(sheet, sheetCount, cacheKey, commands, commandOffset) {
         const figure = document.createElement("figure");
         figure.className = "sheet";
 
@@ -534,7 +827,10 @@
         // than a size knob. Browser zoom magnifies from here.
         image.style.width = `${sheet.width_dots}px`;
         image.src = `${sheet.url}?t=${cacheKey}`;
-        figure.append(caption, image);
+        const layer = document.createElement("div");
+        layer.className = "receipt-layer";
+        layer.append(image, createTraceOverlay(sheet, commands, commandOffset));
+        figure.append(caption, layer);
         return figure;
       }
 

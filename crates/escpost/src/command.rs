@@ -169,14 +169,23 @@ pub(crate) fn execute_esc_command<S: RenderSurface, C: CommandSink>(
             if C::ENABLED {
                 let before = state.trace_justification();
                 state.set_justification(justification);
-                command_sink.record(CommandTrace {
-                    byte_range: offset..offset + 3,
-                    command: DecodedCommand::SetJustification(justification),
-                    effects: vec![Effect::StateChange(StateChange::Justification {
-                        before,
-                        after: state.trace_justification(),
-                    })],
-                });
+                let after = state.trace_justification();
+                command_sink.record(
+                    state.trace_sheet_index(),
+                    CommandTrace {
+                        byte_range: offset..offset + 3,
+                        command: DecodedCommand::SetJustification(justification.into()),
+                        effects: (before != after)
+                            .then(|| {
+                                Effect::StateChange(StateChange::Justification {
+                                    before: before.into(),
+                                    after: after.into(),
+                                })
+                            })
+                            .into_iter()
+                            .collect(),
+                    },
+                );
             } else {
                 state.set_justification(justification);
             }

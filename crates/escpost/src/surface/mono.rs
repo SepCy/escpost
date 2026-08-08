@@ -54,17 +54,6 @@ impl MonoSurface {
     fn stride(&self) -> u32 {
         self.width * self.scale
     }
-
-    #[cfg(test)]
-    pub(crate) fn scale(&self) -> u32 {
-        self.scale
-    }
-
-    #[cfg(test)]
-    pub(crate) fn subpixel_coverage(&self, sx: u32, sy: u32) -> Option<u8> {
-        (sx < self.stride() && sy < self.height * self.scale)
-            .then(|| self.coverage[(sy * self.stride() + sx) as usize])
-    }
 }
 
 impl RenderSurface for MonoSurface {

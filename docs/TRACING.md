@@ -9,8 +9,10 @@ it.
 
 Tracing is optional. Ordinary `render` calls continue to use the plain
 monochrome surface and do not allocate trace records, copy command bytes, or
-calculate trace-only state. The initial tracer is an internal test proof, not a
-public API or stable serialization format.
+calculate trace-only state. Callers opt in through the experimental
+`render_with_trace` or `render_with_trace_and_options` API. The returned Rust
+types are public so applications can explore the feature, but their shape is
+not yet stable.
 
 ## Rendering surfaces
 
@@ -23,7 +25,7 @@ PrinterState<S: RenderSurface>
                 │     canonical raster and PNG output
                 │
                 └── TracingSurface
-                      wraps MonoSurface in the current test proof
+                      wraps MonoSurface for traced renders
 ```
 
 The implementation is split by responsibility:
@@ -32,7 +34,7 @@ The implementation is split by responsibility:
 crates/escpost/src/surface/
 ├── mod.rs       RenderSurface contract and module exports
 ├── mono.rs      monochrome raster storage and PNG encoding
-└── tracing.rs   test-only provenance-decorating surface proof
+└── tracing.rs   provenance-decorating surface used by traced renders
 ```
 
 `TracingSurface` forwards every drawing operation to its inner surface. This
@@ -72,15 +74,43 @@ is a compiler outcome rather than a Rust language guarantee, so benchmark
 comparisons remain part of changes to this seam.
 
 The vertical slice currently models only justification, printable bytes, and
-line feed. It exists to validate the abstraction and its disabled-path cost
-before the complete command model is designed.
+line feed. Other commands still render normally but do not receive trace
+entries. The slice validates the abstraction, its disabled-path cost, and an
+end-to-end consumer before the complete command model is designed.
+
+## Experimental public API
+
+`render_with_trace` mirrors `render`, and `render_with_trace_and_options`
+mirrors `render_with_options`. Both return `TracedRenderResult`, which contains
+the ordinary `RenderResult` plus a `Trace`:
+
+```rust
+let result = escpost::render_with_trace(data, &profile)?;
+
+for sheet in result.trace.sheets {
+    for command in sheet.commands {
+        // Inspect its byte range, decoded command, and typed effects.
+    }
+}
+```
+
+The experimental trace types deliberately do not implement Serde. This keeps
+the renderer's in-memory model independent from any persistent or wire format.
+The CLI maps those types into its own web-specific JSON data transfer objects;
+that JSON is also experimental and is not a stable serialization contract.
+
+The trace groups commands by output sheet. The ordered
+`Trace::sheets` collection corresponds directly to `RenderResult::sheets`, and
+every rendered sheet has a `SheetTrace`, even when it contains no currently
+supported commands. A command belongs to the sheet that was active when the
+command executed. For now, one command is assumed to affect at most one sheet.
 
 ## Target production model
 
 The following sections specify intended production behavior. The current
-implementation does not yet produce complete command entries, typed effects,
-byte ranges, or stable painted rectangles; its narrower guarantees are listed
-under [Current proof](#current-proof).
+implementation produces complete entries only for its three supported command
+types; its narrower guarantees are listed under
+[Current vertical slice](#current-vertical-slice).
 
 ### Command identity
 
@@ -90,7 +120,7 @@ back to the immutable source. A future serialized trace may include raw bytes
 for convenience, but they must match that range exactly.
 
 The current vertical slice records the complete range after parsing determines
-the command length and also uses that range for command relationships.
+the command length and uses its starting offset to attribute logical bounds.
 
 Printable bytes may initially appear as individual commands. Grouping adjacent
 text bytes into display runs is a presentation decision and must not lose the
@@ -101,7 +131,7 @@ underlying byte boundaries.
 Every parsed command will receive a trace entry, including commands that paint
 nothing. A command can have more than one effect:
 
-- **Paint** — one or more regions on ordered output sheets.
+- **Paint** — logical drawing bounds on the command's output sheet.
 - **State change** — typed before/after values such as justification, font,
   print area, or line spacing.
 - **Motion** — logical print-position movement, including the positions before
@@ -116,19 +146,23 @@ This model avoids inventing a painted rectangle for state-only commands. The
 CLI and web interface can visualize each effect appropriately: a region, state
 diff, movement marker, event, boundary, or diagnostic.
 
-### Painted regions
+### Logical drawing bounds
 
-The production tracer will store rectangles, not a record for every contributed
-pixel. A printable command can own several rectangles, and every rectangle
-identifies its sheet and printer-dot coordinates.
+The tracer will store one logical bounding rectangle for a painting command,
+not individual contributed pixels. For text, this is the complete character
+cell, including blank space and character spacing, rather than the tight bounds
+of its visible ink. A space therefore has highlightable bounds even though it
+does not change the raster.
 
-The intended initial semantics are:
+The surface decorator receives an explicit logical-region marker from the
+renderer. It carries that rectangle through buffering, justification, and
+composition into final sheet coordinates without observing individual raster
+writes. Trace finalization unions multiple logical markers from the same
+command into a single bounding rectangle.
 
-- **requested bounds** describe the area the command attempted to affect;
-- **contributing bounds** describe the clipped area in which the command
-  changed raster coverage; and
-- the primary web highlight uses contributing bounds, with requested bounds
-  optionally shown to explain clipping.
+Because commands are grouped under `SheetTrace`, the rectangle does not carry a
+sheet index. The experimental paint effect has the shape
+`Effect::Paint { bounds }` rather than a list of sheet-indexed regions.
 
 Final visible pixel ownership is not stored initially. Later commands may
 overlap, reverse, or erase earlier output, making a single final owner
@@ -136,10 +170,8 @@ ambiguous. If the UI eventually needs exact final-visible selection, it should
 derive that view from command effects under separately documented overlap
 rules.
 
-The test-only vertical slice records only primitive operations that change
-raster coverage, translates them through composition, and coalesces them into
-contributing rectangles per command and sheet. It does not yet expose requested
-bounds or define final-visible ownership when commands overlap.
+The current implementation records explicit logical bounds and never observes
+or stores individual raster writes for tracing.
 
 ### Buffered output and motion
 
@@ -149,8 +181,8 @@ the print area and justification.
 
 Internally, when `LF` commits a line:
 
-1. regions already belong to the commands that produced the buffered content;
-2. composition translates those regions into final sheet coordinates;
+1. bounds already belong to the commands that produced the buffered content;
+2. composition translates those bounds into final sheet coordinates;
 3. `LF` records its own print-position movement.
 
 `LF` does not take ownership of the committed pixels. In the web interface,
@@ -182,10 +214,13 @@ and any buffered data it discards.
 
 ### Errors and safe framing
 
-Tracing must remain useful when strict rendering fails. It will record every
-command whose boundary and effects were established safely, then report the
-failure at the exact byte offset. Remaining bytes may be exposed as opaque input
-but must not be presented as speculatively decoded commands.
+Tracing should eventually remain useful when strict rendering fails. It will
+record every command whose boundary and effects were established safely, then
+report the failure at the exact byte offset. Remaining bytes may be exposed as
+opaque input but must not be presented as speculatively decoded commands.
+
+The current API returns `RenderError` without a partial trace when rendering
+fails.
 
 Diagnostics must distinguish malformed or truncated input, an unimplemented
 valid command, a profile-unavailable command, an ignored command, clipped
@@ -193,36 +228,51 @@ output, and a profile-confirmed behavioral deviation.
 
 ## Current vertical slice
 
-The test-only tracer renders centered text followed by `LF` and assembles a
-crate-private `Trace` containing ordered `CommandTrace` entries. Each entry has
-its exact input byte range, a semantic `DecodedCommand`, and typed effects. The
-slice implements justification state changes, printer-position motion, and
-contributing `PaintRegion` rectangles with sheet indices.
+The tracer assembles a public experimental `Trace` containing one ordered
+`SheetTrace` per rendered sheet. Each `CommandTrace` has its exact input byte
+range, a semantic `DecodedCommand`, and typed effects. The slice implements
+justification state changes, printer-position motion, and one logical
+`PaintRegion` bound for printable bytes. `ESC a` and `LF` receive their
+respective state-change and motion effects without fabricated paint.
 
 The end-to-end test verifies that:
 
 - traced and ordinary raster surfaces are identical;
 - `ESC a` records the `Left` to `Center` state transition without paint;
-- the text's coalesced rectangles retain the printable byte's input range and
-  are translated into the centered position on sheet zero; and
+- text and space cells retain their printable byte's input range and are
+  translated into their final position on the active sheet;
+- commands before and after a cut are grouped under their respective sheets;
 - `LF` records its before/after position without taking ownership of the text
   command's paint.
 
-The types are deliberately crate-private while their shape is validated. The
-slice does not yet trace other commands, return a partial trace on failure, or
-make its in-memory representation a stable public contract.
+The slice does not yet trace other commands, return a partial trace on failure,
+or make its in-memory representation a stable public contract.
+
+## Web workbench
+
+When the CLI web mode is active, it uses the traced renderer and exposes the
+three currently supported command types through `/api/render`. Non-web CLI
+rendering continues to call the ordinary renderer.
+
+The workbench shows a command list beside the authoritative PNG receipt. Each
+receipt image has an SVG overlay in the same printer-dot coordinate system.
+Hovering or focusing a command highlights its logical drawing bounds; hovering
+the bound previews the corresponding command; clicking either side pins or
+unpins the selection. State-only and motion-only commands remain selectable in
+the list but have no fabricated painted rectangle. On narrow screens the
+receipt appears before the command list.
 
 ## Open design decisions
 
-Before exposing tracing publicly, decide and document:
+Before declaring tracing stable, decide and document:
 
 - the Rust trace types and versioned JSON representation;
 - typed state deltas and command parameter models;
-- rectangle clipping and coalescing rules;
+- logical-bound clipping and union rules;
 - how command dependencies such as stored data and later printing are linked;
 - trace behavior on render errors and resource-limit failures;
 - whether traces are retained only in memory or persisted with captures; and
-- CLI output and web selection behavior.
+- whether and how the experimental web JSON becomes a versioned format.
 
 These decisions belong to the trace model, not to `MonoSurface` or the ordinary
 PNG rendering API.

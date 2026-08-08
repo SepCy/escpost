@@ -1,7 +1,9 @@
 use std::io::{self, IsTerminal};
 use std::path::Path;
 
-use escpost::{RenderOptions, render_with_options};
+use escpost::{
+    RenderOptions, TracedRenderResult, render_with_options, render_with_trace_and_options,
+};
 
 use crate::cli::RenderArgs;
 use crate::error::CliError;
@@ -36,8 +38,17 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
         antialias: arguments.antialias,
         ..RenderOptions::default()
     };
-    let rendered = render_with_options(&input.bytes, profile, &options)
-        .map_err(|error| CliError::Render(error.to_string()))?;
+    let (rendered, trace) = if web_enabled {
+        let traced = render_with_trace_and_options(&input.bytes, profile, &options)
+            .map_err(|error| CliError::Render(error.to_string()))?;
+        (traced.render, Some(traced.trace))
+    } else {
+        (
+            render_with_options(&input.bytes, profile, &options)
+                .map_err(|error| CliError::Render(error.to_string()))?,
+            None,
+        )
+    };
     if !binary_stdout {
         eprintln!("Profile: {profile_id}");
     }
@@ -55,7 +66,13 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
     }
     if web_enabled {
         let listener = crate::web::bind(arguments.web_listen).await?;
-        let jobs = crate::web::JobStore::with_render(rendered, arguments.antialias);
+        let jobs = crate::web::JobStore::with_render(
+            TracedRenderResult {
+                render: rendered,
+                trace: trace.expect("web rendering requested a trace"),
+            },
+            arguments.antialias,
+        );
         if arguments.watch {
             crate::watch::start(
                 crate::watch::WatchConfig {

@@ -29,6 +29,18 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("id=\"download\""));
     assert!(response.contains("id=\"warnings\""));
     assert!(response.contains("id=\"magnifyHint\""));
+    assert!(response.contains("id=\"traceWorkspace\""));
+    assert!(response.contains("id=\"commandPanel\""));
+    assert!(response.contains("id=\"commandList\""));
+    assert!(response.contains("createTraceOverlay"));
+    assert!(response.contains("setActiveCommand"));
+    assert!(response.contains("togglePinnedCommand"));
+    assert!(response.contains("data-command-index"));
+    assert!(response.contains("trace-without-commands"));
+    assert!(response.contains("group.setAttribute(\"tabindex\", \"0\")"));
+    assert!(response.contains("activateCommand(commandIndex, true)"));
+    assert!(response.contains("effect.bounds"));
+    assert!(response.contains("commandOffset"));
     assert!(response.contains("fetch(\"/api/render\""));
 }
 
@@ -79,6 +91,44 @@ fn web_mode_exposes_ordered_sheet_metadata_and_png_bytes() {
             .expect("the expected sheet should be readable")
             .as_slice()
     );
+}
+
+#[test]
+fn web_mode_exposes_experimental_command_traces() {
+    let temporary_directory = temporary_directory("command-trace");
+    let input_path = temporary_directory.join("receipt.bin");
+    fs::write(&input_path, [0x1b, b'a', 1, b'A', 0x0a])
+        .expect("the traced input should be writable");
+    let port = unused_loopback_port();
+    let mut child = start_file_web(&input_path, port, false);
+
+    wait_until_listening(&mut child, port);
+    let response = http_get_bytes(port, "/api/render");
+    let metadata: serde_json::Value = serde_json::from_slice(response_body(&response))
+        .expect("the render response should be JSON");
+    stop(&mut child);
+
+    assert!(metadata.get("commands").is_none());
+    let commands = metadata["sheets"][0]["commands"]
+        .as_array()
+        .expect("commands should be an array");
+    assert_eq!(commands.len(), 3);
+    assert_eq!(commands[0]["byte_start"], 0);
+    assert_eq!(commands[0]["byte_end"], 3);
+    assert_eq!(commands[0]["name"], "ESC a");
+    assert_eq!(commands[0]["detail"], "Set justification: center");
+    assert_eq!(commands[0]["effects"][0]["type"], "state_change");
+    assert_eq!(commands[1]["name"], "Text");
+    assert_eq!(commands[1]["detail"], "A");
+    let bounds = &commands[1]["effects"][0]["bounds"];
+    assert_eq!(bounds["x"], 282);
+    assert_eq!(bounds["y"], 0);
+    assert_eq!(bounds["width"], 12);
+    assert_eq!(bounds["height"], 24);
+    assert_eq!(commands[2]["name"], "LF");
+    assert_eq!(commands[2]["effects"][0]["type"], "motion");
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
 }
 
 #[test]

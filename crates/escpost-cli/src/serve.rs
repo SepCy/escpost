@@ -1,7 +1,7 @@
 use std::io::IsTerminal;
 use std::time::Duration;
 
-use escpost::{RenderOptions, render_with_options};
+use escpost::{RenderOptions, render_with_trace_and_options};
 use escpost_profiles::PrinterProfile;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
@@ -28,39 +28,6 @@ fn should_open_browser(
     ci: bool,
 ) -> bool {
     !no_open && !non_interactive && stderr_is_terminal && !ci && browser_env != Some("none")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::should_open_browser;
-
-    #[test]
-    fn opens_by_default_on_an_interactive_terminal() {
-        assert!(should_open_browser(false, false, true, None, false));
-        // An explicit browser choice (not "none") still opens.
-        assert!(should_open_browser(
-            false,
-            false,
-            true,
-            Some("firefox"),
-            false
-        ));
-    }
-
-    #[test]
-    fn stays_out_of_the_way_when_opted_out_or_automated() {
-        assert!(!should_open_browser(true, false, true, None, false)); // --no-open
-        assert!(!should_open_browser(false, true, true, None, false)); // --non-interactive
-        assert!(!should_open_browser(false, false, false, None, false)); // no terminal
-        assert!(!should_open_browser(
-            false,
-            false,
-            true,
-            Some("none"),
-            false
-        )); // BROWSER=none
-        assert!(!should_open_browser(false, false, true, None, true)); // CI
-    }
 }
 
 pub(crate) async fn run(arguments: ServeArgs, non_interactive: bool) -> Result<(), CliError> {
@@ -228,7 +195,10 @@ async fn finalize(
     // job in flight cannot stall the web viewer's responses. The blocking task
     // returns the bytes so the exact input can be kept for download.
     match tokio::task::spawn_blocking(move || {
-        (render_with_options(&bytes, profile, &options), bytes)
+        (
+            render_with_trace_and_options(&bytes, profile, &options),
+            bytes,
+        )
     })
     .await
     {
@@ -241,5 +211,38 @@ async fn finalize(
         }
         // A panic or cancellation in the render task leaves no job to preview.
         Err(_) => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_open_browser;
+
+    #[test]
+    fn opens_by_default_on_an_interactive_terminal() {
+        assert!(should_open_browser(false, false, true, None, false));
+        // An explicit browser choice (not "none") still opens.
+        assert!(should_open_browser(
+            false,
+            false,
+            true,
+            Some("firefox"),
+            false
+        ));
+    }
+
+    #[test]
+    fn stays_out_of_the_way_when_opted_out_or_automated() {
+        assert!(!should_open_browser(true, false, true, None, false)); // --no-open
+        assert!(!should_open_browser(false, true, true, None, false)); // --non-interactive
+        assert!(!should_open_browser(false, false, false, None, false)); // no terminal
+        assert!(!should_open_browser(
+            false,
+            false,
+            true,
+            Some("none"),
+            false
+        )); // BROWSER=none
+        assert!(!should_open_browser(false, false, true, None, true)); // CI
     }
 }

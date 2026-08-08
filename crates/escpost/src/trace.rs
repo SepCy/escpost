@@ -1,69 +1,93 @@
-//! Crate-private command tracing model and compile-time collection seam.
+//! Experimental command tracing model and crate-private collection seam.
 
 use std::ops::Range;
 
-#[cfg(test)]
-use std::collections::{BTreeMap, BTreeSet};
-
-use crate::state::Justification;
-#[cfg(test)]
+use crate::state::Justification as StateJustification;
 use crate::surface::tracing::TracingSurface;
 
+/// Experimental semantic interpretation of a traced command.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum DecodedCommand {
+pub enum DecodedCommand {
     SetJustification(Justification),
     TextByte(u8),
     LineFeed,
 }
 
+/// Experimental justification value used by command traces.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Justification {
+    Left,
+    Center,
+    Right,
+}
+
+impl From<StateJustification> for Justification {
+    fn from(value: StateJustification) -> Self {
+        match value {
+            StateJustification::Left => Self::Left,
+            StateJustification::Center => Self::Center,
+            StateJustification::Right => Self::Right,
+        }
+    }
+}
+
+/// Experimental typed state transition caused by a command.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum StateChange {
+pub enum StateChange {
     Justification {
         before: Justification,
         after: Justification,
     },
 }
 
+/// Experimental logical printer position in printer-dot coordinates.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Position {
-    pub(crate) x: u32,
-    pub(crate) y: u32,
+pub struct Position {
+    pub x: u32,
+    pub y: u32,
 }
 
+/// Experimental logical drawing bounds in printer-dot coordinates.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PaintRegion {
-    pub(crate) sheet_index: usize,
-    pub(crate) x: u32,
-    pub(crate) y: u32,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+pub struct PaintRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
+/// Experimental typed effect of a traced command.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) enum Effect {
+pub enum Effect {
     StateChange(StateChange),
     Motion { before: Position, after: Position },
-    Paint { regions: Vec<PaintRegion> },
+    Paint { bounds: PaintRegion },
 }
 
+/// Experimental trace entry for one safely decoded command.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CommandTrace {
-    pub(crate) byte_range: Range<usize>,
-    pub(crate) command: DecodedCommand,
-    pub(crate) effects: Vec<Effect>,
+pub struct CommandTrace {
+    pub byte_range: Range<usize>,
+    pub command: DecodedCommand,
+    pub effects: Vec<Effect>,
 }
 
-#[cfg(test)]
+/// Experimental commands associated with one rendered sheet.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Trace {
-    pub(crate) commands: Vec<CommandTrace>,
+pub struct SheetTrace {
+    pub commands: Vec<CommandTrace>,
+}
+
+/// Experimental ordered command trace grouped by rendered sheet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Trace {
+    pub sheets: Vec<SheetTrace>,
 }
 
 pub(crate) trait CommandSink {
     const ENABLED: bool;
 
-    fn record(&mut self, command: CommandTrace);
+    fn record(&mut self, sheet_index: usize, command: CommandTrace);
 }
 
 pub(crate) struct NoTrace;
@@ -72,101 +96,67 @@ impl CommandSink for NoTrace {
     const ENABLED: bool = false;
 
     #[inline]
-    fn record(&mut self, _command: CommandTrace) {
+    fn record(&mut self, _sheet_index: usize, _command: CommandTrace) {
         unreachable!("NoTrace commands are guarded by CommandSink::ENABLED")
     }
 }
 
-#[cfg(test)]
 #[derive(Debug, Default)]
 pub(crate) struct TraceCollector {
-    commands: Vec<CommandTrace>,
+    commands: Vec<(usize, CommandTrace)>,
 }
 
-#[cfg(test)]
 impl TraceCollector {
-    pub(crate) fn finish(mut self, surfaces: &[TracingSurface]) -> Trace {
-        let mut dots_by_command = BTreeMap::<usize, BTreeMap<usize, BTreeSet<(u32, u32)>>>::new();
-        for (sheet_index, surface) in surfaces.iter().enumerate() {
-            for region in &surface.painted_regions {
-                let dots = dots_by_command
-                    .entry(region.command_offset)
-                    .or_default()
-                    .entry(sheet_index)
-                    .or_default();
-                for y in region.y..region.y + region.height {
-                    for x in region.x..region.x + region.width {
-                        dots.insert((x, y));
-                    }
-                }
+    pub(crate) fn finish(self, surfaces: &[TracingSurface]) -> Trace {
+        let mut sheets = (0..surfaces.len())
+            .map(|_| SheetTrace {
+                commands: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+
+        for (sheet_index, mut command) in self.commands {
+            if let Some(surface) = surfaces.get(sheet_index)
+                && let Some(bounds) = command_bounds(surface, command.byte_range.start)
+            {
+                command.effects.push(Effect::Paint { bounds });
+            }
+            if let Some(sheet) = sheets.get_mut(sheet_index) {
+                sheet.commands.push(command);
             }
         }
 
-        for command in &mut self.commands {
-            let Some(sheets) = dots_by_command.remove(&command.byte_range.start) else {
-                continue;
-            };
-            let mut regions = Vec::new();
-            for (sheet_index, dots) in sheets {
-                regions.extend(coalesce_dots(sheet_index, &dots));
-            }
-            if !regions.is_empty() {
-                command.effects.push(Effect::Paint { regions });
-            }
-        }
-
-        Trace {
-            commands: self.commands,
-        }
+        Trace { sheets }
     }
 }
 
-#[cfg(test)]
-fn coalesce_dots(sheet_index: usize, dots: &BTreeSet<(u32, u32)>) -> Vec<PaintRegion> {
-    let mut rows = BTreeMap::<u32, Vec<u32>>::new();
-    for &(x, y) in dots {
-        rows.entry(y).or_default().push(x);
+fn command_bounds(surface: &TracingSurface, command_offset: usize) -> Option<PaintRegion> {
+    let mut regions = surface
+        .logical_regions
+        .iter()
+        .filter(|region| region.command_offset == command_offset);
+    let first = regions.next()?;
+    let mut left = first.x;
+    let mut top = first.y;
+    let mut right = first.x.saturating_add(first.width);
+    let mut bottom = first.y.saturating_add(first.height);
+    for region in regions {
+        left = left.min(region.x);
+        top = top.min(region.y);
+        right = right.max(region.x.saturating_add(region.width));
+        bottom = bottom.max(region.y.saturating_add(region.height));
     }
-
-    let mut rectangles: Vec<PaintRegion> = Vec::new();
-    for (y, xs) in rows {
-        let mut run_start = xs[0];
-        let mut previous = xs[0];
-        for x in xs.into_iter().skip(1).chain(std::iter::once(u32::MAX)) {
-            if x == previous.saturating_add(1) {
-                previous = x;
-                continue;
-            }
-
-            let width = previous - run_start + 1;
-            if let Some(rectangle) = rectangles.iter_mut().rev().find(|rectangle| {
-                rectangle.x == run_start
-                    && rectangle.width == width
-                    && rectangle.y + rectangle.height == y
-            }) {
-                rectangle.height += 1;
-            } else {
-                rectangles.push(PaintRegion {
-                    sheet_index,
-                    x: run_start,
-                    y,
-                    width,
-                    height: 1,
-                });
-            }
-
-            run_start = x;
-            previous = x;
-        }
-    }
-    rectangles
+    Some(PaintRegion {
+        x: left,
+        y: top,
+        width: right.saturating_sub(left),
+        height: bottom.saturating_sub(top),
+    })
 }
 
-#[cfg(test)]
 impl CommandSink for TraceCollector {
     const ENABLED: bool = true;
 
-    fn record(&mut self, command: CommandTrace) {
-        self.commands.push(command);
+    fn record(&mut self, sheet_index: usize, command: CommandTrace) {
+        self.commands.push((sheet_index, command));
     }
 }

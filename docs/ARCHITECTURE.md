@@ -195,7 +195,7 @@ barcode.rs        one-dimensional barcode encoders
 databar.rs        GS1 DataBar encoding
 qr.rs             QR matrix adapter
 international.rs  ESC R character substitutions
-surface/          rendering contract, monochrome raster, and tracing proof
+surface/          rendering contract, monochrome raster, and tracing decorator
 error.rs          renderer error types
 ```
 
@@ -205,10 +205,10 @@ domain stays readable on its own. The public API is re-exported from the
 crate root, so module boundaries are not visible to embedders.
 
 The private `RenderSurface` contract keeps command interpretation independent
-from raster storage. `MonoSurface` is the production bitmap implementation;
-the test-only decorator proves command provenance can be retained without
-duplicating the interpreter. See [`TRACING.md`](TRACING.md) for the current
-proof and intended trace semantics.
+from raster storage. `MonoSurface` is the ordinary bitmap implementation; the
+experimental tracing decorator retains command provenance without duplicating
+the interpreter. See [`TRACING.md`](TRACING.md) for the current vertical slice
+and intended trace semantics.
 
 ## Printer state
 
@@ -310,9 +310,9 @@ render receipt content.
 ## Dot surfaces and sheets
 
 Surface code is divided into the private rendering contract, the canonical
-`MonoSurface`, and a test-only tracing proof. Ordinary rendering selects
-`MonoSurface` statically and carries no trace records. A production tracing
-decorator remains planned.
+`MonoSurface`, and an experimental tracing decorator. Ordinary rendering
+selects `MonoSurface` statically and carries no trace records; traced rendering
+wraps the same raster implementation and is opt-in.
 
 `MonoSurface` stores one byte of ink coverage per scaled subpixel. Faithful
 rendering thresholds glyph coverage to hard dots and encodes a one-bit

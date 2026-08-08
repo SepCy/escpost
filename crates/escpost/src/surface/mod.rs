@@ -1,7 +1,6 @@
 //! Rendering-surface abstraction and implementations.
 
 mod mono;
-#[cfg(test)]
 pub(crate) mod tracing;
 
 pub use mono::MonoSurface;
@@ -17,6 +16,8 @@ pub(crate) trait RenderSurface: Sized {
     /// command while starting with empty pixels and metadata.
     fn fork(&self, width: u32) -> Self;
     fn begin_command(&mut self, _offset: usize) {}
+    fn end_command(&mut self) {}
+    fn mark_region(&mut self, _x: u32, _y: u32, _width: u32, _height: u32) {}
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn print_dot(&mut self, x: u32, y: u32);

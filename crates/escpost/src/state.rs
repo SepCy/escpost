@@ -128,6 +128,10 @@ impl<S: RenderSurface> PrinterState<S> {
         (self.print_x, self.line_top)
     }
 
+    pub(crate) fn trace_sheet_index(&self) -> usize {
+        self.completed_sheets.len()
+    }
+
     pub(crate) fn new(
         profile: &PrinterProfile,
         limits: RenderLimits,
@@ -227,6 +231,11 @@ impl<S: RenderSurface> PrinterState<S> {
     pub(crate) fn begin_command(&mut self, offset: usize) {
         self.roll.begin_command(offset);
         self.line.begin_command(offset);
+    }
+
+    pub(crate) fn end_command(&mut self) {
+        self.roll.end_command();
+        self.line.end_command();
     }
 
     pub(crate) fn initialize(&mut self) {

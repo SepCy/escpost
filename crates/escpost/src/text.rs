@@ -66,6 +66,8 @@ impl<S: RenderSurface> PrinterState<S> {
             self.line_feed()?;
         }
         self.line_height = self.line_height.max(cell_height);
+        self.line
+            .mark_region(self.print_x, 0, cell_width, cell_height);
         if self.reversed {
             for x in self.print_x..self.print_x.saturating_add(cell_width) {
                 for y in 0..cell_height {

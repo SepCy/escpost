@@ -29,6 +29,9 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("id=\"download\""));
     assert!(response.contains("id=\"warnings\""));
     assert!(response.contains("id=\"magnifyHint\""));
+    assert!(response.contains("id=\"footerPanel\""));
+    assert!(response.contains("id=\"footerMessages\""));
+    assert!(response.contains("id=\"previewPanel\""));
     assert!(response.contains("id=\"traceWorkspace\""));
     assert!(response.contains("id=\"commandPanel\""));
     assert!(response.contains("id=\"commandList\""));

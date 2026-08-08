@@ -10,18 +10,29 @@
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       }
 
+      html,
       body {
+        height: 100%;
+        overflow: hidden;
+      }
+
+      body {
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
         margin: 0;
-        padding: 24px;
+        padding: 24px 0;
         background: #171717;
         color: #f5f5f5;
       }
 
       header {
         display: flex;
+        flex: 0 0 auto;
         flex-direction: column;
         gap: 12px;
         margin-bottom: 20px;
+        padding: 0 24px;
       }
 
       /* Title on the left, server status centred on the first line. */
@@ -163,11 +174,14 @@
         font-size: 13px;
       }
 
-      /* Paper-margin toggle pinned to the bottom-right corner of the viewport. */
+      /* Keep view controls inside the fixed footer panel. */
       #viewOptions {
-        position: absolute;
-        right: 24px;
-        bottom: 24px;
+        display: flex;
+        align-self: center;
+        flex-direction: column;
+        gap: 6px;
+        align-items: flex-end;
+        justify-self: end;
       }
 
       #viewOptions label {
@@ -186,9 +200,18 @@
       }
 
       #viewport {
-        position: relative;
-        overflow: auto;
-        min-height: 160px;
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      #previewPanel {
+        display: flex;
+        flex: 1 1 auto;
+        flex-direction: column;
+        min-height: 0;
         padding: 24px;
         border: 1px solid #3a3a3a;
         border-radius: 8px;
@@ -209,7 +232,10 @@
 
       #traceWorkspace {
         display: grid;
+        flex: 1 1 auto;
         grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+        min-height: 0;
+        overflow: auto;
         gap: 24px;
         align-items: start;
       }
@@ -410,7 +436,10 @@
          profile). Amber to set them apart from the red render-error banner. */
       #warnings {
         display: none;
-        margin: 16px 0 0;
+        max-height: min(25vh, 180px);
+        margin: 0 0 8px;
+        overflow-y: auto;
+        scrollbar-gutter: stable;
         color: #ffb454;
         font-size: 13px;
       }
@@ -427,21 +456,46 @@
       /* Footer note under the sheets; only meaningful once something is
          rendered, so it is hidden while the sheet list is empty. */
       #magnifyHint {
-        margin: 16px 0 0;
+        margin: 0;
         color: #6b6b6b;
         font-size: 13px;
       }
 
-      #traceWorkspace:has(#sheets:empty) ~ #magnifyHint {
+      #viewport:has(#sheets:empty) #magnifyHint {
         display: none;
+      }
+
+      #footerPanel {
+        display: grid;
+        flex: 0 0 auto;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: end;
+        padding: 12px 24px;
+      }
+
+      #footerMessages {
+        min-width: 0;
+      }
+
+      #error {
+        margin: 0;
       }
 
       @media (max-width: 800px) {
         body {
-          padding: 12px;
+          padding: 12px 0;
+        }
+
+        header {
+          padding: 0 12px;
         }
 
         #viewport {
+          gap: 0;
+        }
+
+        #previewPanel {
           padding: 16px;
         }
 
@@ -457,6 +511,11 @@
           position: static;
           order: 2;
           max-height: 45vh;
+        }
+
+        #footerPanel {
+          grid-template-columns: minmax(0, 1fr);
+          padding: 10px 16px;
         }
       }
     </style>
@@ -476,30 +535,36 @@
     </header>
 
     <main id="viewport">
-      <div id="printStatus">
-        <span id="jobStatus"></span>
-        <span id="completion"></span>
-        <a id="download" href="/job" download>Download raw input</a>
-        <span id="receiving">Receiving a job…</span>
+      <div id="previewPanel">
+        <div id="printStatus">
+          <span id="jobStatus"></span>
+          <span id="completion"></span>
+          <a id="download" href="/job" download>Download raw input</a>
+          <span id="receiving">Receiving a job…</span>
+        </div>
+        <div id="traceWorkspace">
+          <aside id="commandPanel" aria-label="Experimental command trace" hidden>
+            <h2>Commands <small>experimental</small></h2>
+            <p>Hover or focus to preview. Click to pin a command.</p>
+            <ol id="commandList"></ol>
+          </aside>
+          <div id="sheets" aria-live="polite"></div>
+        </div>
       </div>
-      <div id="traceWorkspace">
-        <aside id="commandPanel" aria-label="Experimental command trace" hidden>
-          <h2>Commands <small>experimental</small></h2>
-          <p>Hover or focus to preview. Click to pin a command.</p>
-          <ol id="commandList"></ol>
-        </aside>
-        <div id="sheets" aria-live="polite"></div>
+      <div id="footerPanel">
+        <div id="footerMessages">
+          <div id="warnings" aria-live="polite"></div>
+          <p id="waiting" aria-live="polite"></p>
+          <p id="error"></p>
+        </div>
+        <div id="viewOptions">
+          <p id="magnifyHint">Use your browser's zoom to magnify.</p>
+          <label>
+            <input type="checkbox" id="margin">
+            Paper margin
+          </label>
+        </div>
       </div>
-      <div id="viewOptions">
-        <label>
-          <input type="checkbox" id="margin">
-          Paper margin
-        </label>
-      </div>
-      <div id="warnings" aria-live="polite"></div>
-      <p id="magnifyHint">Use your browser's zoom to magnify.</p>
-      <p id="waiting" aria-live="polite"></p>
-      <p id="error"></p>
     </main>
 
     <script>

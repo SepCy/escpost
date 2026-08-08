@@ -224,12 +224,13 @@ actions. See the
 - [x] Keep ordered sheet names and responsive wrapping.
 - [x] Keep original one-printer-dot-to-one-screen-pixel display as the default.
 - [ ] Show live jobs newest first.
-- [ ] Update the page when a job arrives without requiring manual refresh.
+- [x] Update the page when a job arrives without requiring manual refresh.
 - [ ] Show the selected profile, completion reason, connection, timestamp, and
       rendering status for each job.
 - [ ] Allow rerendering a captured job with another profile.
-- [ ] Download the original binary, readable hexadecimal input, PNG sheets,
-      command trace, events, and diagnostics.
+- [x] Download the original captured binary.
+- [ ] Download readable hexadecimal input, PNG sheets, command trace, events,
+      and diagnostics.
 - [ ] Show multiple profile renderings side by side.
 - [ ] Offer exact-pixel overlay or difference views where that helps compare
       profiles or renderer versions.
@@ -532,7 +533,7 @@ would target.
 - [x] Feed completed network jobs into the web job store shared with
       `render --web`.
 - [x] Show live ordered sheets, with a waiting hint before the first job.
-- [ ] Offer the captured job's raw input as a download.
+- [x] Offer the captured job's raw input as a download.
 - [x] Add container health and transport-fragmentation tests.
 
 ### Phase 3: inspection

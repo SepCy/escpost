@@ -71,9 +71,9 @@ release benchmark in `examples/render_bench.rs`. Exact machine-code identity
 is a compiler outcome rather than a Rust language guarantee, so benchmark
 comparisons remain part of changes to this seam.
 
-The proof currently models only justification, printable bytes, and line feed.
-It exists to validate the abstraction and its disabled-path cost before the
-complete command model is designed.
+The vertical slice currently models only justification, printable bytes, and
+line feed. It exists to validate the abstraction and its disabled-path cost
+before the complete command model is designed.
 
 ## Target production model
 
@@ -89,9 +89,8 @@ submitted input. The range, not a copied payload, is the authoritative link
 back to the immutable source. A future serialized trace may include raw bytes
 for convenience, but they must match that range exactly.
 
-The current proof uses only the starting offset as a temporary command ID. The
-production trace must record the complete range after parsing determines the
-command length.
+The current vertical slice records the complete range after parsing determines
+the command length and also uses that range for command relationships.
 
 Printable bytes may initially appear as individual commands. Grouping adjacent
 text bytes into display runs is a presentation decision and must not lose the
@@ -138,9 +137,10 @@ ambiguous. If the UI eventually needs exact final-visible selection, it should
 derive that view from command effects under separately documented overlap
 rules.
 
-The test-only proof currently records primitive paint requests and translates
-them through composition. It does not yet implement clipping, change detection,
-rectangle coalescing, or the requested/contributing distinction above.
+The test-only vertical slice records only primitive operations that change
+raster coverage, translates them through composition, and coalesces them into
+contributing rectangles per command and sheet. It does not yet expose requested
+bounds or define final-visible ownership when commands overlap.
 
 ### Buffered output and motion
 
@@ -188,18 +188,26 @@ Diagnostics must distinguish malformed or truncated input, an unimplemented
 valid command, a profile-unavailable command, an ignored command, clipped
 output, and a profile-confirmed behavioral deviation.
 
-## Current proof
+## Current vertical slice
 
-The test-only tracer renders centered text followed by `LF` and verifies that:
+The test-only tracer renders centered text followed by `LF` and assembles a
+crate-private `Trace` containing ordered `CommandTrace` entries. Each entry has
+its exact input byte range, a semantic `DecodedCommand`, and typed effects. The
+slice implements justification state changes, printer-position motion, flush
+relationships, and contributing `PaintRegion` rectangles with sheet indices.
+
+The end-to-end test verifies that:
 
 - traced and ordinary raster surfaces are identical;
-- the text's regions retain the printable byte's input offset;
-- line composition translates those regions into the centered sheet position;
-  and
-- `LF` moves the text without taking ownership of its painted regions.
+- `ESC a` records the `Left` to `Center` state transition without paint;
+- the text's coalesced rectangles retain the printable byte's input range and
+  are translated into the centered position on sheet zero; and
+- `LF` records its before/after position and its relationship to the flushed
+  text command without taking ownership of that command's paint.
 
-This proves the command-context and surface-composition mechanism. It does not
-make the test types or their in-memory representation a production trace model.
+The types are deliberately crate-private while their shape is validated. The
+slice does not yet trace other commands, return a partial trace on failure, or
+make its in-memory representation a stable public contract.
 
 ## Open design decisions
 

@@ -12,16 +12,16 @@ mod state;
 mod surface;
 mod symbols;
 mod text;
+mod trace;
 
 pub use error::{LimitKind, RenderError, RenderWarning};
 pub use surface::MonoSurface;
 
-use command::{
-    CommandRecord, CommandSink, DecodedCommand, NoTrace, execute_esc_command, execute_gs_command,
-};
+use command::{execute_esc_command, execute_gs_command};
 use escpost_profiles::PrinterProfile;
 use state::PrinterState;
 use surface::{RenderSurface, encode_png};
+use trace::{CommandSink, CommandTrace, DecodedCommand, Effect, NoTrace, Position};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RenderOptions {
@@ -168,12 +168,26 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
                 1
             }
             0x0a => {
-                state.line_feed()?;
                 if C::ENABLED {
-                    command_sink.record(CommandRecord {
+                    let (before_x, before_y) = state.trace_position();
+                    state.line_feed()?;
+                    let (after_x, after_y) = state.trace_position();
+                    command_sink.record(CommandTrace {
                         byte_range: offset..offset + 1,
                         command: DecodedCommand::LineFeed,
+                        effects: vec![Effect::Motion {
+                            before: Position {
+                                x: before_x,
+                                y: before_y,
+                            },
+                            after: Position {
+                                x: after_x,
+                                y: after_y,
+                            },
+                        }],
                     });
+                } else {
+                    state.line_feed()?;
                 }
                 1
             }
@@ -188,9 +202,10 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
             byte @ (0x20..=0x7e | 0x80..=0xff) => {
                 state.print_byte(byte, offset)?;
                 if C::ENABLED {
-                    command_sink.record(CommandRecord {
+                    command_sink.record(CommandTrace {
                         byte_range: offset..offset + 1,
                         command: DecodedCommand::TextByte(byte),
+                        effects: vec![],
                     });
                 }
                 1
@@ -233,27 +248,16 @@ fn validate_initial_limits(
 #[cfg(test)]
 mod trace_spike_tests {
     use super::{RenderOptions, render, render_surfaces_with_sink};
-    use crate::command::{CommandRecord, CommandSink, DecodedCommand};
     use crate::state::Justification;
     use crate::surface::tracing::TracingSurface;
+    use crate::trace::{
+        CommandTrace, DecodedCommand, Effect, Position, StateChange, TraceCollector,
+    };
     use escpost_profiles::compile_profile;
 
     const CAPABILITIES_JSON: &[u8] =
         include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
     const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
-
-    #[derive(Default)]
-    struct RecordingSink {
-        records: Vec<CommandRecord>,
-    }
-
-    impl CommandSink for RecordingSink {
-        const ENABLED: bool = true;
-
-        fn record(&mut self, record: CommandRecord) {
-            self.records.push(record);
-        }
-    }
 
     #[test]
     fn traced_render_attributes_centered_text_to_its_input_byte() {
@@ -262,7 +266,7 @@ mod trace_spike_tests {
         let input = [0x1b, b'a', 1, b'A', 0x0a];
 
         let ordinary = render(&input, &profile).expect("ordinary rendering should succeed");
-        let mut commands = RecordingSink::default();
+        let mut commands = TraceCollector::default();
         let traced = render_surfaces_with_sink::<TracingSurface, _>(
             &input,
             &profile,
@@ -271,23 +275,47 @@ mod trace_spike_tests {
         )
         .expect("traced rendering should succeed");
         let traced_sheet = &traced.surfaces[0];
+        let trace = commands.finish(&traced.surfaces);
 
         assert_eq!(
-            commands.records,
-            vec![
-                CommandRecord {
-                    byte_range: 0..3,
-                    command: DecodedCommand::SetJustification(Justification::Center),
-                },
-                CommandRecord {
-                    byte_range: 3..4,
-                    command: DecodedCommand::TextByte(b'A'),
-                },
-                CommandRecord {
-                    byte_range: 4..5,
-                    command: DecodedCommand::LineFeed,
-                },
-            ]
+            trace.commands[0],
+            CommandTrace {
+                byte_range: 0..3,
+                command: DecodedCommand::SetJustification(Justification::Center),
+                effects: vec![Effect::StateChange(StateChange::Justification {
+                    before: Justification::Left,
+                    after: Justification::Center,
+                })],
+            }
+        );
+        assert_eq!(trace.commands[1].byte_range, 3..4);
+        assert_eq!(trace.commands[1].command, DecodedCommand::TextByte(b'A'));
+        let [Effect::Paint { regions }] = trace.commands[1].effects.as_slice() else {
+            panic!("the printable byte should have exactly one paint effect");
+        };
+        assert!(!regions.is_empty());
+        assert!(regions.iter().all(|region| {
+            region.sheet_index == 0
+                && region.x >= 282
+                && region.x < 294
+                && region.width > 0
+                && region.height > 0
+        }));
+        assert_eq!(
+            trace.commands[2],
+            CommandTrace {
+                byte_range: 4..5,
+                command: DecodedCommand::LineFeed,
+                effects: vec![
+                    Effect::Motion {
+                        before: Position { x: 12, y: 0 },
+                        after: Position { x: 0, y: 30 },
+                    },
+                    Effect::Flush {
+                        commands: std::iter::once(3..4).collect(),
+                    },
+                ],
+            }
         );
 
         assert_eq!(traced_sheet.inner, ordinary.sheets[0].surface);

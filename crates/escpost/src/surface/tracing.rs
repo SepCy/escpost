@@ -51,8 +51,12 @@ impl RenderSurface for TracingSurface {
     }
 
     fn print_dot(&mut self, x: u32, y: u32) {
+        let was_printed = self.inner.is_printed(x, y);
         self.inner.print_dot(x, y);
-        if let Some(command_offset) = self.active_command {
+        if !was_printed
+            && self.inner.is_printed(x, y)
+            && let Some(command_offset) = self.active_command
+        {
             self.painted_regions.push(PaintedRegion {
                 command_offset,
                 x,
@@ -64,13 +68,16 @@ impl RenderSurface for TracingSurface {
     }
 
     fn blend_subpixel(&mut self, sx: u32, sy: u32, value: u8, add: bool) {
+        let before = self.inner.subpixel_coverage(sx, sy);
         self.inner.blend_subpixel(sx, sy, value, add);
-        // This proof uses scale 1, so subpixel and dot coordinates coincide.
-        if let Some(command_offset) = self.active_command {
+        let after = self.inner.subpixel_coverage(sx, sy);
+        if before != after
+            && let Some(command_offset) = self.active_command
+        {
             self.painted_regions.push(PaintedRegion {
                 command_offset,
-                x: sx,
-                y: sy,
+                x: sx / self.inner.scale(),
+                y: sy / self.inner.scale(),
                 width: 1,
                 height: 1,
             });

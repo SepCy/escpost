@@ -120,6 +120,14 @@ pub(crate) struct PrinterState<S: RenderSurface = MonoSurface> {
 }
 
 impl<S: RenderSurface> PrinterState<S> {
+    pub(crate) fn trace_justification(&self) -> Justification {
+        self.justification
+    }
+
+    pub(crate) fn trace_position(&self) -> (u32, u32) {
+        (self.print_x, self.line_top)
+    }
+
     pub(crate) fn new(
         profile: &PrinterProfile,
         limits: RenderLimits,

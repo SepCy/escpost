@@ -44,7 +44,6 @@ pub(crate) struct PaintRegion {
 pub(crate) enum Effect {
     StateChange(StateChange),
     Motion { before: Position, after: Position },
-    Flush { commands: Vec<Range<usize>> },
     Paint { regions: Vec<PaintRegion> },
 }
 
@@ -82,7 +81,6 @@ impl CommandSink for NoTrace {
 #[derive(Debug, Default)]
 pub(crate) struct TraceCollector {
     commands: Vec<CommandTrace>,
-    pending_printable_commands: Vec<Range<usize>>,
 }
 
 #[cfg(test)]
@@ -168,18 +166,7 @@ fn coalesce_dots(sheet_index: usize, dots: &BTreeSet<(u32, u32)>) -> Vec<PaintRe
 impl CommandSink for TraceCollector {
     const ENABLED: bool = true;
 
-    fn record(&mut self, mut command: CommandTrace) {
-        if matches!(&command.command, DecodedCommand::LineFeed)
-            && !self.pending_printable_commands.is_empty()
-        {
-            command.effects.push(Effect::Flush {
-                commands: std::mem::take(&mut self.pending_printable_commands),
-            });
-        }
-        if matches!(&command.command, DecodedCommand::TextByte(_)) {
-            self.pending_printable_commands
-                .push(command.byte_range.clone());
-        }
+    fn record(&mut self, command: CommandTrace) {
         self.commands.push(command);
     }
 }

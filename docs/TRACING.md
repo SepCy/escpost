@@ -106,7 +106,6 @@ nothing. A command can have more than one effect:
   print area, or line spacing.
 - **Motion** — logical print-position movement, including the positions before
   and after the command.
-- **Flush** — buffered commands committed to a sheet by another command.
 - **Device event** — a drawer pulse or another non-printing physical action.
 - **Sheet boundary** — a completed sheet and the cut that caused it.
 - **Ignored** — a valid command that had no effect, with a typed reason.
@@ -148,17 +147,21 @@ Standard-mode text and column graphics are first painted into a line-local
 surface. Their final sheet position is not known until a feed operation applies
 the print area and justification.
 
-In the production model, when `LF` flushes a line:
+Internally, when `LF` commits a line:
 
 1. regions already belong to the commands that produced the buffered content;
 2. composition translates those regions into final sheet coordinates;
-3. `LF` records a flush relationship to those commands; and
-4. `LF` records its own print-position movement.
+3. `LF` records its own print-position movement.
 
-`LF` does not take ownership of the flushed pixels. In the web interface,
-hovering the printable command highlights its final rectangle. Hovering `LF`
-can show before/after position markers, a paper-advance indicator, and a
-secondary highlight of the commands it flushed.
+`LF` does not take ownership of the committed pixels. In the web interface,
+hovering the printable command highlights its final rectangle, while hovering
+`LF` can show before/after position markers and a paper-advance indicator.
+
+The trace does not currently expose a relationship between the command that
+created buffered content and the command that committed it. Exact commit timing
+can depend on printer firmware, buffer capacity, configuration, and documented
+profile deviations. Add such a relationship only when a user-facing need and
+the profile model can give it defensible semantics.
 
 The same rule applies to other positioning and feed commands: they record
 motion rather than fabricated paint.
@@ -193,8 +196,8 @@ output, and a profile-confirmed behavioral deviation.
 The test-only tracer renders centered text followed by `LF` and assembles a
 crate-private `Trace` containing ordered `CommandTrace` entries. Each entry has
 its exact input byte range, a semantic `DecodedCommand`, and typed effects. The
-slice implements justification state changes, printer-position motion, flush
-relationships, and contributing `PaintRegion` rectangles with sheet indices.
+slice implements justification state changes, printer-position motion, and
+contributing `PaintRegion` rectangles with sheet indices.
 
 The end-to-end test verifies that:
 
@@ -202,8 +205,8 @@ The end-to-end test verifies that:
 - `ESC a` records the `Left` to `Center` state transition without paint;
 - the text's coalesced rectangles retain the printable byte's input range and
   are translated into the centered position on sheet zero; and
-- `LF` records its before/after position and its relationship to the flushed
-  text command without taking ownership of that command's paint.
+- `LF` records its before/after position without taking ownership of the text
+  command's paint.
 
 The types are deliberately crate-private while their shape is validated. The
 slice does not yet trace other commands, return a partial trace on failure, or

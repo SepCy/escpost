@@ -306,15 +306,10 @@ mod trace_spike_tests {
             CommandTrace {
                 byte_range: 4..5,
                 command: DecodedCommand::LineFeed,
-                effects: vec![
-                    Effect::Motion {
-                        before: Position { x: 12, y: 0 },
-                        after: Position { x: 0, y: 30 },
-                    },
-                    Effect::Flush {
-                        commands: std::iter::once(3..4).collect(),
-                    },
-                ],
+                effects: vec![Effect::Motion {
+                    before: Position { x: 12, y: 0 },
+                    after: Position { x: 0, y: 30 },
+                }],
             }
         );
 

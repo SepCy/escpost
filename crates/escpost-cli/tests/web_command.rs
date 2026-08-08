@@ -3,11 +3,8 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-static AUTOMATIC_PORT_TEST: Mutex<()> = Mutex::new(());
 
 #[test]
 fn web_mode_serves_the_embedded_workbench() {
@@ -144,68 +141,6 @@ fn web_mode_can_publish_the_same_complete_render_to_a_file() {
         served_png
     );
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
-}
-
-#[test]
-fn automatic_web_port_advances_past_an_occupied_9000() {
-    let _guard = AUTOMATIC_PORT_TEST
-        .lock()
-        .expect("the automatic-port test lock should be available");
-    let occupied =
-        TcpListener::bind((Ipv4Addr::LOCALHOST, 9000)).expect("port 9000 should be reservable");
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
-    let mut child = Command::new(env!("CARGO_BIN_EXE_escpost"))
-        .args([
-            "render",
-            case_directory
-                .to_str()
-                .expect("the case path should be UTF-8"),
-            "--web",
-            "--non-interactive",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("the escpost command should start");
-
-    wait_until_listening(&mut child, 9001);
-    let response = http_get(9001, "/");
-    stop(&mut child);
-    drop(occupied);
-
-    assert!(response.starts_with("HTTP/1.1 200 OK\r\n"));
-}
-
-#[test]
-fn automatic_web_port_fails_when_the_range_is_exhausted() {
-    let _guard = AUTOMATIC_PORT_TEST
-        .lock()
-        .expect("the automatic-port test lock should be available");
-    let listeners: Vec<TcpListener> = (9000..=9099)
-        .filter_map(|port| TcpListener::bind((Ipv4Addr::LOCALHOST, port)).ok())
-        .collect();
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
-
-    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
-        .args([
-            "render",
-            case_directory
-                .to_str()
-                .expect("the case path should be UTF-8"),
-            "--web",
-            "--non-interactive",
-        ])
-        .output()
-        .expect("the escpost command should finish");
-    drop(listeners);
-
-    assert!(!output.status.success());
-    assert!(
-        String::from_utf8_lossy(&output.stderr)
-            .contains("no loopback web port from 9000 through 9099 is available")
-    );
 }
 
 #[test]

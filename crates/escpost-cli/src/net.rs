@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::io::ErrorKind;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::ops::RangeInclusive;
@@ -23,15 +24,30 @@ pub(crate) async fn bind_loopback(
     requested: Option<SocketAddr>,
     automatic_ports: RangeInclusive<u16>,
 ) -> Result<TcpListener, BindFailure> {
+    bind_loopback_with(requested, automatic_ports, |address| {
+        TcpListener::bind(address)
+    })
+    .await
+}
+
+async fn bind_loopback_with<T, F, Fut>(
+    requested: Option<SocketAddr>,
+    automatic_ports: RangeInclusive<u16>,
+    mut bind: F,
+) -> Result<T, BindFailure>
+where
+    F: FnMut(SocketAddr) -> Fut,
+    Fut: Future<Output = Result<T, std::io::Error>>,
+{
     if let Some(address) = requested {
-        return TcpListener::bind(address)
+        return bind(address)
             .await
             .map_err(|source| BindFailure::Address { address, source });
     }
 
     for port in automatic_ports {
         let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
-        match TcpListener::bind(address).await {
+        match bind(address).await {
             Ok(listener) => return Ok(listener),
             Err(error) if error.kind() == ErrorKind::AddrInUse => {}
             Err(source) => return Err(BindFailure::Address { address, source }),
@@ -42,58 +58,68 @@ pub(crate) async fn bind_loopback(
 
 #[cfg(test)]
 mod tests {
-    use std::net::{Ipv4Addr, SocketAddr};
+    use std::collections::VecDeque;
+    use std::io::{Error, ErrorKind};
+    use std::net::SocketAddr;
 
-    use super::{BindFailure, bind_loopback};
-
-    /// Hold an operating-system-selected loopback port so the tests stay
-    /// independent of whatever fixed ports the host happens to use.
-    async fn reserved_port() -> (tokio::net::TcpListener, u16) {
-        let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
-            .await
-            .expect("an ephemeral port should be bindable");
-        let port = listener
-            .local_addr()
-            .expect("the listener should have an address")
-            .port();
-        (listener, port)
-    }
+    use super::{BindFailure, bind_loopback_with};
 
     #[tokio::test]
     async fn an_automatic_bind_escalates_past_a_busy_port() {
-        let (_occupied, busy) = reserved_port().await;
+        let mut outcomes =
+            VecDeque::from([Err(Error::from(ErrorKind::AddrInUse)), Ok("second port")]);
+        let mut attempts = Vec::new();
+        let listener = bind_loopback_with(None, 9000..=9002, |address| {
+            attempts.push(address);
+            std::future::ready(outcomes.pop_front().expect("one outcome per attempt"))
+        })
+        .await
+        .expect("a free port should follow the busy one");
 
-        let listener = bind_loopback(None, busy..=busy.saturating_add(8))
-            .await
-            .expect("a free port should follow the busy one");
-        let chosen = listener
-            .local_addr()
-            .expect("the listener should have an address")
-            .port();
-
-        assert!(
-            chosen > busy,
-            "escalation should advance past the busy port"
+        assert_eq!(listener, "second port");
+        assert_eq!(
+            attempts,
+            [
+                "127.0.0.1:9000"
+                    .parse::<SocketAddr>()
+                    .expect("valid address"),
+                "127.0.0.1:9001"
+                    .parse::<SocketAddr>()
+                    .expect("valid address"),
+            ]
         );
     }
 
     #[tokio::test]
     async fn an_explicit_busy_address_is_a_strict_error() {
-        let (_occupied, busy) = reserved_port().await;
-        let address = SocketAddr::from((Ipv4Addr::LOCALHOST, busy));
+        let address: SocketAddr = "127.0.0.1:9000".parse().expect("valid address");
 
-        let outcome = bind_loopback(Some(address), 9000..=9099).await;
+        let mut attempts = Vec::new();
+        let outcome = bind_loopback_with(Some(address), 9000..=9099, |attempt| {
+            attempts.push(attempt);
+            std::future::ready(Err::<(), _>(Error::from(ErrorKind::AddrInUse)))
+        })
+        .await;
 
         assert!(matches!(outcome, Err(BindFailure::Address { .. })));
+        assert_eq!(attempts, [address]);
     }
 
     #[tokio::test]
     async fn an_exhausted_range_reports_range_exhausted() {
-        let (_occupied, busy) = reserved_port().await;
-
-        // The only port in the range is already taken, so there is nowhere to go.
-        let outcome = bind_loopback(None, busy..=busy).await;
+        let mut attempts = Vec::new();
+        let outcome = bind_loopback_with(None, 9000..=9002, |address| {
+            attempts.push(address);
+            std::future::ready(Err::<(), _>(Error::from(ErrorKind::AddrInUse)))
+        })
+        .await;
 
         assert!(matches!(outcome, Err(BindFailure::RangeExhausted)));
+        assert_eq!(
+            attempts,
+            (9000..=9002)
+                .map(|port| SocketAddr::from(([127, 0, 0, 1], port)))
+                .collect::<Vec<_>>()
+        );
     }
 }

@@ -2,7 +2,7 @@
 
 use crate::state::{BufferedGraphics, HriPosition, Justification, PrinterState};
 use crate::surface::RenderSurface;
-use crate::trace::{CommandSink, CommandTrace, DecodedCommand, Effect, StateChange};
+use crate::trace::{CommandSink, DecodedCommand, Effect, StateChange};
 use crate::{RenderError, barcode, qr};
 use escpost_profiles::BarcodeSystem;
 
@@ -170,21 +170,17 @@ pub(crate) fn execute_esc_command<S: RenderSurface, C: CommandSink>(
                 let before = state.trace_justification();
                 state.set_justification(justification);
                 let after = state.trace_justification();
-                command_sink.record(
-                    state.trace_sheet_index(),
-                    CommandTrace {
-                        byte_range: offset..offset + 3,
-                        command: DecodedCommand::SetJustification(justification.into()),
-                        effects: (before != after)
-                            .then(|| {
-                                Effect::StateChange(StateChange::Justification {
-                                    before: before.into(),
-                                    after: after.into(),
-                                })
+                command_sink.describe_command(
+                    DecodedCommand::SetJustification(justification.into()),
+                    (before != after)
+                        .then(|| {
+                            Effect::StateChange(StateChange::Justification {
+                                before: before.into(),
+                                after: after.into(),
                             })
-                            .into_iter()
-                            .collect(),
-                    },
+                        })
+                        .into_iter()
+                        .collect(),
                 );
             } else {
                 state.set_justification(justification);
@@ -449,19 +445,9 @@ pub(crate) fn execute_gs_command<S: RenderSurface, C: CommandSink>(
         0x6b => execute_gs_k(data, offset, state),
         0x56 => execute_gs_v(data, offset, state),
         0x76 => {
-            if C::ENABLED {
-                state.begin_command(offset);
-            }
             let command_length = execute_gs_v0(data, offset, state)?;
             if C::ENABLED && command_length > 3 {
-                command_sink.record(
-                    state.trace_sheet_index(),
-                    CommandTrace {
-                        byte_range: offset..offset + command_length,
-                        command: DecodedCommand::RasterImage,
-                        effects: vec![],
-                    },
-                );
+                command_sink.describe_command(DecodedCommand::RasterImage, vec![]);
             }
             Ok(command_length)
         }
@@ -846,18 +832,11 @@ fn execute_gs_parenthesized_k<S: RenderSurface, C: CommandSink>(
         });
     };
     let prints_qr = parameters.starts_with(&[49, 81]);
-    if C::ENABLED && prints_qr {
-        state.begin_command(offset);
-    }
     execute_qr_function(parameters, offset, state)?;
     if C::ENABLED && prints_qr {
-        command_sink.record(
-            state.trace_sheet_index(),
-            CommandTrace {
-                byte_range: offset..offset + command_length,
-                command: DecodedCommand::QrCode(state.trace_qr_data().to_vec()),
-                effects: vec![],
-            },
+        command_sink.describe_command(
+            DecodedCommand::QrCode(state.trace_qr_data().to_vec()),
+            vec![],
         );
     }
     Ok(command_length)

@@ -92,32 +92,29 @@ pub struct Trace {
 pub(crate) trait CommandSink {
     const ENABLED: bool;
 
-    fn record(&mut self, sheet_index: usize, command: CommandTrace);
+    fn begin_command(&mut self, sheet_index: usize, offset: usize);
+    fn describe_command(&mut self, command: DecodedCommand, effects: Vec<Effect>);
+    fn finish_command(&mut self, end_offset: usize);
 }
 
 #[inline]
 pub(crate) fn execute_line_feed<S: RenderSurface, C: CommandSink>(
     state: &mut PrinterState<S>,
     command_sink: &mut C,
-    offset: usize,
 ) -> Result<(), RenderError> {
     if C::ENABLED {
         let before = state.trace_line_feed_start_position();
         state.line_feed()?;
         let after = state.trace_position();
-        command_sink.record(
-            state.trace_sheet_index(),
-            CommandTrace {
-                byte_range: offset..offset + 1,
-                command: DecodedCommand::LineFeed,
-                effects: (before != after)
-                    .then_some(Effect::Motion {
-                        before: position(before),
-                        after: position(after),
-                    })
-                    .into_iter()
-                    .collect(),
-            },
+        command_sink.describe_command(
+            DecodedCommand::LineFeed,
+            (before != after)
+                .then_some(Effect::Motion {
+                    before: position(before),
+                    after: position(after),
+                })
+                .into_iter()
+                .collect(),
         );
     } else {
         state.line_feed()?;
@@ -132,19 +129,9 @@ pub(crate) fn execute_text_byte<S: RenderSurface, C: CommandSink>(
     byte: u8,
     offset: usize,
 ) -> Result<(), RenderError> {
-    if C::ENABLED {
-        state.begin_command(offset);
-    }
     state.print_byte(byte, offset)?;
     if C::ENABLED {
-        command_sink.record(
-            state.trace_sheet_index(),
-            CommandTrace {
-                byte_range: offset..offset + 1,
-                command: DecodedCommand::TextByte(byte),
-                effects: vec![],
-            },
-        );
+        command_sink.describe_command(DecodedCommand::TextByte(byte), vec![]);
     }
     Ok(())
 }
@@ -159,14 +146,32 @@ impl CommandSink for NoTrace {
     const ENABLED: bool = false;
 
     #[inline]
-    fn record(&mut self, _sheet_index: usize, _command: CommandTrace) {
+    fn begin_command(&mut self, _sheet_index: usize, _offset: usize) {
         unreachable!("NoTrace commands are guarded by CommandSink::ENABLED")
     }
+
+    #[inline]
+    fn describe_command(&mut self, _command: DecodedCommand, _effects: Vec<Effect>) {
+        unreachable!("NoTrace commands are guarded by CommandSink::ENABLED")
+    }
+
+    #[inline]
+    fn finish_command(&mut self, _end_offset: usize) {
+        unreachable!("NoTrace commands are guarded by CommandSink::ENABLED")
+    }
+}
+
+#[derive(Debug)]
+struct PendingCommand {
+    sheet_index: usize,
+    start_offset: usize,
+    description: Option<(DecodedCommand, Vec<Effect>)>,
 }
 
 #[derive(Debug, Default)]
 pub(crate) struct TraceCollector {
     commands: Vec<(usize, CommandTrace)>,
+    pending: Option<PendingCommand>,
 }
 
 impl TraceCollector {
@@ -219,8 +224,40 @@ fn command_bounds(surface: &TracingSurface, command_offset: usize) -> Option<Pai
 impl CommandSink for TraceCollector {
     const ENABLED: bool = true;
 
-    fn record(&mut self, sheet_index: usize, command: CommandTrace) {
-        self.commands.push((sheet_index, command));
+    fn begin_command(&mut self, sheet_index: usize, offset: usize) {
+        debug_assert!(self.pending.is_none());
+        self.pending = Some(PendingCommand {
+            sheet_index,
+            start_offset: offset,
+            description: None,
+        });
+    }
+
+    fn describe_command(&mut self, command: DecodedCommand, effects: Vec<Effect>) {
+        let pending = self
+            .pending
+            .as_mut()
+            .expect("traced command descriptions require an active command");
+        debug_assert!(pending.description.is_none());
+        pending.description = Some((command, effects));
+    }
+
+    fn finish_command(&mut self, end_offset: usize) {
+        let pending = self
+            .pending
+            .take()
+            .expect("traced command finalization requires an active command");
+        let Some((command, effects)) = pending.description else {
+            return;
+        };
+        self.commands.push((
+            pending.sheet_index,
+            CommandTrace {
+                byte_range: pending.start_offset..end_offset,
+                command,
+                effects,
+            },
+        ));
     }
 }
 

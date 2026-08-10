@@ -212,18 +212,20 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
         let byte = data[offset];
         if C::ENABLED {
             state.end_command();
+            state.begin_command(offset);
+            command_sink.begin_command(state.trace_sheet_index(), offset);
         }
         if byte != 0x0a {
             state.clear_pending_gs_v_0_lf();
         }
 
-        offset += match byte {
+        let command_length = match byte {
             0x09 => {
                 state.horizontal_tab()?;
                 1
             }
             0x0a => {
-                trace::execute_line_feed(&mut state, command_sink, offset)?;
+                trace::execute_line_feed(&mut state, command_sink)?;
                 1
             }
             0x0d => {
@@ -240,6 +242,10 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
             }
             byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
         };
+        if C::ENABLED {
+            command_sink.finish_command(offset + command_length);
+        }
+        offset += command_length;
     }
 
     let device_events = std::mem::take(&mut state.device_events);

@@ -35,8 +35,8 @@ docker compose run --rm test cargo test -p escpost --test golden_cases -- --noca
 
 ### Running the CLI
 
-The `cli` service wraps the compiled binary (see `scripts/cli-entrypoint`) and
-maps USB devices plus a checkout-local config directory:
+The `cli` service builds and runs the compiled binary, and maps USB devices plus
+a checkout-local config directory:
 
 ```bash
 docker compose run --rm cli render examples/hello.escpos --output-dir local/out

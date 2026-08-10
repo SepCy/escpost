@@ -820,56 +820,6 @@ fn development_wrapper_creates_the_checkout_local_config_source() {
 }
 
 #[cfg(unix)]
-#[test]
-fn development_entrypoint_runs_the_rust_cli_with_forwarded_arguments() {
-    let directory = temporary_directory("entrypoint-route");
-    let target_directory = directory.join("target");
-    fs::create_dir_all(target_directory.join("debug"))
-        .expect("the fake target directory should be creatable");
-    write_executable(&directory.join("cargo"), "#!/bin/sh\nexit 0\n");
-    write_executable(
-        &target_directory.join("debug/escpost"),
-        "#!/bin/sh\nprintf 'rust-command: %s\\n' \"$*\"\n",
-    );
-    let repository = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-
-    // A leading `--config` option once had to be parsed so the bridge would not
-    // mistake its value for a subcommand. The entrypoint now forwards every
-    // argument to the Rust executable unchanged.
-    let output = Command::new("sh")
-        .arg(repository.join("scripts/cli-entrypoint"))
-        .args([
-            "printers",
-            "--config",
-            "/tmp/printers.toml",
-            "add",
-            "--help",
-        ])
-        .env(
-            "PATH",
-            format!(
-                "{}:/usr/bin:/bin",
-                directory.to_str().expect("the test path should be UTF-8")
-            ),
-        )
-        .env("CARGO_TARGET_DIR", &target_directory)
-        .current_dir(repository)
-        .output()
-        .expect("the development entrypoint should finish");
-
-    assert!(
-        output.status.success(),
-        "entrypoint failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "rust-command: printers --config /tmp/printers.toml add --help\n"
-    );
-    fs::remove_dir_all(directory).expect("the test directory should be removable");
-}
-
-#[cfg(unix)]
 fn run_non_interactive_add(config: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args(["--non-interactive", "printers", "--config"])

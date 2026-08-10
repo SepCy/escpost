@@ -309,10 +309,11 @@ fn execute_esc_star<S: RenderSurface>(
     Ok(command_length)
 }
 
-pub(crate) fn execute_gs_command<S: RenderSurface>(
+pub(crate) fn execute_gs_command<S: RenderSurface, C: CommandSink>(
     data: &[u8],
     offset: usize,
     state: &mut PrinterState<S>,
+    command_sink: &mut C,
 ) -> Result<usize, RenderError> {
     let Some(command) = data.get(1).copied() else {
         return Err(RenderError::TruncatedCommand {
@@ -334,7 +335,7 @@ pub(crate) fn execute_gs_command<S: RenderSurface>(
         }
         0x28 => match data.get(2) {
             Some(b'L') => execute_gs_parenthesized_l(data, offset, state),
-            Some(b'k') => execute_gs_parenthesized_k(data, offset, state),
+            Some(b'k') => execute_gs_parenthesized_k(data, offset, state, command_sink),
             Some(_) => Err(RenderError::UnsupportedGsCommand {
                 command: 0x28,
                 offset,
@@ -447,7 +448,23 @@ pub(crate) fn execute_gs_command<S: RenderSurface>(
         }
         0x6b => execute_gs_k(data, offset, state),
         0x56 => execute_gs_v(data, offset, state),
-        0x76 => execute_gs_v0(data, offset, state),
+        0x76 => {
+            if C::ENABLED {
+                state.begin_command(offset);
+            }
+            let command_length = execute_gs_v0(data, offset, state)?;
+            if C::ENABLED && command_length > 3 {
+                command_sink.record(
+                    state.trace_sheet_index(),
+                    CommandTrace {
+                        byte_range: offset..offset + command_length,
+                        command: DecodedCommand::RasterImage,
+                        effects: vec![],
+                    },
+                );
+            }
+            Ok(command_length)
+        }
         0x77 => {
             let Some(width) = data.get(2).copied() else {
                 return Err(RenderError::TruncatedCommand {
@@ -806,10 +823,11 @@ fn execute_gs_parenthesized_l<S: RenderSurface>(
     Ok(command_length)
 }
 
-fn execute_gs_parenthesized_k<S: RenderSurface>(
+fn execute_gs_parenthesized_k<S: RenderSurface, C: CommandSink>(
     data: &[u8],
     offset: usize,
     state: &mut PrinterState<S>,
+    command_sink: &mut C,
 ) -> Result<usize, RenderError> {
     if data.len() < 5 || data[2] != b'k' {
         return Err(RenderError::TruncatedCommand {
@@ -827,7 +845,21 @@ fn execute_gs_parenthesized_k<S: RenderSurface>(
             offset,
         });
     };
+    let prints_qr = parameters.starts_with(&[49, 81]);
+    if C::ENABLED && prints_qr {
+        state.begin_command(offset);
+    }
     execute_qr_function(parameters, offset, state)?;
+    if C::ENABLED && prints_qr {
+        command_sink.record(
+            state.trace_sheet_index(),
+            CommandTrace {
+                byte_range: offset..offset + command_length,
+                command: DecodedCommand::QrCode(state.trace_qr_data().to_vec()),
+                effects: vec![],
+            },
+        );
+    }
     Ok(command_length)
 }
 

@@ -90,8 +90,21 @@ fn web_mode_exposes_ordered_sheet_metadata_and_png_bytes() {
 fn web_mode_exposes_experimental_command_traces() {
     let temporary_directory = temporary_directory("command-trace");
     let input_path = temporary_directory.join("receipt.bin");
-    fs::write(&input_path, [0x1b, b'a', 1, b'A', 0x0a])
-        .expect("the traced input should be writable");
+    let qr_content = b"https://example.test";
+    let mut input = vec![0x1b, b'a', 1, b'A', 0x0a];
+    input.extend_from_slice(&[
+        0x1d,
+        b'(',
+        b'k',
+        (qr_content.len() + 3) as u8,
+        0,
+        49,
+        80,
+        48,
+    ]);
+    input.extend_from_slice(qr_content);
+    input.extend_from_slice(&[0x1d, b'(', b'k', 3, 0, 49, 81, 48]);
+    fs::write(&input_path, input).expect("the traced input should be writable");
     let port = unused_loopback_port();
     let mut child = start_file_web(&input_path, port, false);
 
@@ -105,7 +118,7 @@ fn web_mode_exposes_experimental_command_traces() {
     let commands = metadata["sheets"][0]["commands"]
         .as_array()
         .expect("commands should be an array");
-    assert_eq!(commands.len(), 3);
+    assert_eq!(commands.len(), 4);
     assert_eq!(commands[0]["byte_start"], 0);
     assert_eq!(commands[0]["byte_end"], 3);
     assert_eq!(commands[0]["name"], "ESC a");
@@ -120,6 +133,10 @@ fn web_mode_exposes_experimental_command_traces() {
     assert_eq!(bounds["height"], 24);
     assert_eq!(commands[2]["name"], "LF");
     assert_eq!(commands[2]["effects"][0]["type"], "motion");
+    assert_eq!(commands[3]["name"], "GS ( k");
+    assert_eq!(commands[3]["detail"], "Print QR code · Function 181");
+    assert_eq!(commands[3]["annotation"]["label"], "https://example.test");
+    assert_eq!(commands[3]["annotation"]["content"], "https://example.test");
 
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
 }

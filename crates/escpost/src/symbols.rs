@@ -212,6 +212,8 @@ impl<S: RenderSurface> PrinterState<S> {
         let physical_left = self.print_area_left.saturating_add(symbol_left);
         let next_line_top = self.line_top.saturating_add(symbol_size);
         self.validate_roll_height(next_line_top)?;
+        self.roll
+            .mark_region(physical_left, self.line_top, symbol_size, symbol_size);
 
         for (index, dark) in encoded.modules.into_iter().enumerate() {
             if !dark {

@@ -71,6 +71,12 @@ impl<S: RenderSurface> PrinterState<S> {
             .line_top
             .saturating_add(height_dots as u32 * vertical_scale);
         self.validate_roll_height(next_line_top)?;
+        self.roll.mark_region(
+            physical_left,
+            self.line_top,
+            image_width.min(print_area_right.saturating_sub(physical_left)),
+            height_dots as u32 * vertical_scale,
+        );
 
         for (source_y, row) in payload.chunks_exact(width_bytes).enumerate() {
             for (byte_index, byte) in row.iter().copied().enumerate() {

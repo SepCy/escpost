@@ -73,10 +73,11 @@ release benchmark in `examples/render_bench.rs`. Exact machine-code identity
 is a compiler outcome rather than a Rust language guarantee, so benchmark
 comparisons remain part of changes to this seam.
 
-The vertical slice currently models only justification, printable bytes, and
-line feed. Other commands still render normally but do not receive trace
-entries. The slice validates the abstraction, its disabled-path cost, and an
-end-to-end consumer before the complete command model is designed.
+The vertical slice currently models justification, printable bytes, line feed,
+`GS v 0` raster images, and QR print operations. Other commands still render
+normally but do not receive trace entries. The slice validates the abstraction,
+its disabled-path cost, and an end-to-end consumer before the complete command
+model is designed.
 
 ## Experimental public API
 
@@ -108,7 +109,7 @@ command executed. For now, one command is assumed to affect at most one sheet.
 ## Target production model
 
 The following sections specify intended production behavior. The current
-implementation produces complete entries only for its three supported command
+implementation produces complete entries only for its five supported command
 types; its narrower guarantees are listed under
 [Current vertical slice](#current-vertical-slice).
 
@@ -121,6 +122,9 @@ for convenience, but they must match that range exactly.
 
 The current vertical slice records the complete range after parsing determines
 the command length and uses its starting offset to attribute logical bounds.
+The QR print entry additionally carries the effective stored QR payload so a
+consumer can label the symbol; this is derived state, not a replacement for the
+print command's authoritative input range.
 
 Printable bytes may initially appear as individual commands. Grouping adjacent
 text bytes into display runs is a presentation decision and must not lose the
@@ -232,8 +236,10 @@ The tracer assembles a public experimental `Trace` containing one ordered
 `SheetTrace` per rendered sheet. Each `CommandTrace` has its exact input byte
 range, a semantic `DecodedCommand`, and typed effects. The slice implements
 justification state changes, printer-position motion, and one logical
-`PaintRegion` bound for printable bytes. `ESC a` and `LF` receive their
-respective state-change and motion effects without fabricated paint.
+`PaintRegion` bound for printable bytes, `GS v 0` raster images, and QR print
+operations. Image bounds cover their complete logical drawing area rather than
+only their dark pixels. `ESC a` and `LF` receive their respective state-change
+and motion effects without fabricated paint.
 
 The end-to-end test verifies that:
 
@@ -243,7 +249,11 @@ The end-to-end test verifies that:
   translated into their final position on the active sheet;
 - commands before and after a cut are grouped under their respective sheets;
 - `LF` records its before/after position without taking ownership of the text
-  command's paint.
+  command's paint;
+- raster images retain their full logical dimensions even when most pixels are
+  blank;
+- QR storage remains untraced while the print operation owns the symbol bounds
+  and exposes its effective stored payload.
 
 The slice does not yet trace other commands, return a partial trace on failure,
 or make its in-memory representation a stable public contract.
@@ -251,7 +261,7 @@ or make its in-memory representation a stable public contract.
 ## Web workbench
 
 When the CLI web mode is active, it uses the traced renderer and exposes the
-three currently supported command types through `/api/render`. Non-web CLI
+five currently supported command types through `/api/render`. Non-web CLI
 rendering continues to call the ordinary renderer.
 
 The workbench shows a command list beside the authoritative PNG receipt. Each
@@ -259,8 +269,12 @@ receipt image has an SVG overlay in the same printer-dot coordinate system.
 Hovering or focusing a command highlights its logical drawing bounds; hovering
 the bound previews the corresponding command; clicking either side pins or
 unpins the selection. State-only and motion-only commands remain selectable in
-the list but have no fabricated painted rectangle. On narrow screens the
-receipt appears before the command list.
+the list but have no fabricated painted rectangle. QR bounds carry a badge on
+their bottom edge containing a display-safe form of the encoded payload.
+Activating the badge copies the exact text payload; an `http://` or `https://`
+payload also opens in a new tab. The QR command item repeats the payload as a
+link when applicable and always provides a separate copy control. On narrow
+screens the receipt appears before the command list.
 
 ## Open design decisions
 

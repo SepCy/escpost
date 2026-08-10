@@ -14,6 +14,8 @@ pub enum DecodedCommand {
     SetJustification(Justification),
     TextByte(u8),
     LineFeed,
+    RasterImage,
+    QrCode(Vec<u8>),
 }
 
 /// Experimental justification value used by command traces.
@@ -312,7 +314,7 @@ mod tests {
     fn unsupported_paint_commands_do_not_retain_trace_provenance() {
         let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
             .expect("the reference profile should compile");
-        let input = [0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0xff];
+        let input = [0x1b, b'*', 1, 1, 0, 0xff];
         let mut commands = TraceCollector::default();
 
         let traced = render_surfaces_with_sink::<TracingSurface, _>(

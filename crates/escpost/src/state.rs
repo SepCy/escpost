@@ -124,6 +124,10 @@ impl<S: RenderSurface> PrinterState<S> {
         self.justification
     }
 
+    pub(crate) fn trace_qr_data(&self) -> &[u8] {
+        self.stored_qr_data.as_deref().unwrap_or_default()
+    }
+
     pub(crate) fn trace_position(&self) -> (u32, u32) {
         (
             self.print_area_left.saturating_add(self.print_x),

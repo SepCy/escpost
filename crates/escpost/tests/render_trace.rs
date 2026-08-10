@@ -85,6 +85,52 @@ fn a_space_has_logical_bounds_without_ink() {
 }
 
 #[test]
+fn raster_image_trace_uses_the_complete_logical_image_area() {
+    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+        .expect("the reference profile should compile");
+    let input = [0x1d, b'v', b'0', 0, 1, 0, 2, 0, 0x80, 0x00];
+
+    let traced = render_with_trace(&input, &profile).expect("the raster image should render");
+    let [command] = traced.trace.sheets[0].commands.as_slice() else {
+        panic!("the raster image should produce one trace command");
+    };
+
+    assert_eq!(command.byte_range, 0..input.len());
+    assert_eq!(command.command, DecodedCommand::RasterImage);
+    let [Effect::Paint { bounds }] = command.effects.as_slice() else {
+        panic!("the raster image should expose its logical bounds");
+    };
+    assert_eq!(
+        (bounds.x, bounds.y, bounds.width, bounds.height),
+        (0, 0, 8, 2)
+    );
+}
+
+#[test]
+fn qr_trace_attributes_bounds_to_the_print_command_only() {
+    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+        .expect("the reference profile should compile");
+    let input = [
+        0x1d, b'(', b'k', 4, 0, 49, 80, 48, b'A', 0x1d, b'(', b'k', 3, 0, 49, 81, 48,
+    ];
+
+    let traced = render_with_trace(&input, &profile).expect("the QR code should render");
+    let [command] = traced.trace.sheets[0].commands.as_slice() else {
+        panic!("only the QR print operation should produce a trace command");
+    };
+
+    assert_eq!(command.byte_range, 9..17);
+    assert_eq!(command.command, DecodedCommand::QrCode(vec![b'A']));
+    let [Effect::Paint { bounds }] = command.effects.as_slice() else {
+        panic!("the QR print operation should expose its logical bounds");
+    };
+    assert_eq!(
+        (bounds.x, bounds.y, bounds.width, bounds.height),
+        (0, 0, 63, 63)
+    );
+}
+
+#[test]
 fn commands_are_grouped_under_the_sheet_active_when_they_execute() {
     let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
         .expect("the reference profile should compile");

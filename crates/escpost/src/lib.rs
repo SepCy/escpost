@@ -231,7 +231,7 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
                 1
             }
             0x1b => execute_esc_command(&data[offset..], offset, &mut state, command_sink)?,
-            0x1d => execute_gs_command(&data[offset..], offset, &mut state)?,
+            0x1d => execute_gs_command(&data[offset..], offset, &mut state, command_sink)?,
             // ESC/POS code pages retain ASCII in 20h–7Eh and assign printable
             // characters to 80h–FFh. Control bytes remain parser input.
             byte @ (0x20..=0x7e | 0x80..=0xff) => {

@@ -109,7 +109,15 @@ struct CommandResponse {
     byte_end: usize,
     name: &'static str,
     detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    annotation: Option<AnnotationResponse>,
     effects: Vec<EffectResponse>,
+}
+
+#[derive(Clone, Serialize)]
+struct AnnotationResponse {
+    label: String,
+    content: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -325,10 +333,11 @@ fn command_responses(commands: Vec<CommandTrace>) -> Vec<CommandResponse> {
     commands
         .into_iter()
         .map(|command| {
-            let (name, detail) = match command.command {
+            let (name, detail, annotation) = match command.command {
                 DecodedCommand::SetJustification(justification) => (
                     "ESC a",
                     format!("Set justification: {}", justification_name(justification)),
+                    None,
                 ),
                 DecodedCommand::TextByte(byte) => (
                     "Text",
@@ -337,18 +346,46 @@ fn command_responses(commands: Vec<CommandTrace>) -> Vec<CommandResponse> {
                     } else {
                         format!("0x{byte:02X}")
                     },
+                    None,
                 ),
-                DecodedCommand::LineFeed => ("LF", "Print and line feed".to_owned()),
+                DecodedCommand::LineFeed => ("LF", "Print and line feed".to_owned(), None),
+                DecodedCommand::RasterImage => ("GS v 0", "Print raster image".to_owned(), None),
+                DecodedCommand::QrCode(data) => (
+                    "GS ( k",
+                    "Print QR code · Function 181".to_owned(),
+                    Some(qr_annotation(&data)),
+                ),
             };
             CommandResponse {
                 byte_start: command.byte_range.start,
                 byte_end: command.byte_range.end,
                 name,
                 detail,
+                annotation,
                 effects: command.effects.into_iter().map(effect_response).collect(),
             }
         })
         .collect()
+}
+
+fn qr_annotation(data: &[u8]) -> AnnotationResponse {
+    match std::str::from_utf8(data) {
+        Ok(text) => AnnotationResponse {
+            label: text.chars().flat_map(char::escape_default).collect(),
+            content: text.to_owned(),
+        },
+        Err(_) => {
+            let hexadecimal = data
+                .iter()
+                .map(|byte| format!("{byte:02X}"))
+                .collect::<Vec<_>>()
+                .join(" ");
+            AnnotationResponse {
+                label: hexadecimal.clone(),
+                content: hexadecimal,
+            }
+        }
+    }
 }
 
 fn effect_response(effect: Effect) -> EffectResponse {

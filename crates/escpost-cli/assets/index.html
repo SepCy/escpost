@@ -333,6 +333,45 @@
         font-size: 11px;
       }
 
+      .trace-command-annotation {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        padding: 0 12px 10px 34px;
+        background: #252525;
+        overflow-wrap: anywhere;
+      }
+
+      .trace-command:hover + .trace-command-annotation,
+      .trace-command:focus-visible + .trace-command-annotation,
+      .trace-command.trace-previewed + .trace-command-annotation {
+        background: #3a2929;
+      }
+
+      .trace-command.trace-pinned + .trace-command-annotation {
+        background: #3b2323;
+      }
+
+      .trace-command-annotation a {
+        min-width: 0;
+        color: #ff8a8a;
+      }
+
+      .trace-command-annotation > span {
+        min-width: 0;
+        color: #d0d0d0;
+      }
+
+      .trace-command-copy {
+        flex: 0 0 auto;
+        padding: 2px 5px;
+        border: 1px solid #555;
+        border-radius: 3px;
+        color: #f5f5f5;
+        background: #303030;
+        cursor: pointer;
+      }
+
       .sheet {
         display: flex;
         flex: 0 0 auto;
@@ -418,7 +457,8 @@
       }
 
       .trace-motion-visual,
-      .trace-motion-label {
+      .trace-motion-label,
+      .trace-paint-label {
         opacity: 0;
         pointer-events: none;
       }
@@ -430,16 +470,22 @@
         stroke-dasharray: 6 4;
       }
 
-      .trace-motion-label rect {
+      .trace-motion-label rect,
+      .trace-paint-label rect {
         fill: #252525;
         stroke: var(--trace-color);
         stroke-width: 1px;
       }
 
-      .trace-motion-label text {
+      .trace-motion-label text,
+      .trace-paint-label text {
         fill: var(--trace-color);
         font: 700 10px/1 monospace;
         text-anchor: middle;
+      }
+
+      .trace-paint-label .trace-paint-action {
+        font-size: 12px;
       }
 
       .trace-region-group:hover .trace-motion-visual,
@@ -449,8 +495,14 @@
       .trace-region-group:hover .trace-motion-label,
       .trace-region-group:focus-visible .trace-motion-label,
       .trace-region-group.trace-previewed .trace-motion-label,
-      .trace-region-group.trace-pinned .trace-motion-label {
+      .trace-region-group.trace-pinned .trace-motion-label,
+      .trace-region-group:hover .trace-paint-label,
+      .trace-region-group:focus-visible .trace-paint-label,
+      .trace-region-group.trace-previewed .trace-paint-label,
+      .trace-region-group.trace-pinned .trace-paint-label {
         opacity: 1;
+        pointer-events: all;
+        cursor: pointer;
       }
 
       /* An anti-aliased preview is a supersampled grayscale image, so let the
@@ -824,6 +876,7 @@
             : lineFeedGroup
               ? `${group.commands.length}x ${first.detail}`
               : first.detail,
+          annotation: first.annotation,
           effects: group.commands.flatMap((command) => command.effects),
           command_count: group.commands.length,
         };
@@ -893,6 +946,34 @@
         effects.textContent = groupEffectSummary(command);
         button.append(name, range, detail, effects);
         item.append(button);
+        if (command.annotation) {
+          const annotation = document.createElement("span");
+          annotation.className = "trace-command-annotation";
+          const href = qrLink(command.annotation.content);
+          const content = document.createElement(href ? "a" : "span");
+          content.textContent = command.annotation.label;
+          if (href) {
+            content.href = href;
+            content.target = "_blank";
+            content.rel = "noopener noreferrer";
+            content.addEventListener("click", (event) => {
+              event.stopPropagation();
+              void copyText(command.annotation.content);
+            });
+          }
+          const copy = document.createElement("button");
+          copy.type = "button";
+          copy.className = "trace-command-copy";
+          copy.textContent = "⧉";
+          copy.title = "Copy QR content";
+          copy.setAttribute("aria-label", "Copy QR content");
+          copy.addEventListener("click", (event) => {
+            event.stopPropagation();
+            void copyText(command.annotation.content);
+          });
+          annotation.append(content, copy);
+          item.append(annotation);
+        }
         return item;
       }
 
@@ -1055,6 +1136,45 @@
         }
       }
 
+      function copyText(text) {
+        const fallbackCopy = () => {
+          const fallback = document.createElement("textarea");
+          fallback.value = text;
+          fallback.setAttribute("readonly", "");
+          fallback.style.position = "fixed";
+          fallback.style.opacity = "0";
+          document.body.append(fallback);
+          fallback.select();
+          document.execCommand("copy");
+          fallback.remove();
+        };
+        return navigator.clipboard?.writeText
+          ? navigator.clipboard.writeText(text).catch(fallbackCopy)
+          : Promise.resolve(fallbackCopy());
+      }
+
+      function qrLink(content) {
+        if (!content.startsWith("http://") && !content.startsWith("https://")) {
+          return null;
+        }
+        try {
+          const url = new URL(content);
+          return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function activateQrLabel(event, annotation) {
+        event.preventDefault();
+        event.stopPropagation();
+        void copyText(annotation.content);
+        const href = qrLink(annotation.content);
+        if (href) {
+          window.open(href, "_blank", "noopener,noreferrer");
+        }
+      }
+
       function createTraceOverlay(sheet, commandGroups) {
         const namespace = "http://www.w3.org/2000/svg";
         const overlay = document.createElementNS(namespace, "svg");
@@ -1116,6 +1236,57 @@
             rectangle.setAttribute("width", String(paint.bounds.width));
             rectangle.setAttribute("height", String(paint.bounds.height));
             group.append(rectangle);
+            if (command.annotation) {
+              const contentWidth = Math.max(24, command.annotation.label.length * 6 + 10);
+              const labelWidth = contentWidth + 18;
+              const labelX = paint.bounds.x + paint.bounds.width / 2;
+              const labelY = paint.bounds.y + paint.bounds.height;
+              const label = document.createElementNS(namespace, "g");
+              label.classList.add("trace-paint-label");
+              label.setAttribute("tabindex", "0");
+              const href = qrLink(command.annotation.content);
+              label.setAttribute("role", href ? "link" : "button");
+              label.setAttribute(
+                "aria-label",
+                href
+                  ? `Copy and open QR content: ${command.annotation.label}`
+                  : `Copy QR content: ${command.annotation.label}`
+              );
+              const labelTitle = document.createElementNS(namespace, "title");
+              labelTitle.textContent = href
+                ? "Open in browser and copy QR content"
+                : "Copy QR content";
+              label.addEventListener("focus", () =>
+                previewCommand(commandGroup.index, true)
+              );
+              label.addEventListener("blur", () => previewCommand(null));
+              label.addEventListener(
+                "click",
+                (event) => activateQrLabel(event, command.annotation)
+              );
+              label.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  activateQrLabel(event, command.annotation);
+                }
+              });
+              const labelBackground = document.createElementNS(namespace, "rect");
+              labelBackground.setAttribute("x", String(labelX - labelWidth / 2));
+              labelBackground.setAttribute("y", String(labelY - 7));
+              labelBackground.setAttribute("width", String(labelWidth));
+              labelBackground.setAttribute("height", "14");
+              labelBackground.setAttribute("rx", "2");
+              const labelText = document.createElementNS(namespace, "text");
+              labelText.setAttribute("x", String(labelX - 9));
+              labelText.setAttribute("y", String(labelY + 4));
+              labelText.textContent = command.annotation.label;
+              const action = document.createElementNS(namespace, "text");
+              action.classList.add("trace-paint-action");
+              action.setAttribute("x", String(labelX + contentWidth / 2));
+              action.setAttribute("y", String(labelY + 4));
+              action.textContent = href ? "↗" : "⧉";
+              label.append(labelTitle, labelBackground, labelText, action);
+              group.append(label);
+            }
           });
           motions.forEach((motion) => {
             const terminals = motionTerminals(commandGroups, commandGroupIndex, motion);

@@ -392,6 +392,49 @@
         stroke: #ffb454;
       }
 
+      .trace-motion-hit {
+        fill: none;
+        stroke: transparent;
+        stroke-width: 12px;
+        pointer-events: stroke;
+        cursor: pointer;
+      }
+
+      .trace-motion-visual,
+      .trace-motion-anchor {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .trace-motion-visual {
+        fill: none;
+        stroke: #7fd1ff;
+        stroke-width: 2px;
+        stroke-dasharray: 6 4;
+      }
+
+      .trace-motion-anchor {
+        stroke: #7fd1ff;
+        stroke-width: 2px;
+      }
+
+      .trace-motion-source {
+        fill: #252525;
+      }
+
+      .trace-motion-target {
+        fill: #7fd1ff;
+      }
+
+      .trace-region-group:hover .trace-motion-visual,
+      .trace-region-group:hover .trace-motion-anchor,
+      .trace-region-group:focus-visible .trace-motion-visual,
+      .trace-region-group:focus-visible .trace-motion-anchor,
+      .trace-region-group.trace-active .trace-motion-visual,
+      .trace-region-group.trace-active .trace-motion-anchor {
+        opacity: 1;
+      }
+
       /* An anti-aliased preview is a supersampled grayscale image, so let the
          browser smooth it: nearest-neighbour would discard the very softening
          it encodes whenever the image is scaled into its box. */
@@ -893,6 +936,24 @@
         overlay.setAttribute("height", String(sheet.height_dots));
         overlay.setAttribute("aria-label", `Trace regions for ${sheet.name}`);
 
+        const definitions = document.createElementNS(namespace, "defs");
+        const arrow = document.createElementNS(namespace, "marker");
+        const arrowId = `trace-motion-arrow-${sheet.order}`;
+        arrow.id = arrowId;
+        arrow.setAttribute("viewBox", "0 0 8 8");
+        arrow.setAttribute("refX", "7");
+        arrow.setAttribute("refY", "4");
+        arrow.setAttribute("markerWidth", "8");
+        arrow.setAttribute("markerHeight", "8");
+        arrow.setAttribute("orient", "auto");
+        arrow.setAttribute("markerUnits", "userSpaceOnUse");
+        const arrowShape = document.createElementNS(namespace, "path");
+        arrowShape.setAttribute("d", "M 0 0 L 8 4 L 0 8 z");
+        arrowShape.setAttribute("fill", "#7fd1ff");
+        arrow.append(arrowShape);
+        definitions.append(arrow);
+        overlay.append(definitions);
+
         commandGroups.forEach((commandGroup) => {
           const paintingCommands = commandGroup.commands
             .map((command) => ({
@@ -900,7 +961,10 @@
               paint: command.effects.find((effect) => effect.type === "paint"),
             }))
             .filter(({ paint }) => paint);
-          if (paintingCommands.length === 0) {
+          const motions = commandGroup.commands.flatMap((command) =>
+            command.effects.filter((effect) => effect.type === "motion")
+          );
+          if (paintingCommands.length === 0 && motions.length === 0) {
             return;
           }
           const command = commandGroupView(commandGroup);
@@ -924,6 +988,29 @@
             rectangle.setAttribute("width", String(paint.bounds.width));
             rectangle.setAttribute("height", String(paint.bounds.height));
             group.append(rectangle);
+          });
+          motions.forEach((motion) => {
+            const pathData =
+              `M ${motion.before.x} ${motion.before.y} ` +
+              `V ${motion.after.y} H ${motion.after.x}`;
+            const hitPath = document.createElementNS(namespace, "path");
+            hitPath.classList.add("trace-motion-hit");
+            hitPath.setAttribute("d", pathData);
+            const path = document.createElementNS(namespace, "path");
+            path.classList.add("trace-motion-visual");
+            path.setAttribute("d", pathData);
+            path.setAttribute("marker-end", `url(#${arrowId})`);
+            const source = document.createElementNS(namespace, "circle");
+            source.classList.add("trace-motion-anchor", "trace-motion-source");
+            source.setAttribute("cx", String(motion.before.x));
+            source.setAttribute("cy", String(motion.before.y));
+            source.setAttribute("r", "4");
+            const target = document.createElementNS(namespace, "circle");
+            target.classList.add("trace-motion-anchor", "trace-motion-target");
+            target.setAttribute("cx", String(motion.after.x));
+            target.setAttribute("cy", String(motion.after.y));
+            target.setAttribute("r", "4");
+            group.append(hitPath, path, source, target);
           });
           overlay.append(group);
         });

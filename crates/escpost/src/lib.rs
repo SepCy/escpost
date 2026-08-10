@@ -224,7 +224,7 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
             }
             0x0a => {
                 if C::ENABLED {
-                    let (before_x, before_y) = state.trace_position();
+                    let (before_x, before_y) = state.trace_line_feed_start_position();
                     state.line_feed()?;
                     let (after_x, after_y) = state.trace_position();
                     command_sink.record(
@@ -370,7 +370,7 @@ mod trace_spike_tests {
                 byte_range: 4..5,
                 command: DecodedCommand::LineFeed,
                 effects: vec![Effect::Motion {
-                    before: Position { x: 12, y: 0 },
+                    before: Position { x: 294, y: 0 },
                     after: Position { x: 0, y: 30 },
                 }],
             }

@@ -125,7 +125,29 @@ impl<S: RenderSurface> PrinterState<S> {
     }
 
     pub(crate) fn trace_position(&self) -> (u32, u32) {
-        (self.print_x, self.line_top)
+        (
+            self.print_area_left.saturating_add(self.print_x),
+            self.line_top,
+        )
+    }
+
+    pub(crate) fn trace_line_feed_start_position(&self) -> (u32, u32) {
+        let line_left = if self.line_used_width == 0 {
+            0
+        } else {
+            let remaining_width = self.line.width().saturating_sub(self.line_used_width);
+            match self.justification {
+                Justification::Left => 0,
+                Justification::Center => remaining_width / 2,
+                Justification::Right => remaining_width,
+            }
+        };
+        (
+            self.print_area_left
+                .saturating_add(line_left)
+                .saturating_add(self.print_x),
+            self.line_top,
+        )
     }
 
     pub(crate) fn trace_sheet_index(&self) -> usize {

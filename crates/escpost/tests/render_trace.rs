@@ -43,7 +43,7 @@ fn experimental_trace_exposes_sheet_commands_and_logical_bounds() {
     assert_eq!(
         commands[2].effects,
         [Effect::Motion {
-            before: Position { x: 12, y: 0 },
+            before: Position { x: 294, y: 0 },
             after: Position { x: 0, y: 30 },
         }]
     );

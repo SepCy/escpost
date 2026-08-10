@@ -908,6 +908,74 @@ silent upstream or default drift.
 - Runtime resolution stays a pack lookup; the larger pack must be regenerated on
   upstream or default changes, enforced by the drift check.
 
+## DD-033 — Keep conceptual trace sheets and buffered output distinct from rendered sheets
+
+**Status:** Accepted
+
+### Context
+
+In Standard mode, some ESC/POS input writes image data into the current print
+buffer without printing it immediately. Printable characters and `ESC *` column
+images are examples. A later print operation such as `LF` prints that buffered
+line; if the job ends first, the printer still has buffered data but no
+corresponding marks exist on paper.
+
+The renderer already reflects this distinction internally. `PrinterState`
+creates an active roll and line buffer at initialization, but returns a
+`RenderedSheet` only after committed output gives the roll a height or a cut
+finalizes it. Deriving trace sheets solely from returned render surfaces would
+therefore discard successfully parsed commands whenever all of their paint
+remains buffered. Automatically flushing at end of input would instead invent
+printer behavior and falsely show unprinted data in the PNG.
+
+A whole sheet also cannot simply be called uncommitted: one receipt may contain
+many committed lines followed by one final buffered line.
+
+### Decision
+
+Tracing has a **conceptual active sheet** independently of whether that sheet
+has a rendered PNG. Sheet zero exists internally from renderer initialization;
+it is emitted into the trace once the job records a command. A cut closes the
+current conceptual sheet and establishes the next one. Rendered sheets remain
+authoritative paper output and are never fabricated merely to host trace data.
+
+Each successfully parsed command retains its command record. Paint-producing
+commands additionally distinguish the disposition of their output:
+
+- **Buffered** — logical output exists only in the current print buffer and is
+  not visible on a rendered sheet.
+- **Committed** — output reached the roll and may carry final sheet-space paint
+  bounds.
+- Commands with no paint output have no paint disposition; state, motion, device
+  action, and as-yet-unmodeled effects remain distinct concepts.
+
+A print operation transitions the affected earlier commands from Buffered to
+Committed. The trace may retain the committing command as the cause of that
+transition, so a consumer can explain that `LF`, `CR`, `ESC J`, `ESC d`, or
+another modeled print operation caused buffered content to reach paper.
+Commands that print immediately enter the Committed state directly.
+
+At end of input, remaining buffered commands stay Buffered. They appear in the
+command stream with an explicit “not printed” status, receive no overlay on the
+authoritative PNG, and do not cause an implicit line feed. A trace sheet may
+therefore exist without a corresponding rendered sheet, or may contain both
+committed and buffered commands while referencing one rendered sheet.
+
+### Consequences
+
+- Every successfully parsed command remains inspectable even when the job
+  produces no PNG.
+- The web workbench can explain missing output instead of silently omitting a
+  command or pretending buffered pixels were printed.
+- Commitment is tracked per paint-producing command, not as one coarse sheet
+  flag.
+- Trace-sheet and rendered-sheet counts are no longer required to match; their
+  relationship must be represented explicitly in the experimental trace API.
+- Final sheet-space bounds exist only for committed paint. A future buffered
+  preview may expose line-local logical bounds, but it must remain visually and
+  semantically separate from printed output.
+- Ordinary non-traced rendering keeps its current end-of-input behavior.
+
 ## Open questions
 
 The following are intentionally not decided yet:

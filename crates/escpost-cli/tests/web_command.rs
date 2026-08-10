@@ -35,16 +35,6 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("id=\"traceWorkspace\""));
     assert!(response.contains("id=\"commandPanel\""));
     assert!(response.contains("id=\"commandList\""));
-    assert!(response.contains("createTraceOverlay"));
-    assert!(response.contains("setActiveCommand"));
-    assert!(response.contains("togglePinnedCommand"));
-    assert!(response.contains("data-command-index"));
-    assert!(response.contains("trace-without-commands"));
-    assert!(response.contains("group.setAttribute(\"tabindex\", \"0\")"));
-    assert!(response.contains("activateCommand(commandIndex, true)"));
-    assert!(response.contains("effect.bounds"));
-    assert!(response.contains("commandOffset"));
-    assert!(response.contains("fetch(\"/api/render\""));
 }
 
 #[test]

@@ -605,9 +605,18 @@
         });
       }
 
-      function previewCommand(index) {
+      function revealCommand(index) {
+        commandList
+          .querySelector(`[data-command-index="${index}"]`)
+          ?.scrollIntoView({ block: "nearest" });
+      }
+
+      function previewCommand(index, revealListItem = false) {
         if (pinnedCommand === null) {
           setActiveCommand(index);
+          if (revealListItem && index !== null) {
+            revealCommand(index);
+          }
         }
       }
 
@@ -616,22 +625,20 @@
         setActiveCommand(pinnedCommand);
       }
 
-      function activateCommand(index, revealCommand) {
+      function activateCommand(index, revealListItem) {
         togglePinnedCommand(index);
-        if (revealCommand) {
-          commandList
-            .querySelector(`[data-command-index="${index}"]`)
-            ?.scrollIntoView({ block: "nearest" });
+        if (revealListItem) {
+          revealCommand(index);
         }
       }
 
-      function bindCommandInteraction(element, index, revealCommand = false) {
+      function bindCommandInteraction(element, index, revealListItem = false) {
         element.dataset.commandIndex = String(index);
-        element.addEventListener("mouseenter", () => previewCommand(index));
+        element.addEventListener("mouseenter", () => previewCommand(index, revealListItem));
         element.addEventListener("mouseleave", () => previewCommand(null));
-        element.addEventListener("focus", () => previewCommand(index));
+        element.addEventListener("focus", () => previewCommand(index, revealListItem));
         element.addEventListener("blur", () => previewCommand(null));
-        element.addEventListener("click", () => activateCommand(index, revealCommand));
+        element.addEventListener("click", () => activateCommand(index, revealListItem));
       }
 
       function effectSummary(effect) {
@@ -648,13 +655,59 @@
         return effect.type;
       }
 
-      function createCommand(command, index) {
+      function groupAdjacentCommands(commands, firstGroupIndex) {
+        const groups = [];
+        (commands || []).forEach((command) => {
+          const previousGroup = groups.at(-1);
+          const previousCommand = previousGroup?.commands.at(-1);
+          const joinsTextGroup =
+            command.name === "Text" &&
+            previousCommand?.name === "Text" &&
+            previousCommand.byte_end === command.byte_start;
+          if (joinsTextGroup) {
+            previousGroup.commands.push(command);
+          } else {
+            groups.push({
+              index: firstGroupIndex + groups.length,
+              commands: [command],
+            });
+          }
+        });
+        return groups;
+      }
+
+      function commandGroupView(group) {
+        const first = group.commands[0];
+        const last = group.commands.at(-1);
+        const textGroup = first.name === "Text";
+        return {
+          name: first.name,
+          byte_start: first.byte_start,
+          byte_end: last.byte_end,
+          detail: textGroup
+            ? group.commands.map((command) => command.detail).join("")
+            : first.detail,
+          effects: group.commands.flatMap((command) => command.effects),
+          command_count: group.commands.length,
+        };
+      }
+
+      function groupEffectSummary(command) {
+        if (command.name === "Text" && command.command_count > 1) {
+          const paintCount = command.effects.filter((effect) => effect.type === "paint").length;
+          return `${command.command_count} text commands · ${paintCount} paint bounds`;
+        }
+        return command.effects.map(effectSummary).join(" · ") || "no visible effect";
+      }
+
+      function createCommand(group) {
+        const command = commandGroupView(group);
         const item = document.createElement("li");
         const button = document.createElement("button");
         button.type = "button";
         button.className = "trace-command";
         button.setAttribute("aria-pressed", "false");
-        bindCommandInteraction(button, index);
+        bindCommandInteraction(button, group.index);
 
         const name = document.createElement("span");
         name.className = "trace-command-name";
@@ -667,14 +720,14 @@
         detail.textContent = command.detail;
         const effects = document.createElement("span");
         effects.className = "trace-command-effects";
-        effects.textContent = command.effects.map(effectSummary).join(" · ") || "no visible effect";
+        effects.textContent = groupEffectSummary(command);
         button.append(name, range, detail, effects);
         item.append(button);
         return item;
       }
 
-      function showCommands(commands) {
-        const entries = commands || [];
+      function showCommands(groups) {
+        const entries = groups || [];
         pinnedCommand = null;
         commandPanel.hidden = entries.length === 0;
         traceWorkspace.classList.toggle("trace-without-commands", entries.length === 0);
@@ -779,20 +832,21 @@
         }
         currentRendering = identity;
 
-        const allCommands = rendering.sheets.flatMap((sheet) => sheet.commands || []);
-        showCommands(allCommands);
+        let nextGroupIndex = 0;
+        const groupedSheets = rendering.sheets.map((sheet) => {
+          const commandGroups = groupAdjacentCommands(sheet.commands, nextGroupIndex);
+          nextGroupIndex += commandGroups.length;
+          return { ...sheet, commandGroups };
+        });
+        showCommands(groupedSheets.flatMap((sheet) => sheet.commandGroups));
 
-        let commandOffset = 0;
-        const sheetElements = rendering.sheets.map((sheet) => {
-          const commands = sheet.commands || [];
+        const sheetElements = groupedSheets.map((sheet) => {
           const element = createSheet(
             sheet,
             rendering.sheets.length,
             cacheKey,
-            commands,
-            commandOffset
+            sheet.commandGroups
           );
-          commandOffset += commands.length;
           return element;
         });
         sheets.replaceChildren(...sheetElements);
@@ -830,7 +884,7 @@
         }
       }
 
-      function createTraceOverlay(sheet, commands, commandOffset) {
+      function createTraceOverlay(sheet, commandGroups) {
         const namespace = "http://www.w3.org/2000/svg";
         const overlay = document.createElementNS(namespace, "svg");
         overlay.classList.add("trace-overlay");
@@ -839,37 +893,44 @@
         overlay.setAttribute("height", String(sheet.height_dots));
         overlay.setAttribute("aria-label", `Trace regions for ${sheet.name}`);
 
-        commands.forEach((command, localCommandIndex) => {
-          const paint = command.effects.find((effect) => effect.type === "paint");
-          if (!paint) {
+        commandGroups.forEach((commandGroup) => {
+          const paintingCommands = commandGroup.commands
+            .map((command) => ({
+              command,
+              paint: command.effects.find((effect) => effect.type === "paint"),
+            }))
+            .filter(({ paint }) => paint);
+          if (paintingCommands.length === 0) {
             return;
           }
-          const commandIndex = commandOffset + localCommandIndex;
+          const command = commandGroupView(commandGroup);
           const group = document.createElementNS(namespace, "g");
           group.classList.add("trace-region-group");
           group.setAttribute("tabindex", "0");
           group.setAttribute("role", "button");
-          group.setAttribute("aria-label", `Highlight ${command.name} at bytes ${command.byte_start} to ${command.byte_end}`);
-          bindCommandInteraction(group, commandIndex, true);
+          group.setAttribute("aria-label", `Highlight ${command.name} group at bytes ${command.byte_start} to ${command.byte_end}`);
+          bindCommandInteraction(group, commandGroup.index, true);
           group.addEventListener("keydown", (event) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
-              activateCommand(commandIndex, true);
+              activateCommand(commandGroup.index, true);
             }
           });
-          const rectangle = document.createElementNS(namespace, "rect");
-          rectangle.classList.add("trace-region");
-          rectangle.setAttribute("x", String(paint.bounds.x));
-          rectangle.setAttribute("y", String(paint.bounds.y));
-          rectangle.setAttribute("width", String(paint.bounds.width));
-          rectangle.setAttribute("height", String(paint.bounds.height));
-          group.append(rectangle);
+          paintingCommands.forEach(({ paint }) => {
+            const rectangle = document.createElementNS(namespace, "rect");
+            rectangle.classList.add("trace-region");
+            rectangle.setAttribute("x", String(paint.bounds.x));
+            rectangle.setAttribute("y", String(paint.bounds.y));
+            rectangle.setAttribute("width", String(paint.bounds.width));
+            rectangle.setAttribute("height", String(paint.bounds.height));
+            group.append(rectangle);
+          });
           overlay.append(group);
         });
         return overlay;
       }
 
-      function createSheet(sheet, sheetCount, cacheKey, commands, commandOffset) {
+      function createSheet(sheet, sheetCount, cacheKey, commandGroups) {
         const figure = document.createElement("figure");
         figure.className = "sheet";
 
@@ -894,7 +955,7 @@
         image.src = `${sheet.url}?t=${cacheKey}`;
         const layer = document.createElement("div");
         layer.className = "receipt-layer";
-        layer.append(image, createTraceOverlay(sheet, commands, commandOffset));
+        layer.append(image, createTraceOverlay(sheet, commandGroups));
         figure.append(caption, layer);
         return figure;
       }

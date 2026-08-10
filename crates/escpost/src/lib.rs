@@ -223,33 +223,7 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
                 1
             }
             0x0a => {
-                if C::ENABLED {
-                    let (before_x, before_y) = state.trace_line_feed_start_position();
-                    state.line_feed()?;
-                    let (after_x, after_y) = state.trace_position();
-                    command_sink.record(
-                        state.trace_sheet_index(),
-                        CommandTrace {
-                            byte_range: offset..offset + 1,
-                            command: DecodedCommand::LineFeed,
-                            effects: ((before_x, before_y) != (after_x, after_y))
-                                .then_some(Effect::Motion {
-                                    before: Position {
-                                        x: before_x,
-                                        y: before_y,
-                                    },
-                                    after: Position {
-                                        x: after_x,
-                                        y: after_y,
-                                    },
-                                })
-                                .into_iter()
-                                .collect(),
-                        },
-                    );
-                } else {
-                    state.line_feed()?;
-                }
+                trace::execute_line_feed(&mut state, command_sink, offset)?;
                 1
             }
             0x0d => {
@@ -261,20 +235,7 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
             // ESC/POS code pages retain ASCII in 20h–7Eh and assign printable
             // characters to 80h–FFh. Control bytes remain parser input.
             byte @ (0x20..=0x7e | 0x80..=0xff) => {
-                if C::ENABLED {
-                    state.begin_command(offset);
-                }
-                state.print_byte(byte, offset)?;
-                if C::ENABLED {
-                    command_sink.record(
-                        state.trace_sheet_index(),
-                        CommandTrace {
-                            byte_range: offset..offset + 1,
-                            command: DecodedCommand::TextByte(byte),
-                            effects: vec![],
-                        },
-                    );
-                }
+                trace::execute_text_byte(&mut state, command_sink, byte, offset)?;
                 1
             }
             byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
@@ -310,121 +271,4 @@ fn validate_initial_limits(
         });
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod trace_spike_tests {
-    use super::{RenderOptions, render, render_surfaces_with_sink};
-    use crate::surface::tracing::TracingSurface;
-    use crate::trace::{
-        CommandTrace, DecodedCommand, Effect, Justification, Position, StateChange, TraceCollector,
-    };
-    use escpost_profiles::compile_profile;
-
-    const CAPABILITIES_JSON: &[u8] =
-        include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-    const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
-
-    #[test]
-    fn traced_render_attributes_centered_text_to_its_input_byte() {
-        let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-            .expect("the reference profile should compile");
-        let input = [0x1b, b'a', 1, b'A', 0x0a];
-
-        let ordinary = render(&input, &profile).expect("ordinary rendering should succeed");
-        let mut commands = TraceCollector::default();
-        let traced = render_surfaces_with_sink::<TracingSurface, _>(
-            &input,
-            &profile,
-            &RenderOptions::default(),
-            &mut commands,
-        )
-        .expect("traced rendering should succeed");
-        let traced_sheet = &traced.surfaces[0];
-        let trace = commands.finish(&traced.surfaces);
-        let commands = &trace.sheets[0].commands;
-
-        assert_eq!(
-            commands[0],
-            CommandTrace {
-                byte_range: 0..3,
-                command: DecodedCommand::SetJustification(Justification::Center),
-                effects: vec![Effect::StateChange(StateChange::Justification {
-                    before: Justification::Left,
-                    after: Justification::Center,
-                })],
-            }
-        );
-        assert_eq!(commands[1].byte_range, 3..4);
-        assert_eq!(commands[1].command, DecodedCommand::TextByte(b'A'));
-        let [Effect::Paint { bounds }] = commands[1].effects.as_slice() else {
-            panic!("the printable byte should have exactly one paint effect");
-        };
-        assert_eq!(
-            (bounds.x, bounds.y, bounds.width, bounds.height),
-            (282, 0, 12, 24)
-        );
-        assert_eq!(
-            commands[2],
-            CommandTrace {
-                byte_range: 4..5,
-                command: DecodedCommand::LineFeed,
-                effects: vec![Effect::Motion {
-                    before: Position { x: 294, y: 0 },
-                    after: Position { x: 0, y: 30 },
-                }],
-            }
-        );
-
-        assert_eq!(traced_sheet.inner, ordinary.sheets[0].surface);
-        let text_bounds = traced_sheet
-            .logical_regions
-            .iter()
-            .filter(|region| region.command_offset == 3)
-            .collect::<Vec<_>>();
-        assert!(!text_bounds.is_empty());
-        assert!(
-            text_bounds
-                .iter()
-                .all(|region| region.x >= 282 && region.x < 294)
-        );
-        assert!(
-            traced_sheet
-                .logical_regions
-                .iter()
-                .all(|region| region.command_offset != 4),
-            "LF must move the text without taking ownership of its pixels"
-        );
-    }
-
-    #[test]
-    fn unsupported_paint_commands_do_not_retain_trace_provenance() {
-        let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-            .expect("the reference profile should compile");
-        let input = [0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0xff];
-        let mut commands = TraceCollector::default();
-
-        let traced = render_surfaces_with_sink::<TracingSurface, _>(
-            &input,
-            &profile,
-            &RenderOptions::default(),
-            &mut commands,
-        )
-        .expect("traced rendering should succeed");
-
-        assert!(
-            commands
-                .finish(&traced.surfaces)
-                .sheets
-                .iter()
-                .all(|sheet| sheet.commands.is_empty())
-        );
-        assert!(
-            traced
-                .surfaces
-                .iter()
-                .all(|surface| surface.logical_regions.is_empty()),
-            "unsupported paint commands must not retain logical regions"
-        );
-    }
 }

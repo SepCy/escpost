@@ -2,7 +2,10 @@
 
 use std::ops::Range;
 
+use crate::RenderError;
 use crate::state::Justification as StateJustification;
+use crate::state::PrinterState;
+use crate::surface::RenderSurface;
 use crate::surface::tracing::TracingSurface;
 
 /// Experimental semantic interpretation of a traced command.
@@ -90,6 +93,64 @@ pub(crate) trait CommandSink {
     fn record(&mut self, sheet_index: usize, command: CommandTrace);
 }
 
+#[inline]
+pub(crate) fn execute_line_feed<S: RenderSurface, C: CommandSink>(
+    state: &mut PrinterState<S>,
+    command_sink: &mut C,
+    offset: usize,
+) -> Result<(), RenderError> {
+    if C::ENABLED {
+        let before = state.trace_line_feed_start_position();
+        state.line_feed()?;
+        let after = state.trace_position();
+        command_sink.record(
+            state.trace_sheet_index(),
+            CommandTrace {
+                byte_range: offset..offset + 1,
+                command: DecodedCommand::LineFeed,
+                effects: (before != after)
+                    .then_some(Effect::Motion {
+                        before: position(before),
+                        after: position(after),
+                    })
+                    .into_iter()
+                    .collect(),
+            },
+        );
+    } else {
+        state.line_feed()?;
+    }
+    Ok(())
+}
+
+#[inline]
+pub(crate) fn execute_text_byte<S: RenderSurface, C: CommandSink>(
+    state: &mut PrinterState<S>,
+    command_sink: &mut C,
+    byte: u8,
+    offset: usize,
+) -> Result<(), RenderError> {
+    if C::ENABLED {
+        state.begin_command(offset);
+    }
+    state.print_byte(byte, offset)?;
+    if C::ENABLED {
+        command_sink.record(
+            state.trace_sheet_index(),
+            CommandTrace {
+                byte_range: offset..offset + 1,
+                command: DecodedCommand::TextByte(byte),
+                effects: vec![],
+            },
+        );
+    }
+    Ok(())
+}
+
+fn position((x, y): (u32, u32)) -> Position {
+    Position { x, y }
+}
+
 pub(crate) struct NoTrace;
 
 impl CommandSink for NoTrace {
@@ -158,5 +219,123 @@ impl CommandSink for TraceCollector {
 
     fn record(&mut self, sheet_index: usize, command: CommandTrace) {
         self.commands.push((sheet_index, command));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use escpost_profiles::compile_profile;
+
+    use super::{
+        CommandTrace, DecodedCommand, Effect, Justification, Position, StateChange, TraceCollector,
+    };
+    use crate::surface::tracing::TracingSurface;
+    use crate::{RenderOptions, render, render_surfaces_with_sink};
+
+    const CAPABILITIES_JSON: &[u8] =
+        include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+    const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
+
+    #[test]
+    fn traced_render_attributes_centered_text_to_its_input_byte() {
+        let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+            .expect("the reference profile should compile");
+        let input = [0x1b, b'a', 1, b'A', 0x0a];
+
+        let ordinary = render(&input, &profile).expect("ordinary rendering should succeed");
+        let mut commands = TraceCollector::default();
+        let traced = render_surfaces_with_sink::<TracingSurface, _>(
+            &input,
+            &profile,
+            &RenderOptions::default(),
+            &mut commands,
+        )
+        .expect("traced rendering should succeed");
+        let traced_sheet = &traced.surfaces[0];
+        let trace = commands.finish(&traced.surfaces);
+        let commands = &trace.sheets[0].commands;
+
+        assert_eq!(
+            commands[0],
+            CommandTrace {
+                byte_range: 0..3,
+                command: DecodedCommand::SetJustification(Justification::Center),
+                effects: vec![Effect::StateChange(StateChange::Justification {
+                    before: Justification::Left,
+                    after: Justification::Center,
+                })],
+            }
+        );
+        assert_eq!(commands[1].byte_range, 3..4);
+        assert_eq!(commands[1].command, DecodedCommand::TextByte(b'A'));
+        let [Effect::Paint { bounds }] = commands[1].effects.as_slice() else {
+            panic!("the printable byte should have exactly one paint effect");
+        };
+        assert_eq!(
+            (bounds.x, bounds.y, bounds.width, bounds.height),
+            (282, 0, 12, 24)
+        );
+        assert_eq!(
+            commands[2],
+            CommandTrace {
+                byte_range: 4..5,
+                command: DecodedCommand::LineFeed,
+                effects: vec![Effect::Motion {
+                    before: Position { x: 294, y: 0 },
+                    after: Position { x: 0, y: 30 },
+                }],
+            }
+        );
+
+        assert_eq!(traced_sheet.inner, ordinary.sheets[0].surface);
+        let text_bounds = traced_sheet
+            .logical_regions
+            .iter()
+            .filter(|region| region.command_offset == 3)
+            .collect::<Vec<_>>();
+        assert!(!text_bounds.is_empty());
+        assert!(
+            text_bounds
+                .iter()
+                .all(|region| region.x >= 282 && region.x < 294)
+        );
+        assert!(
+            traced_sheet
+                .logical_regions
+                .iter()
+                .all(|region| region.command_offset != 4),
+            "LF must move the text without taking ownership of its pixels"
+        );
+    }
+
+    #[test]
+    fn unsupported_paint_commands_do_not_retain_trace_provenance() {
+        let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+            .expect("the reference profile should compile");
+        let input = [0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0xff];
+        let mut commands = TraceCollector::default();
+
+        let traced = render_surfaces_with_sink::<TracingSurface, _>(
+            &input,
+            &profile,
+            &RenderOptions::default(),
+            &mut commands,
+        )
+        .expect("traced rendering should succeed");
+
+        assert!(
+            commands
+                .finish(&traced.surfaces)
+                .sheets
+                .iter()
+                .all(|sheet| sheet.commands.is_empty())
+        );
+        assert!(
+            traced
+                .surfaces
+                .iter()
+                .all(|surface| surface.logical_regions.is_empty()),
+            "unsupported paint commands must not retain logical regions"
+        );
     }
 }

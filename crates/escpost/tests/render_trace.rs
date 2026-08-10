@@ -1,4 +1,6 @@
-use escpost::{DecodedCommand, Effect, Justification, Position, StateChange, render_with_trace};
+use escpost::{
+    CommandCode, DecodedCommand, Effect, Justification, Position, StateChange, render_with_trace,
+};
 use escpost_profiles::compile_profile;
 
 const CAPABILITIES_JSON: &[u8] =
@@ -115,10 +117,16 @@ fn qr_trace_attributes_bounds_to_the_print_command_only() {
     ];
 
     let traced = render_with_trace(&input, &profile).expect("the QR code should render");
-    let [command] = traced.trace.sheets[0].commands.as_slice() else {
-        panic!("only the QR print operation should produce a trace command");
+    let [store, command] = traced.trace.sheets[0].commands.as_slice() else {
+        panic!("QR storage and printing should each produce one trace command");
     };
 
+    assert_eq!(store.byte_range, 0..9);
+    assert_eq!(
+        store.command,
+        DecodedCommand::Unmodeled(CommandCode::Gs(b'('))
+    );
+    assert!(store.effects.is_empty());
     assert_eq!(command.byte_range, 9..17);
     assert_eq!(command.command, DecodedCommand::QrCode(vec![b'A']));
     let [Effect::Paint { bounds }] = command.effects.as_slice() else {
@@ -139,10 +147,14 @@ fn commands_are_grouped_under_the_sheet_active_when_they_execute() {
 
     assert_eq!(traced.render.sheets.len(), 2);
     assert_eq!(traced.trace.sheets.len(), 2);
-    assert_eq!(traced.trace.sheets[0].commands.len(), 2);
+    assert_eq!(traced.trace.sheets[0].commands.len(), 3);
     assert_eq!(
         traced.trace.sheets[0].commands[0].command,
         DecodedCommand::TextByte(b'A')
+    );
+    assert_eq!(
+        traced.trace.sheets[0].commands[2].command,
+        DecodedCommand::Unmodeled(CommandCode::Gs(b'V'))
     );
     assert_eq!(traced.trace.sheets[1].commands.len(), 2);
     assert_eq!(

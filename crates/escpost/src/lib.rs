@@ -17,8 +17,8 @@ mod trace;
 pub use error::{LimitKind, RenderError, RenderWarning};
 pub use surface::MonoSurface;
 pub use trace::{
-    CommandTrace, DecodedCommand, Effect, Justification, PaintRegion, Position, SheetTrace,
-    StateChange, Trace,
+    CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintRegion, Position,
+    SheetTrace, StateChange, Trace,
 };
 
 use command::{execute_esc_command, execute_gs_command};
@@ -213,7 +213,11 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
         if C::ENABLED {
             state.end_command();
             state.begin_command(offset);
-            command_sink.begin_command(state.trace_sheet_index(), offset);
+            command_sink.begin_command(
+                state.trace_sheet_index(),
+                offset,
+                trace::fallback_command(&data[offset..]),
+            );
         }
         if byte != 0x0a {
             state.clear_pending_gs_v_0_lf();

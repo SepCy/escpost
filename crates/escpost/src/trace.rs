@@ -16,6 +16,15 @@ pub enum DecodedCommand {
     LineFeed,
     RasterImage,
     QrCode(Vec<u8>),
+    Unmodeled(CommandCode),
+}
+
+/// Experimental protocol identity for a parsed command without a typed model.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandCode {
+    Control(u8),
+    Esc(u8),
+    Gs(u8),
 }
 
 /// Experimental justification value used by command traces.
@@ -92,7 +101,7 @@ pub struct Trace {
 pub(crate) trait CommandSink {
     const ENABLED: bool;
 
-    fn begin_command(&mut self, sheet_index: usize, offset: usize);
+    fn begin_command(&mut self, sheet_index: usize, offset: usize, fallback: DecodedCommand);
     fn describe_command(&mut self, command: DecodedCommand, effects: Vec<Effect>);
     fn finish_command(&mut self, end_offset: usize);
 }
@@ -136,6 +145,16 @@ pub(crate) fn execute_text_byte<S: RenderSurface, C: CommandSink>(
     Ok(())
 }
 
+pub(crate) fn fallback_command(data: &[u8]) -> DecodedCommand {
+    let byte = data[0];
+    let code = match byte {
+        0x1b => CommandCode::Esc(data.get(1).copied().unwrap_or_default()),
+        0x1d => CommandCode::Gs(data.get(1).copied().unwrap_or_default()),
+        byte => CommandCode::Control(byte),
+    };
+    DecodedCommand::Unmodeled(code)
+}
+
 fn position((x, y): (u32, u32)) -> Position {
     Position { x, y }
 }
@@ -146,7 +165,7 @@ impl CommandSink for NoTrace {
     const ENABLED: bool = false;
 
     #[inline]
-    fn begin_command(&mut self, _sheet_index: usize, _offset: usize) {
+    fn begin_command(&mut self, _sheet_index: usize, _offset: usize, _fallback: DecodedCommand) {
         unreachable!("NoTrace commands are guarded by CommandSink::ENABLED")
     }
 
@@ -165,6 +184,7 @@ impl CommandSink for NoTrace {
 struct PendingCommand {
     sheet_index: usize,
     start_offset: usize,
+    fallback: DecodedCommand,
     description: Option<(DecodedCommand, Vec<Effect>)>,
 }
 
@@ -224,11 +244,12 @@ fn command_bounds(surface: &TracingSurface, command_offset: usize) -> Option<Pai
 impl CommandSink for TraceCollector {
     const ENABLED: bool = true;
 
-    fn begin_command(&mut self, sheet_index: usize, offset: usize) {
+    fn begin_command(&mut self, sheet_index: usize, offset: usize, fallback: DecodedCommand) {
         debug_assert!(self.pending.is_none());
         self.pending = Some(PendingCommand {
             sheet_index,
             start_offset: offset,
+            fallback,
             description: None,
         });
     }
@@ -247,9 +268,9 @@ impl CommandSink for TraceCollector {
             .pending
             .take()
             .expect("traced command finalization requires an active command");
-        let Some((command, effects)) = pending.description else {
-            return;
-        };
+        let (command, effects) = pending
+            .description
+            .unwrap_or_else(|| (pending.fallback, vec![]));
         self.commands.push((
             pending.sheet_index,
             CommandTrace {
@@ -266,7 +287,8 @@ mod tests {
     use escpost_profiles::compile_profile;
 
     use super::{
-        CommandTrace, DecodedCommand, Effect, Justification, Position, StateChange, TraceCollector,
+        CommandCode, CommandTrace, DecodedCommand, Effect, Justification, Position, StateChange,
+        TraceCollector,
     };
     use crate::surface::tracing::TracingSurface;
     use crate::{RenderOptions, render, render_surfaces_with_sink};
@@ -348,10 +370,10 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_paint_commands_do_not_retain_trace_provenance() {
+    fn unmodeled_paint_commands_have_no_fabricated_bounds() {
         let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
             .expect("the reference profile should compile");
-        let input = [0x1b, b'*', 1, 1, 0, 0xff];
+        let input = [0x1b, b'*', 1, 1, 0, 0xff, 0x0a];
         let mut commands = TraceCollector::default();
 
         let traced = render_surfaces_with_sink::<TracingSurface, _>(
@@ -362,13 +384,13 @@ mod tests {
         )
         .expect("traced rendering should succeed");
 
-        assert!(
-            commands
-                .finish(&traced.surfaces)
-                .sheets
-                .iter()
-                .all(|sheet| sheet.commands.is_empty())
+        let trace = commands.finish(&traced.surfaces);
+        let command = &trace.sheets[0].commands[0];
+        assert_eq!(
+            command.command,
+            DecodedCommand::Unmodeled(CommandCode::Esc(b'*'))
         );
+        assert!(command.effects.is_empty());
         assert!(
             traced
                 .surfaces

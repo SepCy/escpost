@@ -9,7 +9,8 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use escpost::{
-    CommandTrace, DecodedCommand, Effect, Justification, StateChange, TracedRenderResult,
+    CommandCode, CommandTrace, DecodedCommand, Effect, Justification, StateChange,
+    TracedRenderResult,
 };
 use serde::Serialize;
 use tokio::net::TcpListener;
@@ -107,7 +108,7 @@ struct SheetResponse {
 struct CommandResponse {
     byte_start: usize,
     byte_end: usize,
-    name: &'static str,
+    name: String,
     detail: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     annotation: Option<AnnotationResponse>,
@@ -335,12 +336,12 @@ fn command_responses(commands: Vec<CommandTrace>) -> Vec<CommandResponse> {
         .map(|command| {
             let (name, detail, annotation) = match command.command {
                 DecodedCommand::SetJustification(justification) => (
-                    "ESC a",
+                    "ESC a".to_owned(),
                     format!("Set justification: {}", justification_name(justification)),
                     None,
                 ),
                 DecodedCommand::TextByte(byte) => (
-                    "Text",
+                    "Text".to_owned(),
                     if byte.is_ascii_graphic() || byte == b' ' {
                         char::from(byte).to_string()
                     } else {
@@ -348,13 +349,21 @@ fn command_responses(commands: Vec<CommandTrace>) -> Vec<CommandResponse> {
                     },
                     None,
                 ),
-                DecodedCommand::LineFeed => ("LF", "Print and line feed".to_owned(), None),
-                DecodedCommand::RasterImage => ("GS v 0", "Print raster image".to_owned(), None),
+                DecodedCommand::LineFeed => {
+                    ("LF".to_owned(), "Print and line feed".to_owned(), None)
+                }
+                DecodedCommand::RasterImage => {
+                    ("GS v 0".to_owned(), "Print raster image".to_owned(), None)
+                }
                 DecodedCommand::QrCode(data) => (
-                    "GS ( k",
+                    "GS ( k".to_owned(),
                     "Print QR code · Function 181".to_owned(),
                     Some(qr_annotation(&data)),
                 ),
+                DecodedCommand::Unmodeled(code) => {
+                    let (name, detail) = unmodeled_command(code);
+                    (name, detail, None)
+                }
             };
             CommandResponse {
                 byte_start: command.byte_range.start,
@@ -366,6 +375,25 @@ fn command_responses(commands: Vec<CommandTrace>) -> Vec<CommandResponse> {
             }
         })
         .collect()
+}
+
+fn unmodeled_command(code: CommandCode) -> (String, String) {
+    let detail = "Parsed command · annotations not yet modeled".to_owned();
+    match code {
+        CommandCode::Control(0x09) => ("HT".to_owned(), detail),
+        CommandCode::Control(0x0d) => ("CR".to_owned(), detail),
+        CommandCode::Control(opcode) => (format!("Control {opcode:02X}"), detail),
+        CommandCode::Esc(opcode) => (format!("ESC {}", opcode_name(opcode)), detail),
+        CommandCode::Gs(opcode) => (format!("GS {}", opcode_name(opcode)), detail),
+    }
+}
+
+fn opcode_name(opcode: u8) -> String {
+    if opcode.is_ascii_graphic() {
+        char::from(opcode).to_string()
+    } else {
+        format!("{opcode:02X}")
+    }
 }
 
 fn qr_annotation(data: &[u8]) -> AnnotationResponse {

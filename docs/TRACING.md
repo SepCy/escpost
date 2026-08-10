@@ -74,10 +74,10 @@ is a compiler outcome rather than a Rust language guarantee, so benchmark
 comparisons remain part of changes to this seam.
 
 The vertical slice currently models justification, printable bytes, line feed,
-`GS v 0` raster images, and QR print operations. Other commands still render
-normally but do not receive trace entries. The slice validates the abstraction,
-its disabled-path cost, and an end-to-end consumer before the complete command
-model is designed.
+`GS v 0` raster images, and QR print operations. Every other successfully
+parsed command receives an unmodeled fallback identity with no fabricated
+effects. The slice validates the abstraction, its disabled-path cost, and an
+end-to-end consumer before the complete command model is designed.
 
 ## Experimental public API
 
@@ -102,15 +102,16 @@ that JSON is also experimental and is not a stable serialization contract.
 
 The trace groups commands by output sheet. The ordered
 `Trace::sheets` collection corresponds directly to `RenderResult::sheets`, and
-every rendered sheet has a `SheetTrace`, even when it contains no currently
-supported commands. A command belongs to the sheet that was active when the
-command executed. For now, one command is assumed to affect at most one sheet.
+every rendered sheet has a `SheetTrace`, even when it contains no parsed
+commands. A command belongs to the sheet that was active when the command began
+executing. For now, one command is assumed to affect at most one sheet.
 
 ## Target production model
 
 The following sections specify intended production behavior. The current
-implementation produces complete entries only for its five supported command
-types; its narrower guarantees are listed under
+implementation produces typed entries for five command types and generic
+entries for every other successfully parsed command; its narrower guarantees
+are listed under
 [Current vertical slice](#current-vertical-slice).
 
 ### Command identity
@@ -239,7 +240,8 @@ justification state changes, printer-position motion, and one logical
 `PaintRegion` bound for printable bytes, `GS v 0` raster images, and QR print
 operations. Image bounds cover their complete logical drawing area rather than
 only their dark pixels. `ESC a` and `LF` receive their respective state-change
-and motion effects without fabricated paint.
+and motion effects without fabricated paint. Unmodeled commands retain their
+control/`ESC`/`GS` family and opcode with an empty effect list.
 
 The end-to-end test verifies that:
 
@@ -252,17 +254,21 @@ The end-to-end test verifies that:
   command's paint;
 - raster images retain their full logical dimensions even when most pixels are
   blank;
-- QR storage remains untraced while the print operation owns the symbol bounds
-  and exposes its effective stored payload.
+- QR storage receives an unmodeled fallback entry while the print operation
+  owns the symbol bounds and exposes its effective stored payload;
+- unmodeled commands retain exact ranges without fabricated effects.
 
-The slice does not yet trace other commands, return a partial trace on failure,
-or make its in-memory representation a stable public contract.
+The slice does not yet provide typed identities and effects for other commands,
+return a partial trace on failure, or make its in-memory representation a
+stable public contract.
 
 ## Web workbench
 
-When the CLI web mode is active, it uses the traced renderer and exposes the
-five currently supported command types through `/api/render`. Non-web CLI
-rendering continues to call the ordinary renderer.
+When the CLI web mode is active, it uses the traced renderer and exposes every
+successfully parsed command through `/api/render`. Five command types have
+specialized presentation; the rest use their protocol family and opcode with a
+default “annotations not yet modeled” description. Non-web CLI rendering
+continues to call the ordinary renderer.
 
 The workbench shows a command list beside the authoritative PNG receipt. Each
 receipt image has an SVG overlay in the same printer-dot coordinate system.

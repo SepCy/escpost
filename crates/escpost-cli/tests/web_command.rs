@@ -118,7 +118,7 @@ fn web_mode_exposes_experimental_command_traces() {
     let commands = metadata["sheets"][0]["commands"]
         .as_array()
         .expect("commands should be an array");
-    assert_eq!(commands.len(), 4);
+    assert_eq!(commands.len(), 5);
     assert_eq!(commands[0]["byte_start"], 0);
     assert_eq!(commands[0]["byte_end"], 3);
     assert_eq!(commands[0]["name"], "ESC a");
@@ -133,10 +133,16 @@ fn web_mode_exposes_experimental_command_traces() {
     assert_eq!(bounds["height"], 24);
     assert_eq!(commands[2]["name"], "LF");
     assert_eq!(commands[2]["effects"][0]["type"], "motion");
-    assert_eq!(commands[3]["name"], "GS ( k");
-    assert_eq!(commands[3]["detail"], "Print QR code · Function 181");
-    assert_eq!(commands[3]["annotation"]["label"], "https://example.test");
-    assert_eq!(commands[3]["annotation"]["content"], "https://example.test");
+    assert_eq!(commands[3]["name"], "GS (");
+    assert_eq!(
+        commands[3]["detail"],
+        "Parsed command · annotations not yet modeled"
+    );
+    assert_eq!(commands[3]["effects"].as_array().unwrap().len(), 0);
+    assert_eq!(commands[4]["name"], "GS ( k");
+    assert_eq!(commands[4]["detail"], "Print QR code · Function 181");
+    assert_eq!(commands[4]["annotation"]["label"], "https://example.test");
+    assert_eq!(commands[4]["annotation"]["content"], "https://example.test");
 
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
 }

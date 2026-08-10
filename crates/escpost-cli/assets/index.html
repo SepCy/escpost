@@ -401,37 +401,36 @@
       }
 
       .trace-motion-visual,
-      .trace-motion-anchor {
+      .trace-motion-label {
         opacity: 0;
         pointer-events: none;
       }
 
       .trace-motion-visual {
         fill: none;
-        stroke: #7fd1ff;
+        stroke: #ffb454;
         stroke-width: 2px;
         stroke-dasharray: 6 4;
       }
 
-      .trace-motion-anchor {
-        stroke: #7fd1ff;
-        stroke-width: 2px;
-      }
-
-      .trace-motion-source {
+      .trace-motion-label rect {
         fill: #252525;
+        stroke: #ffb454;
+        stroke-width: 1px;
       }
 
-      .trace-motion-target {
-        fill: #7fd1ff;
+      .trace-motion-label text {
+        fill: #ffb454;
+        font: 700 10px/1 monospace;
+        text-anchor: middle;
       }
 
       .trace-region-group:hover .trace-motion-visual,
-      .trace-region-group:hover .trace-motion-anchor,
       .trace-region-group:focus-visible .trace-motion-visual,
-      .trace-region-group:focus-visible .trace-motion-anchor,
       .trace-region-group.trace-active .trace-motion-visual,
-      .trace-region-group.trace-active .trace-motion-anchor {
+      .trace-region-group:hover .trace-motion-label,
+      .trace-region-group:focus-visible .trace-motion-label,
+      .trace-region-group.trace-active .trace-motion-label {
         opacity: 1;
       }
 
@@ -735,6 +734,39 @@
         };
       }
 
+      function motionTerminals(commandGroups, motionGroupIndex, motion) {
+        const destinationLength = 8;
+        for (let index = motionGroupIndex - 1; index >= 0; index -= 1) {
+          const matchingPaint = commandGroups[index].commands
+            .flatMap((command) => command.effects)
+            .filter((effect) =>
+              effect.type === "paint" &&
+              effect.bounds.y <= motion.before.y &&
+              effect.bounds.y + effect.bounds.height > motion.before.y
+            );
+          if (matchingPaint.length > 0) {
+            const sourceTop = Math.min(...matchingPaint.map((effect) => effect.bounds.y));
+            const sourceBottom = Math.max(...matchingPaint.map((effect) =>
+              effect.bounds.y + effect.bounds.height
+            ));
+            return {
+              sourceX: Math.max(...matchingPaint.map((effect) =>
+                effect.bounds.x + effect.bounds.width
+              )),
+              sourceTop,
+              sourceBottom,
+              targetBottom: motion.after.y + destinationLength,
+            };
+          }
+        }
+        return {
+          sourceX: motion.before.x,
+          sourceTop: motion.before.y,
+          sourceBottom: motion.before.y,
+          targetBottom: motion.after.y + destinationLength,
+        };
+      }
+
       function groupEffectSummary(command) {
         if (command.name === "Text" && command.command_count > 1) {
           const paintCount = command.effects.filter((effect) => effect.type === "paint").length;
@@ -943,18 +975,18 @@
         arrow.setAttribute("viewBox", "0 0 8 8");
         arrow.setAttribute("refX", "7");
         arrow.setAttribute("refY", "4");
-        arrow.setAttribute("markerWidth", "8");
-        arrow.setAttribute("markerHeight", "8");
+        arrow.setAttribute("markerWidth", "12");
+        arrow.setAttribute("markerHeight", "12");
         arrow.setAttribute("orient", "auto");
         arrow.setAttribute("markerUnits", "userSpaceOnUse");
         const arrowShape = document.createElementNS(namespace, "path");
         arrowShape.setAttribute("d", "M 0 0 L 8 4 L 0 8 z");
-        arrowShape.setAttribute("fill", "#7fd1ff");
+        arrowShape.setAttribute("fill", "#ffb454");
         arrow.append(arrowShape);
         definitions.append(arrow);
         overlay.append(definitions);
 
-        commandGroups.forEach((commandGroup) => {
+        commandGroups.forEach((commandGroup, commandGroupIndex) => {
           const paintingCommands = commandGroup.commands
             .map((command) => ({
               command,
@@ -990,27 +1022,41 @@
             group.append(rectangle);
           });
           motions.forEach((motion) => {
+            const terminals = motionTerminals(commandGroups, commandGroupIndex, motion);
+            const middleY = (terminals.sourceBottom + motion.after.y) / 2;
             const pathData =
-              `M ${motion.before.x} ${motion.before.y} ` +
-              `V ${motion.after.y} H ${motion.after.x}`;
+              `M ${terminals.sourceX} ${terminals.sourceBottom} ` +
+              `V ${middleY} H ${motion.after.x} V ${motion.after.y}`;
+            const terminalData =
+              `M ${terminals.sourceX} ${terminals.sourceTop} ` +
+              `V ${terminals.sourceBottom} ` +
+              `M ${motion.after.x} ${motion.after.y} ` +
+              `V ${terminals.targetBottom}`;
             const hitPath = document.createElementNS(namespace, "path");
             hitPath.classList.add("trace-motion-hit");
-            hitPath.setAttribute("d", pathData);
+            hitPath.setAttribute("d", `${pathData} ${terminalData}`);
             const path = document.createElementNS(namespace, "path");
             path.classList.add("trace-motion-visual");
             path.setAttribute("d", pathData);
-            path.setAttribute("marker-end", `url(#${arrowId})`);
-            const source = document.createElementNS(namespace, "circle");
-            source.classList.add("trace-motion-anchor", "trace-motion-source");
-            source.setAttribute("cx", String(motion.before.x));
-            source.setAttribute("cy", String(motion.before.y));
-            source.setAttribute("r", "4");
-            const target = document.createElementNS(namespace, "circle");
-            target.classList.add("trace-motion-anchor", "trace-motion-target");
-            target.setAttribute("cx", String(motion.after.x));
-            target.setAttribute("cy", String(motion.after.y));
-            target.setAttribute("r", "4");
-            group.append(hitPath, path, source, target);
+            const terminalsPath = document.createElementNS(namespace, "path");
+            terminalsPath.classList.add("trace-motion-visual");
+            terminalsPath.setAttribute("d", terminalData);
+            terminalsPath.setAttribute("marker-end", `url(#${arrowId})`);
+            const labelX = (motion.before.x + motion.after.x) / 2;
+            const label = document.createElementNS(namespace, "g");
+            label.classList.add("trace-motion-label");
+            const labelBackground = document.createElementNS(namespace, "rect");
+            labelBackground.setAttribute("x", String(labelX - 10));
+            labelBackground.setAttribute("y", String(middleY - 7));
+            labelBackground.setAttribute("width", "20");
+            labelBackground.setAttribute("height", "14");
+            labelBackground.setAttribute("rx", "2");
+            const labelText = document.createElementNS(namespace, "text");
+            labelText.setAttribute("x", String(labelX));
+            labelText.setAttribute("y", String(middleY + 4));
+            labelText.textContent = "LF";
+            label.append(labelBackground, labelText);
+            group.append(hitPath, terminalsPath, path, label);
           });
           overlay.append(group);
         });

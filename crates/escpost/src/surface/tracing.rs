@@ -58,6 +58,12 @@ impl RenderSurface for TracingSurface {
         }
     }
 
+    fn has_command_region(&self, offset: usize) -> bool {
+        self.logical_regions
+            .iter()
+            .any(|region| region.command_offset == offset)
+    }
+
     fn width(&self) -> u32 {
         self.inner.width()
     }

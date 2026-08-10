@@ -9,7 +9,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use escpost::{
-    CommandCode, CommandTrace, DecodedCommand, Effect, Justification, StateChange,
+    CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintLifecycle, StateChange,
     TracedRenderResult,
 };
 use serde::Serialize;
@@ -58,6 +58,7 @@ struct RenderedJob {
     /// Non-fatal render diagnostics, pre-formatted for display.
     warnings: Vec<String>,
     sheets: Vec<RenderedWebSheet>,
+    trace_sheets: Vec<TraceWebSheet>,
 }
 
 struct RenderedWebSheet {
@@ -65,6 +66,9 @@ struct RenderedWebSheet {
     width_dots: u32,
     height_dots: u32,
     png: Vec<u8>,
+}
+
+struct TraceWebSheet {
     commands: Vec<CommandResponse>,
 }
 
@@ -97,9 +101,12 @@ struct RenderResponse {
 struct SheetResponse {
     name: String,
     order: usize,
-    width_dots: u32,
-    height_dots: u32,
-    url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    width_dots: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    height_dots: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
     /// Experimental subset of decoded commands associated with this sheet.
     commands: Vec<CommandResponse>,
 }
@@ -110,6 +117,8 @@ struct CommandResponse {
     byte_end: usize,
     name: String,
     detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    paint_lifecycle: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     annotation: Option<AnnotationResponse>,
     effects: Vec<EffectResponse>,
@@ -276,16 +285,21 @@ impl JobStore {
             };
         };
         let sheets = job
-            .sheets
+            .trace_sheets
             .iter()
             .enumerate()
-            .map(|(index, sheet)| SheetResponse {
-                name: sheet.name.clone(),
-                order: index + 1,
-                width_dots: sheet.width_dots,
-                height_dots: sheet.height_dots,
-                url: format!("/sheets/{}.png", index + 1),
-                commands: sheet.commands.clone(),
+            .map(|(index, trace_sheet)| {
+                let rendered = job.sheets.get(index);
+                SheetResponse {
+                    name: rendered
+                        .map(|sheet| sheet.name.clone())
+                        .unwrap_or_else(|| format!("sheet-{:03}", index + 1)),
+                    order: index + 1,
+                    width_dots: rendered.map(|sheet| sheet.width_dots),
+                    height_dots: rendered.map(|sheet| sheet.height_dots),
+                    url: rendered.map(|_| format!("/sheets/{}.png", index + 1)),
+                    commands: trace_sheet.commands.clone(),
+                }
             })
             .collect();
         RenderResponse {
@@ -307,7 +321,6 @@ impl JobStore {
 impl From<TracedRenderResult> for RenderedJob {
     fn from(traced: TracedRenderResult) -> Self {
         let TracedRenderResult { render, trace } = traced;
-        let mut trace_sheets = trace.sheets.into_iter();
         Self {
             profile: render.metadata.profile_id,
             warnings: render.warnings.iter().map(ToString::to_string).collect(),
@@ -320,10 +333,13 @@ impl From<TracedRenderResult> for RenderedJob {
                     width_dots: sheet.surface.width(),
                     height_dots: sheet.surface.height(),
                     png: sheet.png,
-                    commands: trace_sheets
-                        .next()
-                        .map(|sheet| command_responses(sheet.commands))
-                        .unwrap_or_default(),
+                })
+                .collect(),
+            trace_sheets: trace
+                .sheets
+                .into_iter()
+                .map(|sheet| TraceWebSheet {
+                    commands: command_responses(sheet.commands),
                 })
                 .collect(),
         }
@@ -370,6 +386,10 @@ fn command_responses(commands: Vec<CommandTrace>) -> Vec<CommandResponse> {
                 byte_end: command.byte_range.end,
                 name,
                 detail,
+                paint_lifecycle: command.paint_lifecycle.map(|lifecycle| match lifecycle {
+                    PaintLifecycle::Buffered => "buffered",
+                    PaintLifecycle::Committed => "committed",
+                }),
                 annotation,
                 effects: command.effects.into_iter().map(effect_response).collect(),
             }

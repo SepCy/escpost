@@ -330,6 +330,18 @@
         overflow-wrap: anywhere;
       }
 
+      .trace-command-status {
+        grid-column: 2;
+        justify-self: start;
+        padding: 2px 6px;
+        border: 1px solid #8f6531;
+        border-radius: 3px;
+        color: #ffd49a;
+        background: #3b2e1f;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
       .trace-command-effects {
         color: #a7a7a7;
         font-size: 11px;
@@ -879,6 +891,13 @@
               ? `${group.commands.length}x ${first.detail}`
               : first.detail,
           annotation: first.annotation,
+          paint_lifecycle: group.commands.some(
+            (command) => command.paint_lifecycle === "buffered"
+          )
+            ? "buffered"
+            : group.commands.some((command) => command.paint_lifecycle === "committed")
+              ? "committed"
+              : null,
           effects: group.commands.flatMap((command) => command.effects),
           command_count: group.commands.length,
         };
@@ -946,7 +965,14 @@
         const effects = document.createElement("span");
         effects.className = "trace-command-effects";
         effects.textContent = groupEffectSummary(command);
-        button.append(name, range, detail, effects);
+        button.append(name, range, detail);
+        if (command.paint_lifecycle === "buffered") {
+          const status = document.createElement("span");
+          status.className = "trace-command-status";
+          status.textContent = "Not printed";
+          button.append(status);
+        }
+        button.append(effects);
         item.append(button);
         if (command.annotation) {
           const annotation = document.createElement("span");
@@ -1094,10 +1120,11 @@
         });
         showCommands(groupedSheets.flatMap((sheet) => sheet.commandGroups));
 
-        const sheetElements = groupedSheets.map((sheet) => {
+        const renderedSheets = groupedSheets.filter((sheet) => sheet.url);
+        const sheetElements = renderedSheets.map((sheet) => {
           const element = createSheet(
             sheet,
-            rendering.sheets.length,
+            renderedSheets.length,
             cacheKey,
             sheet.commandGroups
           );

@@ -2,6 +2,7 @@
 
 use crate::surface::{MonoSurface, RenderSurface};
 use crate::symbols::barcode_system_command_name;
+use crate::trace::PaintLifecycle;
 use crate::{DeviceEvent, LimitKind, RenderError, RenderLimits, RenderWarning, qr};
 use escpost_profiles::{
     BarcodeSystem, CarriageReturnMode, FeedBehavior, Font as ProfileFont, PositioningBehavior,
@@ -120,6 +121,16 @@ pub(crate) struct PrinterState<S: RenderSurface = MonoSurface> {
 }
 
 impl<S: RenderSurface> PrinterState<S> {
+    pub(crate) fn trace_paint_lifecycle(&self, command_offset: usize) -> Option<PaintLifecycle> {
+        if self.roll.has_command_region(command_offset) {
+            Some(PaintLifecycle::Committed)
+        } else if self.line.has_command_region(command_offset) {
+            Some(PaintLifecycle::Buffered)
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn trace_justification(&self) -> Justification {
         self.justification
     }

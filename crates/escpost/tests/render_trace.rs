@@ -1,5 +1,6 @@
 use escpost::{
-    CommandCode, DecodedCommand, Effect, Justification, Position, StateChange, render_with_trace,
+    CommandCode, DecodedCommand, Effect, Justification, PaintLifecycle, Position, StateChange,
+    render_with_trace,
 };
 use escpost_profiles::compile_profile;
 
@@ -7,6 +8,77 @@ const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
 const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
 const NT_5890K_PROFILE: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+
+#[test]
+fn paint_lifecycle_keeps_unfed_text_buffered_on_a_conceptual_sheet() {
+    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+        .expect("the reference profile should compile");
+
+    let traced = render_with_trace(b"A", &profile).expect("traced rendering should succeed");
+
+    assert!(traced.render.sheets.is_empty());
+    let [sheet] = traced.trace.sheets.as_slice() else {
+        panic!("the buffered command should retain its conceptual sheet");
+    };
+    let [command] = sheet.commands.as_slice() else {
+        panic!("the text byte should retain its command trace");
+    };
+    assert_eq!(command.paint_lifecycle, Some(PaintLifecycle::Buffered));
+    assert!(command.effects.is_empty());
+}
+
+#[test]
+fn paint_lifecycle_promotes_text_when_lf_prints_the_line() {
+    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+        .expect("the reference profile should compile");
+
+    let traced = render_with_trace(b"A\n", &profile).expect("traced rendering should succeed");
+
+    assert_eq!(
+        traced.trace.sheets[0].commands[0].paint_lifecycle,
+        Some(PaintLifecycle::Committed)
+    );
+    assert_eq!(traced.trace.sheets[0].commands[1].paint_lifecycle, None);
+}
+
+#[test]
+fn paint_lifecycle_marks_raster_images_committed_immediately() {
+    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+        .expect("the reference profile should compile");
+    let input = [0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0x80];
+
+    let traced = render_with_trace(&input, &profile).expect("traced rendering should succeed");
+
+    assert_eq!(
+        traced.trace.sheets[0].commands[0].paint_lifecycle,
+        Some(PaintLifecycle::Committed)
+    );
+}
+
+#[test]
+fn paint_lifecycle_is_absent_for_state_commands() {
+    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+        .expect("the reference profile should compile");
+
+    let traced =
+        render_with_trace(&[0x1b, b'a', 1], &profile).expect("traced rendering should succeed");
+
+    assert_eq!(traced.trace.sheets[0].commands[0].paint_lifecycle, None);
+}
+
+#[test]
+fn paint_lifecycle_distinguishes_printed_and_final_buffered_lines() {
+    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
+        .expect("the reference profile should compile");
+
+    let traced = render_with_trace(b"A\nB", &profile).expect("traced rendering should succeed");
+    let commands = &traced.trace.sheets[0].commands;
+
+    assert_eq!(commands[0].paint_lifecycle, Some(PaintLifecycle::Committed));
+    assert_eq!(commands[1].paint_lifecycle, None);
+    assert_eq!(commands[2].paint_lifecycle, Some(PaintLifecycle::Buffered));
+    assert!(commands[2].effects.is_empty());
+}
 
 #[test]
 fn experimental_trace_exposes_sheet_commands_and_logical_bounds() {

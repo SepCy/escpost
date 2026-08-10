@@ -18,6 +18,9 @@ pub(crate) trait RenderSurface: Sized {
     fn begin_command(&mut self, _offset: usize) {}
     fn end_command(&mut self) {}
     fn mark_region(&mut self, _x: u32, _y: u32, _width: u32, _height: u32) {}
+    fn has_command_region(&self, _offset: usize) -> bool {
+        false
+    }
     fn width(&self) -> u32;
     fn height(&self) -> u32;
     fn print_dot(&mut self, x: u32, y: u32);

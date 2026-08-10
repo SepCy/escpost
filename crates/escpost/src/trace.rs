@@ -78,21 +78,31 @@ pub enum Effect {
     Paint { bounds: PaintRegion },
 }
 
+/// Experimental lifecycle of logical paint produced by a command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PaintLifecycle {
+    /// Paint remains in the printer's current line buffer.
+    Buffered,
+    /// Paint reached the rendered roll.
+    Committed,
+}
+
 /// Experimental trace entry for one safely decoded command.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandTrace {
     pub byte_range: Range<usize>,
     pub command: DecodedCommand,
+    pub paint_lifecycle: Option<PaintLifecycle>,
     pub effects: Vec<Effect>,
 }
 
-/// Experimental commands associated with one rendered sheet.
+/// Experimental commands associated with one conceptual output sheet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SheetTrace {
     pub commands: Vec<CommandTrace>,
 }
 
-/// Experimental ordered command trace grouped by rendered sheet.
+/// Experimental ordered command trace grouped by conceptual output sheet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Trace {
     pub sheets: Vec<SheetTrace>,
@@ -103,7 +113,7 @@ pub(crate) trait CommandSink {
 
     fn begin_command(&mut self, sheet_index: usize, offset: usize, fallback: DecodedCommand);
     fn describe_command(&mut self, command: DecodedCommand, effects: Vec<Effect>);
-    fn finish_command(&mut self, end_offset: usize);
+    fn finish_command(&mut self, end_offset: usize, paint_lifecycle: Option<PaintLifecycle>);
 }
 
 #[inline]
@@ -175,7 +185,7 @@ impl CommandSink for NoTrace {
     }
 
     #[inline]
-    fn finish_command(&mut self, _end_offset: usize) {
+    fn finish_command(&mut self, _end_offset: usize, _paint_lifecycle: Option<PaintLifecycle>) {
         unreachable!("NoTrace commands are guarded by CommandSink::ENABLED")
     }
 }
@@ -196,7 +206,14 @@ pub(crate) struct TraceCollector {
 
 impl TraceCollector {
     pub(crate) fn finish(self, surfaces: &[TracingSurface]) -> Trace {
-        let mut sheets = (0..surfaces.len())
+        let command_sheet_count = self
+            .commands
+            .iter()
+            .map(|(sheet_index, _)| sheet_index.saturating_add(1))
+            .max()
+            .unwrap_or_default();
+        let sheet_count = surfaces.len().max(command_sheet_count);
+        let mut sheets = (0..sheet_count)
             .map(|_| SheetTrace {
                 commands: Vec::new(),
             })
@@ -206,6 +223,7 @@ impl TraceCollector {
             if let Some(surface) = surfaces.get(sheet_index)
                 && let Some(bounds) = command_bounds(surface, command.byte_range.start)
             {
+                command.paint_lifecycle = Some(PaintLifecycle::Committed);
                 command.effects.push(Effect::Paint { bounds });
             }
             if let Some(sheet) = sheets.get_mut(sheet_index) {
@@ -263,7 +281,7 @@ impl CommandSink for TraceCollector {
         pending.description = Some((command, effects));
     }
 
-    fn finish_command(&mut self, end_offset: usize) {
+    fn finish_command(&mut self, end_offset: usize, paint_lifecycle: Option<PaintLifecycle>) {
         let pending = self
             .pending
             .take()
@@ -276,6 +294,7 @@ impl CommandSink for TraceCollector {
             CommandTrace {
                 byte_range: pending.start_offset..end_offset,
                 command,
+                paint_lifecycle,
                 effects,
             },
         ));
@@ -287,8 +306,8 @@ mod tests {
     use escpost_profiles::compile_profile;
 
     use super::{
-        CommandCode, CommandTrace, DecodedCommand, Effect, Justification, Position, StateChange,
-        TraceCollector,
+        CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintLifecycle, Position,
+        StateChange, TraceCollector,
     };
     use crate::surface::tracing::TracingSurface;
     use crate::{RenderOptions, render, render_surfaces_with_sink};
@@ -321,6 +340,7 @@ mod tests {
             CommandTrace {
                 byte_range: 0..3,
                 command: DecodedCommand::SetJustification(Justification::Center),
+                paint_lifecycle: None,
                 effects: vec![Effect::StateChange(StateChange::Justification {
                     before: Justification::Left,
                     after: Justification::Center,
@@ -329,6 +349,7 @@ mod tests {
         );
         assert_eq!(commands[1].byte_range, 3..4);
         assert_eq!(commands[1].command, DecodedCommand::TextByte(b'A'));
+        assert_eq!(commands[1].paint_lifecycle, Some(PaintLifecycle::Committed));
         let [Effect::Paint { bounds }] = commands[1].effects.as_slice() else {
             panic!("the printable byte should have exactly one paint effect");
         };
@@ -341,6 +362,7 @@ mod tests {
             CommandTrace {
                 byte_range: 4..5,
                 command: DecodedCommand::LineFeed,
+                paint_lifecycle: None,
                 effects: vec![Effect::Motion {
                     before: Position { x: 294, y: 0 },
                     after: Position { x: 0, y: 30 },

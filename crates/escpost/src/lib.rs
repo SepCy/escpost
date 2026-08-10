@@ -17,8 +17,8 @@ mod trace;
 pub use error::{LimitKind, RenderError, RenderWarning};
 pub use surface::MonoSurface;
 pub use trace::{
-    CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintRegion, Position,
-    SheetTrace, StateChange, Trace,
+    CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintLifecycle, PaintRegion,
+    Position, SheetTrace, StateChange, Trace,
 };
 
 use command::{execute_esc_command, execute_gs_command};
@@ -247,7 +247,8 @@ fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
             byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
         };
         if C::ENABLED {
-            command_sink.finish_command(offset + command_length);
+            command_sink
+                .finish_command(offset + command_length, state.trace_paint_lifecycle(offset));
         }
         offset += command_length;
     }

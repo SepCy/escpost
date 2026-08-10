@@ -100,11 +100,12 @@ the renderer's in-memory model independent from any persistent or wire format.
 The CLI maps those types into its own web-specific JSON data transfer objects;
 that JSON is also experimental and is not a stable serialization contract.
 
-The trace groups commands by output sheet. The ordered
-`Trace::sheets` collection corresponds directly to `RenderResult::sheets`, and
-every rendered sheet has a `SheetTrace`, even when it contains no parsed
-commands. A command belongs to the sheet that was active when the command began
-executing. For now, one command is assumed to affect at most one sheet.
+The trace groups commands by conceptual output sheet. `Trace::sheets[n]` and
+`RenderResult::sheets[n]` refer to the same ordered sheet when rendered output
+exists. A final conceptual sheet containing only buffered output has no
+corresponding rendered entry or PNG. A command belongs to the conceptual sheet
+that was active when the command began executing. For now, one command is
+assumed to affect at most one sheet.
 
 ## Target production model
 
@@ -190,6 +191,13 @@ Internally, when `LF` commits a line:
 2. composition translates those bounds into final sheet coordinates;
 3. `LF` records its own print-position movement.
 
+Each paint-producing `CommandTrace` also carries a `PaintLifecycle`.
+Line-buffered text and column graphics begin as `Buffered`; finalization
+promotes them to `Committed` when their regions are present on a rendered roll.
+Commands such as raster images and QR print operations that draw directly onto
+the roll begin as `Committed`. Commands without logical paint have no paint
+lifecycle.
+
 `LF` does not take ownership of the committed pixels. In the web interface,
 hovering the printable command highlights its final rectangle, while hovering
 `LF` can show before/after position markers and a paper-advance indicator.
@@ -233,9 +241,11 @@ output, and a profile-confirmed behavioral deviation.
 
 ## Current vertical slice
 
-The tracer assembles a public experimental `Trace` containing one ordered
-`SheetTrace` per rendered sheet. Each `CommandTrace` has its exact input byte
-range, a semantic `DecodedCommand`, and typed effects. The slice implements
+The tracer assembles a public experimental `Trace` containing ordered
+conceptual `SheetTrace` values, including a sheet whose paint remains entirely
+buffered and therefore has no rendered PNG. Each `CommandTrace` has its exact
+input byte range, a semantic `DecodedCommand`, an optional paint lifecycle, and
+typed effects. The slice implements
 justification state changes, printer-position motion, and one logical
 `PaintRegion` bound for printable bytes, `GS v 0` raster images, and QR print
 operations. Image bounds cover their complete logical drawing area rather than
@@ -256,7 +266,11 @@ The end-to-end test verifies that:
   blank;
 - QR storage receives an unmodeled fallback entry while the print operation
   owns the symbol bounds and exposes its effective stored payload;
-- unmodeled commands retain exact ranges without fabricated effects.
+- unmodeled commands retain exact ranges without fabricated effects;
+- un-fed paint remains Buffered without receiving final sheet-space bounds or
+  causing an implicit end-of-input feed; and
+- line feeds promote buffered paint to Committed, while immediate-print
+  commands enter the Committed state directly.
 
 The slice does not yet provide typed identities and effects for other commands,
 return a partial trace on failure, or make its in-memory representation a
@@ -275,7 +289,9 @@ receipt image has an SVG overlay in the same printer-dot coordinate system.
 Hovering or focusing a command highlights its logical drawing bounds; hovering
 the bound previews the corresponding command; clicking either side pins or
 unpins the selection. State-only and motion-only commands remain selectable in
-the list but have no fabricated painted rectangle. QR bounds carry a badge on
+the list but have no fabricated painted rectangle. A command group whose paint
+remains buffered at end of input is labeled “Not printed”; it remains in the
+list even when its conceptual sheet has no PNG. QR bounds carry a badge on
 their bottom edge containing a display-safe form of the encoded payload.
 Activating the badge copies the exact text payload; an `http://` or `https://`
 payload also opens in a new tab. The QR command item repeats the payload as a

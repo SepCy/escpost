@@ -969,8 +969,9 @@ committed and buffered commands while referencing one rendered sheet.
   command or pretending buffered pixels were printed.
 - Commitment is tracked per paint-producing command, not as one coarse sheet
   flag.
-- Trace-sheet and rendered-sheet counts are no longer required to match; their
-  relationship must be represented explicitly in the experimental trace API.
+- Trace-sheet and rendered-sheet counts are no longer required to match. Their
+  ordered indexes correspond when rendered output exists; a final zero-height
+  conceptual sheet may have no rendered entry.
 - Final sheet-space bounds exist only for committed paint. A future buffered
   preview may expose line-local logical bounds, but it must remain visually and
   semantically separate from printed output.

@@ -706,7 +706,11 @@
             command.name === "Text" &&
             previousCommand?.name === "Text" &&
             previousCommand.byte_end === command.byte_start;
-          if (joinsTextGroup) {
+          const joinsLineFeedGroup =
+            command.name === "LF" &&
+            previousCommand?.name === "LF" &&
+            previousCommand.byte_end === command.byte_start;
+          if (joinsTextGroup || joinsLineFeedGroup) {
             previousGroup.commands.push(command);
           } else {
             groups.push({
@@ -722,13 +726,16 @@
         const first = group.commands[0];
         const last = group.commands.at(-1);
         const textGroup = first.name === "Text";
+        const lineFeedGroup = first.name === "LF" && group.commands.length > 1;
         return {
           name: first.name,
           byte_start: first.byte_start,
           byte_end: last.byte_end,
           detail: textGroup
             ? group.commands.map((command) => command.detail).join("")
-            : first.detail,
+            : lineFeedGroup
+              ? `${group.commands.length}x ${first.detail}`
+              : first.detail,
           effects: group.commands.flatMap((command) => command.effects),
           command_count: group.commands.length,
         };

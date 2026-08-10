@@ -297,10 +297,15 @@
 
       .trace-command:hover,
       .trace-command:focus-visible,
-      .trace-command.trace-active {
+      .trace-command.trace-previewed {
         outline: none;
-        background: #383228;
-        box-shadow: inset 3px 0 #ffb454;
+        background: #3a2929;
+        box-shadow: inset 3px 0 #ff8a8a;
+      }
+
+      .trace-command.trace-pinned {
+        background: #3b2323;
+        box-shadow: inset 3px 0 #d94b4b;
       }
 
       .trace-command-name {
@@ -386,10 +391,22 @@
         cursor: pointer;
       }
 
+      .trace-region-group {
+        --trace-color: #ff8a8a;
+        --trace-fill: rgb(255 138 138 / 32%);
+      }
+
+      .trace-region-group.trace-pinned {
+        --trace-color: #d94b4b;
+        --trace-fill: rgb(217 75 75 / 32%);
+      }
+
       .trace-region-group:hover .trace-region,
-      .trace-region-group.trace-active .trace-region {
-        fill: rgb(255 180 84 / 32%);
-        stroke: #ffb454;
+      .trace-region-group:focus-visible .trace-region,
+      .trace-region-group.trace-previewed .trace-region,
+      .trace-region-group.trace-pinned .trace-region {
+        fill: var(--trace-fill);
+        stroke: var(--trace-color);
       }
 
       .trace-motion-hit {
@@ -408,29 +425,31 @@
 
       .trace-motion-visual {
         fill: none;
-        stroke: #ffb454;
+        stroke: var(--trace-color);
         stroke-width: 2px;
         stroke-dasharray: 6 4;
       }
 
       .trace-motion-label rect {
         fill: #252525;
-        stroke: #ffb454;
+        stroke: var(--trace-color);
         stroke-width: 1px;
       }
 
       .trace-motion-label text {
-        fill: #ffb454;
+        fill: var(--trace-color);
         font: 700 10px/1 monospace;
         text-anchor: middle;
       }
 
       .trace-region-group:hover .trace-motion-visual,
       .trace-region-group:focus-visible .trace-motion-visual,
-      .trace-region-group.trace-active .trace-motion-visual,
+      .trace-region-group.trace-previewed .trace-motion-visual,
+      .trace-region-group.trace-pinned .trace-motion-visual,
       .trace-region-group:hover .trace-motion-label,
       .trace-region-group:focus-visible .trace-motion-label,
-      .trace-region-group.trace-active .trace-motion-label {
+      .trace-region-group.trace-previewed .trace-motion-label,
+      .trace-region-group.trace-pinned .trace-motion-label {
         opacity: 1;
       }
 
@@ -636,51 +655,120 @@
       document.querySelector("#serverAddress").textContent = window.location.host;
       let currentRendering = "";
       let pinnedCommand = null;
+      let previewedCommand = null;
 
-      function setActiveCommand(index) {
+      function updateCommandHighlights() {
         document.querySelectorAll("[data-command-index]").forEach((element) => {
-          const active = index !== null && Number(element.dataset.commandIndex) === index;
-          element.classList.toggle("trace-active", active);
+          const commandIndex = Number(element.dataset.commandIndex);
+          element.classList.toggle("trace-previewed", commandIndex === previewedCommand);
+          element.classList.toggle("trace-pinned", commandIndex === pinnedCommand);
           if (element.classList.contains("trace-command")) {
-            element.setAttribute("aria-pressed", String(active && pinnedCommand === index));
+            element.setAttribute(
+              "aria-pressed",
+              String(commandIndex === pinnedCommand)
+            );
           }
         });
       }
 
-      function revealCommand(index) {
-        commandList
-          .querySelector(`[data-command-index="${index}"]`)
-          ?.scrollIntoView({ block: "nearest" });
+      function scrollWithin(element, container, includeHorizontal = false) {
+        const elementBounds = element.getBoundingClientRect();
+        const containerBounds = container.getBoundingClientRect();
+        const visibleBottom = containerBounds.top + container.clientHeight;
+        const visibleRight = containerBounds.left + container.clientWidth;
+        let top = 0;
+        let left = 0;
+        if (elementBounds.top < containerBounds.top) {
+          top = elementBounds.top - containerBounds.top;
+        } else if (elementBounds.bottom > visibleBottom) {
+          top = elementBounds.bottom - visibleBottom;
+        }
+        if (includeHorizontal && elementBounds.left < containerBounds.left) {
+          left = elementBounds.left - containerBounds.left;
+        } else if (includeHorizontal && elementBounds.right > visibleRight) {
+          left = elementBounds.right - visibleRight;
+        }
+        container.scrollBy({ top, left });
       }
 
-      function previewCommand(index, revealListItem = false) {
-        if (pinnedCommand === null) {
-          setActiveCommand(index);
-          if (revealListItem && index !== null) {
-            revealCommand(index);
-          }
+      function revealCommand(index) {
+        const command = commandList.querySelector(`[data-command-index="${index}"]`);
+        if (command) {
+          scrollWithin(command, commandPanel);
+        }
+      }
+
+      function revealPreview(index) {
+        const region = sheets.querySelector(
+          `.trace-region-group[data-command-index="${index}"]`
+        );
+        if (region) {
+          scrollWithin(region, traceWorkspace, true);
+        }
+      }
+
+      function previewCommand(index, revealListItem = false, revealPreviewItem = false) {
+        previewedCommand = index;
+        updateCommandHighlights();
+        if (revealListItem && index !== null) {
+          revealCommand(index);
+        }
+        if (revealPreviewItem && index !== null) {
+          revealPreview(index);
         }
       }
 
       function togglePinnedCommand(index) {
         pinnedCommand = pinnedCommand === index ? null : index;
-        setActiveCommand(pinnedCommand);
+        updateCommandHighlights();
       }
 
-      function activateCommand(index, revealListItem) {
+      sheets.addEventListener("click", (event) => {
+        if (
+          event.target.closest(".receipt-layer") &&
+          !event.target.closest(".trace-region-group")
+        ) {
+          pinnedCommand = null;
+          updateCommandHighlights();
+        }
+      });
+
+      function activateCommand(index, revealListItem, revealPreviewItem = false) {
         togglePinnedCommand(index);
         if (revealListItem) {
           revealCommand(index);
         }
+        if (revealPreviewItem) {
+          revealPreview(index);
+        }
       }
 
-      function bindCommandInteraction(element, index, revealListItem = false) {
+      function bindCommandInteraction(
+        element,
+        index,
+        revealListItem = false,
+        revealPreviewItem = false
+      ) {
         element.dataset.commandIndex = String(index);
-        element.addEventListener("mouseenter", () => previewCommand(index, revealListItem));
+        element.addEventListener("mouseenter", () => previewCommand(index));
+        element.addEventListener("pointermove", () => {
+          if (revealListItem) {
+            revealCommand(index);
+          }
+          if (revealPreviewItem) {
+            revealPreview(index);
+          }
+        });
         element.addEventListener("mouseleave", () => previewCommand(null));
-        element.addEventListener("focus", () => previewCommand(index, revealListItem));
+        element.addEventListener(
+          "focus",
+          () => previewCommand(index, revealListItem, revealPreviewItem)
+        );
         element.addEventListener("blur", () => previewCommand(null));
-        element.addEventListener("click", () => activateCommand(index, revealListItem));
+        element.addEventListener(
+          "click",
+          () => activateCommand(index, revealListItem, revealPreviewItem)
+        );
       }
 
       function effectSummary(effect) {
@@ -789,7 +877,7 @@
         button.type = "button";
         button.className = "trace-command";
         button.setAttribute("aria-pressed", "false");
-        bindCommandInteraction(button, group.index);
+        bindCommandInteraction(button, group.index, false, true);
 
         const name = document.createElement("span");
         name.className = "trace-command-name";
@@ -811,6 +899,7 @@
       function showCommands(groups) {
         const entries = groups || [];
         pinnedCommand = null;
+        previewedCommand = null;
         commandPanel.hidden = entries.length === 0;
         traceWorkspace.classList.toggle("trace-without-commands", entries.length === 0);
         commandList.replaceChildren(...entries.map(createCommand));
@@ -988,7 +1077,7 @@
         arrow.setAttribute("markerUnits", "userSpaceOnUse");
         const arrowShape = document.createElementNS(namespace, "path");
         arrowShape.setAttribute("d", "M 0 0 L 8 4 L 0 8 z");
-        arrowShape.setAttribute("fill", "#ffb454");
+        arrowShape.setAttribute("fill", "context-stroke");
         arrow.append(arrowShape);
         definitions.append(arrow);
         overlay.append(definitions);

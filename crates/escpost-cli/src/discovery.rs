@@ -1,22 +1,22 @@
 use std::fmt;
 use std::net::Ipv4Addr;
 
+use crate::error::CliError;
+
 /// The longest network an automatic scan will sweep. A /24 means at most 254
 /// probes per interface; anything larger must be requested with --subnet.
-#[allow(dead_code)]
 pub(crate) const AUTO_SCAN_MINIMUM_PREFIX: u8 = 24;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
 pub(crate) struct Subnet {
     network: Ipv4Addr,
     prefix: u8,
 }
 
-#[allow(dead_code)]
 impl Subnet {
     /// Parse CIDR notation such as `10.42.0.0/24`. Host bits are cleared, so
     /// `10.42.0.71/24` names the same subnet as `10.42.0.0/24`.
+    #[allow(dead_code)]
     pub(crate) fn parse(text: &str) -> Result<Self, String> {
         let error = || format!("expected CIDR notation such as 10.42.0.0/24, found `{text}`");
         let (address, prefix) = text.split_once('/').ok_or_else(error)?;
@@ -52,6 +52,7 @@ impl Subnet {
     /// Probe candidates. Ordinary subnets exclude the network and broadcast
     /// addresses; /31 and /32 have neither (RFC 3021), so every address is a
     /// host — the integration tests rely on /32 working.
+    #[allow(dead_code)]
     pub(crate) fn hosts(&self) -> Vec<Ipv4Addr> {
         let network = u32::from(self.network);
         let broadcast = network | !prefix_mask(self.prefix);
@@ -70,7 +71,6 @@ impl fmt::Display for Subnet {
     }
 }
 
-#[allow(dead_code)]
 fn prefix_mask(prefix: u8) -> u32 {
     if prefix == 0 {
         0
@@ -79,11 +79,71 @@ fn prefix_mask(prefix: u8) -> u32 {
     }
 }
 
+/// One IPv4 address of a local interface, as reported by the operating
+/// system.
+pub(crate) struct InterfaceAddress {
+    pub(crate) name: String,
+    pub(crate) address: Ipv4Addr,
+    pub(crate) netmask: Ipv4Addr,
+}
+
+/// One subnet to sweep. `excluded` is the scanning host's own address, which
+/// automatic mode never probes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ScanTarget {
+    pub(crate) subnet: Subnet,
+    pub(crate) interface: Option<String>,
+    pub(crate) excluded: Option<Ipv4Addr>,
+}
+
+/// The connected subnets an automatic scan sweeps: non-loopback, contiguous
+/// netmask, no larger than /24, first interface wins on duplicates.
+pub(crate) fn auto_scan_targets(addresses: Vec<InterfaceAddress>) -> Vec<ScanTarget> {
+    let mut targets: Vec<ScanTarget> = Vec::new();
+    for interface in addresses {
+        if interface.address.is_loopback() {
+            continue;
+        }
+        let Some(subnet) = Subnet::from_interface(interface.address, interface.netmask) else {
+            continue;
+        };
+        if subnet.prefix() < AUTO_SCAN_MINIMUM_PREFIX {
+            continue;
+        }
+        if targets.iter().any(|target| target.subnet == subnet) {
+            continue;
+        }
+        targets.push(ScanTarget {
+            subnet,
+            interface: Some(interface.name),
+            excluded: Some(interface.address),
+        });
+    }
+    targets
+}
+
+#[allow(dead_code)]
+pub(crate) fn local_scan_targets() -> Result<Vec<ScanTarget>, CliError> {
+    let interfaces = if_addrs::get_if_addrs().map_err(CliError::EnumerateNetworkInterfaces)?;
+    let addresses = interfaces
+        .into_iter()
+        .filter_map(|interface| match interface.addr {
+            if_addrs::IfAddr::V4(v4) => Some(InterfaceAddress {
+                name: interface.name,
+                address: v4.ip,
+                netmask: v4.netmask,
+            }),
+            if_addrs::IfAddr::V6(_) => None,
+        })
+        .collect();
+    Ok(auto_scan_targets(addresses))
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::Ipv4Addr;
 
-    use super::Subnet;
+    use super::{InterfaceAddress, ScanTarget, Subnet, auto_scan_targets};
 
     #[test]
     fn parse_normalizes_host_bits_to_the_network_address() {
@@ -145,5 +205,49 @@ mod tests {
             Subnet::from_interface(Ipv4Addr::new(10, 42, 0, 1), Ipv4Addr::new(255, 0, 255, 0),)
                 .is_none()
         );
+    }
+
+    fn interface(name: &str, address: [u8; 4], netmask: [u8; 4]) -> InterfaceAddress {
+        InterfaceAddress {
+            name: name.to_owned(),
+            address: Ipv4Addr::from(address),
+            netmask: Ipv4Addr::from(netmask),
+        }
+    }
+
+    #[test]
+    fn auto_targets_keep_small_connected_subnets_and_remember_the_interface() {
+        let targets =
+            auto_scan_targets(vec![interface("enx0", [10, 42, 0, 1], [255, 255, 255, 0])]);
+
+        assert_eq!(
+            targets,
+            vec![ScanTarget {
+                subnet: Subnet::parse("10.42.0.0/24").expect("a valid CIDR should parse"),
+                interface: Some("enx0".to_owned()),
+                excluded: Some(Ipv4Addr::new(10, 42, 0, 1)),
+            }]
+        );
+    }
+
+    #[test]
+    fn auto_targets_skip_loopback_and_networks_larger_than_a_24() {
+        let targets = auto_scan_targets(vec![
+            interface("lo", [127, 0, 0, 1], [255, 0, 0, 0]),
+            interface("docker0", [172, 17, 0, 1], [255, 255, 0, 0]),
+        ]);
+
+        assert!(targets.is_empty());
+    }
+
+    #[test]
+    fn auto_targets_deduplicate_identical_subnets() {
+        let targets = auto_scan_targets(vec![
+            interface("eth0", [10, 42, 0, 1], [255, 255, 255, 0]),
+            interface("eth0:1", [10, 42, 0, 2], [255, 255, 255, 0]),
+        ]);
+
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].interface.as_deref(), Some("eth0"));
     }
 }

@@ -15,6 +15,7 @@ clap.workspace = true
 directories.workspace = true
 escpost = { path = "../escpost" }
 escpost-profiles = { path = "../escpost-profiles" }
+if-addrs.workspace = true
 inquire.workspace = true
 nusb.workspace = true
 serde.workspace = true

@@ -1,5 +1,5 @@
-use escpost::{RenderError, render};
 use escpost_profiles::compile_profile;
+use escpost_render::{RenderError, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -309,7 +309,7 @@ fn extended_bytes_in_post_v1_multibyte_code_pages_still_report_unsupported() {
 }
 
 fn cell_contains_printed_dots(
-    surface: &escpost::MonoSurface,
+    surface: &escpost_render::MonoSurface,
     left: u32,
     width: u32,
     height: u32,
@@ -317,7 +317,12 @@ fn cell_contains_printed_dots(
     (left..left + width).any(|x| (0..height).any(|y| surface.is_printed(x, y)))
 }
 
-fn count_printed_dots(surface: &escpost::MonoSurface, left: u32, width: u32, height: u32) -> usize {
+fn count_printed_dots(
+    surface: &escpost_render::MonoSurface,
+    left: u32,
+    width: u32,
+    height: u32,
+) -> usize {
     (left..left + width)
         .flat_map(|x| (0..height).map(move |y| (x, y)))
         .filter(|&(x, y)| surface.is_printed(x, y))

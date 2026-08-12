@@ -1,8 +1,8 @@
 use std::io::IsTerminal;
 use std::time::Duration;
 
-use escpost::{RenderOptions, render_with_trace_and_options};
 use escpost_profiles::PrinterProfile;
+use escpost_render::{RenderOptions, render_with_trace_and_options};
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
 

@@ -1,5 +1,5 @@
-use escpost::{LimitKind, RenderError, RenderLimits, RenderOptions, render_with_options};
 use escpost_profiles::compile_profile;
+use escpost_render::{LimitKind, RenderError, RenderLimits, RenderOptions, render_with_options};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -86,7 +86,7 @@ fn options_with(update: impl FnOnce(&mut RenderLimits)) -> RenderOptions {
 }
 
 fn assert_limit(
-    result: Result<escpost::RenderResult, RenderError>,
+    result: Result<escpost_render::RenderResult, RenderError>,
     expected_kind: LimitKind,
     expected_value: u64,
     expected_limit: u64,

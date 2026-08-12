@@ -1,5 +1,5 @@
-use escpost::{RenderError, render};
 use escpost_profiles::compile_profile;
+use escpost_render::{RenderError, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -170,7 +170,12 @@ fn qr_symbols_use_the_configured_print_area_and_reject_oversized_symbols() {
     assert!(matches!(error, RenderError::InvalidQrData { .. }));
 }
 
-fn count_printed_dots(surface: &escpost::MonoSurface, left: u32, width: u32, height: u32) -> usize {
+fn count_printed_dots(
+    surface: &escpost_render::MonoSurface,
+    left: u32,
+    width: u32,
+    height: u32,
+) -> usize {
     (left..left + width)
         .flat_map(|x| (0..height).map(move |y| (x, y)))
         .filter(|&(x, y)| surface.is_printed(x, y))

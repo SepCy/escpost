@@ -1,5 +1,5 @@
-use escpost::{DeviceEvent, render};
 use escpost_profiles::compile_profile;
+use escpost_render::{DeviceEvent, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");

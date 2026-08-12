@@ -1,5 +1,5 @@
-use escpost::{RenderError, render};
 use escpost_profiles::compile_profile;
+use escpost_render::{RenderError, render};
 use std::io::Cursor;
 
 const CAPABILITIES_JSON: &[u8] =

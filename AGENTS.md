@@ -23,14 +23,14 @@ docker compose build
 docker compose run --rm test cargo test --workspace
 
 # A single crate
-docker compose run --rm test cargo test -p escpost
+docker compose run --rm test cargo test -p escpost-render
 
 # Formatting and lints (must pass before committing)
 docker compose run --rm test cargo fmt --check
 docker compose run --rm test cargo clippy --workspace --all-targets -- -D warnings
 
 # Golden conformance layer, with rendered-vs-expected detail
-docker compose run --rm test cargo test -p escpost --test golden_cases -- --nocapture
+docker compose run --rm test cargo test -p escpost-render --test golden_cases -- --nocapture
 ```
 
 ### Running the CLI

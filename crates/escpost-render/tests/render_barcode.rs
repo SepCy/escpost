@@ -1,5 +1,5 @@
-use escpost::{RenderError, render};
 use escpost_profiles::{BarcodeSystem, compile_profile};
+use escpost_render::{RenderError, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -1502,7 +1502,7 @@ fn test_profile_with_function_b(system: BarcodeSystem) -> escpost_profiles::Prin
 }
 
 fn cell_contains_printed_dots(
-    surface: &escpost::MonoSurface,
+    surface: &escpost_render::MonoSurface,
     left: u32,
     top: u32,
     width: u32,
@@ -1516,7 +1516,7 @@ fn modules(bits: &str) -> Vec<bool> {
 }
 
 fn assert_module_pattern(
-    surface: &escpost::MonoSurface,
+    surface: &escpost_render::MonoSurface,
     modules: &[bool],
     module_width: u32,
     bar_height: u32,
@@ -1535,7 +1535,7 @@ fn assert_module_pattern(
 }
 
 fn assert_hri_below(
-    surface: &escpost::MonoSurface,
+    surface: &escpost_render::MonoSurface,
     profile: &escpost_profiles::PrinterProfile,
     barcode_height: u32,
     barcode_width: u32,

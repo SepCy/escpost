@@ -59,7 +59,7 @@ up front. Add each module with the feature that needs it.
 
 Do not create a separate server or protocol crate merely in anticipation of
 reuse. Extract one when another executable or embedding API genuinely needs
-the same behavior. The `escpost` rendering crate must remain independent of
+the same behavior. The `escpost-render` rendering crate must remain independent of
 CLI, networking, storage, and web concerns.
 
 The Python package is now only the render binding; the Click CLI has been

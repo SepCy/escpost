@@ -84,7 +84,7 @@ been published to crates.io or PyPI.
 
 | Library or API | Available today |
 |---|---|
-| [`escpost`](crates/escpost) | Convert ESC/POS data into ordered PNG sheets using a selected printer profile. Results include warnings, device events, and reproducible profile information. |
+| [`escpost-render`](crates/escpost-render) | Convert ESC/POS data into ordered PNG sheets using a selected printer profile. Results include warnings, device events, and reproducible profile information. |
 | [`escpost-profiles`](crates/escpost-profiles) | Resolve profiles from the embedded catalog, inspect profile capabilities, and read, write, compile, or synthesize canonical profiles. |
 | [`escpost-python`](crates/escpost-python) | Call the Rust preview engine from Python and receive the rendered PNG sheets. |
 

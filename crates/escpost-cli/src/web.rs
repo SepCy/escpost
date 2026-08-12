@@ -8,7 +8,7 @@ use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
-use escpost::{
+use escpost_render::{
     CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintLifecycle, StateChange,
     TracedRenderResult,
 };

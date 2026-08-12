@@ -57,7 +57,7 @@ Keep isolated command mechanics in a command-specific file. For example,
 a file named after the governing state:
 
 ```text
-crates/escpost/tests/
+crates/escpost-render/tests/
 ├── render_justification.rs
 ├── render_print_area.rs
 ├── render_initialization.rs
@@ -244,7 +244,7 @@ Run only the golden conformance layer with:
 
 ```bash
 docker compose run --rm test \
-  cargo test -p escpost --test golden_cases -- --nocapture
+  cargo test -p escpost-render --test golden_cases -- --nocapture
 ```
 
 `notes.md` explains the behavior under test, relevant commands, manual

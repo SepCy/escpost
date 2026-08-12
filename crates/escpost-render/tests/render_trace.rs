@@ -1,8 +1,8 @@
-use escpost::{
+use escpost_profiles::compile_profile;
+use escpost_render::{
     CommandCode, DecodedCommand, Effect, Justification, PaintLifecycle, Position, StateChange,
     render_with_trace,
 };
-use escpost_profiles::compile_profile;
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");

@@ -756,18 +756,17 @@ struct UpstreamDescriptors {
     vendor: Option<String>,
 }
 
+type CompiledProfileSource = (
+    ProfileSource,
+    BTreeMap<u8, String>,
+    Features,
+    Option<UpstreamDescriptors>,
+);
+
 fn compile_profile_source(
     capabilities_json: &[u8],
     enrichment: &Enrichment,
-) -> Result<
-    (
-        ProfileSource,
-        BTreeMap<u8, String>,
-        Features,
-        Option<UpstreamDescriptors>,
-    ),
-    CompileProfileError,
-> {
+) -> Result<CompiledProfileSource, CompileProfileError> {
     match &enrichment.source {
         ProfileSource::Upstream {
             profile_sha256: expected_hash,

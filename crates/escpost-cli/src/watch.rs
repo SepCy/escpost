@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-use escpost::{RenderOptions, render_with_trace_and_options};
+use escpost_render::{RenderOptions, render_with_trace_and_options};
 
 use crate::cli::InputFormat;
 use crate::error::CliError;
@@ -68,7 +68,7 @@ async fn run(
     }
 }
 
-fn rerender(config: &WatchConfig) -> Result<escpost::TracedRenderResult, CliError> {
+fn rerender(config: &WatchConfig) -> Result<escpost_render::TracedRenderResult, CliError> {
     let input = source::load(&config.source, config.format)?;
     let profile = profiles::load(&config.profile)?;
     let options = RenderOptions {

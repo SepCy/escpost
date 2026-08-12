@@ -590,7 +590,7 @@ available.
 
 ### Context
 
-The `escpost` crate is embedded by the CLI and the Python binding today, and
+The `escpost-render` crate is embedded by the CLI and the Python binding today, and
 the roadmap adds more consumers: replay, proxying, linting, and integration
 into other projects. Some future hosts may not be developer-machine processes
 at all; rendering inside a browser through WebAssembly is a realistic option
@@ -600,7 +600,7 @@ surface that must be audited and tested.
 
 ### Decision
 
-The `escpost` crate performs pure computation: ESC/POS bytes and a profile
+The `escpost-render` crate performs pure computation: ESC/POS bytes and a profile
 in, dot surfaces and PNG bytes out. It must not depend on networking,
 hardware transports, filesystem access, system clocks, or any other
 operating-system interface. Its dependency tree stays pure-Rust computation

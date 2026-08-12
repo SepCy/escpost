@@ -1,5 +1,5 @@
-use escpost::render;
 use escpost_profiles::{CarriageReturnMode, FeedBehavior, compile_profile};
+use escpost_render::render;
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -194,7 +194,12 @@ fn column_graphics_advance_by_the_selected_line_spacing() {
     assert_eq!(surface.height(), 24);
 }
 
-fn count_printed_dots(surface: &escpost::MonoSurface, left: u32, width: u32, height: u32) -> usize {
+fn count_printed_dots(
+    surface: &escpost_render::MonoSurface,
+    left: u32,
+    width: u32,
+    height: u32,
+) -> usize {
     (left..left + width)
         .flat_map(|x| (0..height).map(move |y| (x, y)))
         .filter(|&(x, y)| surface.is_printed(x, y))

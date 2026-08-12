@@ -1,5 +1,5 @@
-use escpost::render;
 use escpost_profiles::{ProfileSource, compile_profile};
+use escpost_render::render;
 use serde::Deserialize;
 use std::fs;
 use std::io::{BufReader, Cursor};

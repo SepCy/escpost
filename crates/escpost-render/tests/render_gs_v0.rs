@@ -1,5 +1,5 @@
-use escpost::{RenderError, render};
 use escpost_profiles::{FeedBehavior, compile_profile};
+use escpost_render::{RenderError, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");

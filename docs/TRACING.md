@@ -31,7 +31,7 @@ PrinterState<S: RenderSurface>
 The implementation is split by responsibility:
 
 ```text
-crates/escpost/src/surface/
+crates/escpost-render/src/surface/
 ├── mod.rs       RenderSurface contract and module exports
 ├── mono.rs      monochrome raster storage and PNG encoding
 └── tracing.rs   provenance-decorating surface used by traced renders
@@ -86,7 +86,7 @@ mirrors `render_with_options`. Both return `TracedRenderResult`, which contains
 the ordinary `RenderResult` plus a `Trace`:
 
 ```rust
-let result = escpost::render_with_trace(data, &profile)?;
+let result = escpost_render::render_with_trace(data, &profile)?;
 
 for sheet in result.trace.sheets {
     for command in sheet.commands {

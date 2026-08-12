@@ -1,5 +1,5 @@
-use escpost::render;
 use escpost_profiles::compile_profile;
+use escpost_render::render;
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -161,7 +161,12 @@ fn esc_at_clears_qr_data_and_restores_qr_defaults() {
     assert_eq!(rendered.sheets[0].surface.height(), 63);
 }
 
-fn count_printed_dots(surface: &escpost::MonoSurface, left: u32, width: u32, height: u32) -> usize {
+fn count_printed_dots(
+    surface: &escpost_render::MonoSurface,
+    left: u32,
+    width: u32,
+    height: u32,
+) -> usize {
     (left..left + width)
         .flat_map(|x| (0..height).map(move |y| (x, y)))
         .filter(|&(x, y)| surface.is_printed(x, y))
@@ -169,7 +174,7 @@ fn count_printed_dots(surface: &escpost::MonoSurface, left: u32, width: u32, hei
 }
 
 fn cell_contains_printed_dots(
-    surface: &escpost::MonoSurface,
+    surface: &escpost_render::MonoSurface,
     left: u32,
     width: u32,
     height: u32,

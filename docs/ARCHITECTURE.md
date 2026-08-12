@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`escpost` interprets one complete ESC/POS byte stream as an isolated print
+`escpost-render` interprets one complete ESC/POS byte stream as an isolated print
 job and returns one or more PNG receipt sheets.
 
 The renderer works in printer dots. HTML, CSS, SVG text, host fonts, and browser
@@ -27,7 +27,7 @@ The Rust workspace contains four crates:
 
 - `escpost-profiles` imports, enriches, validates, and loads printer
   profiles.
-- `escpost` parses ESC/POS, applies printer state, rasterizes content, and
+- `escpost-render` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
 - `escpost-cli` provides the native `escpost` executable, PNG destinations,
   embedded local web viewer, named USB and RAW TCP output, passive printer
@@ -128,7 +128,7 @@ conformance-case directories. Output adapters consume one completed
 Known ESC/POS source
         │
         ▼
-Profile resolution → escpost::render
+Profile resolution → escpost_render::render
                            │
              ┌─────────────┼─────────────┐
              ▼             ▼             ▼
@@ -182,7 +182,7 @@ V1 does not return a speculative partial preview after a parser error.
 
 ### Renderer modules
 
-Each rendering domain owns one module in `crates/escpost/src/`:
+Each rendering domain owns one module in `crates/escpost-render/src/`:
 
 ```text
 lib.rs            public API types and the render entry point

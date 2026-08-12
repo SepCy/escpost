@@ -2,7 +2,7 @@ use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::Path;
 
-use escpost::RenderResult;
+use escpost_render::RenderResult;
 use serde::Serialize;
 
 use crate::error::CliError;
@@ -58,7 +58,7 @@ fn remove_previous_manifest(output_directory: &Path) -> Result<(), CliError> {
 fn select_sheet(
     rendered: &RenderResult,
     selected_sheet: Option<usize>,
-) -> Result<&escpost::RenderedSheet, CliError> {
+) -> Result<&escpost_render::RenderedSheet, CliError> {
     match selected_sheet {
         Some(number @ 1..) => rendered
             .sheets

@@ -1,5 +1,5 @@
-use escpost::{RenderWarning, render};
 use escpost_profiles::{CutterGeometry, FeedBehavior, compile_profile};
+use escpost_render::{RenderWarning, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");

@@ -1,7 +1,7 @@
 use std::io::{self, IsTerminal};
 use std::path::Path;
 
-use escpost::{
+use escpost_render::{
     RenderOptions, TracedRenderResult, render_with_options, render_with_trace_and_options,
 };
 

@@ -1,5 +1,5 @@
-use escpost::{LimitKind, RenderError, render};
 use escpost_profiles::{PrinterProfile, compile_profile};
+use escpost_render::{LimitKind, RenderError, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");

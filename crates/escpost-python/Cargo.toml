@@ -10,7 +10,7 @@ name = "_native"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-escpost = { path = "../escpost" }
+escpost-render = { path = "../escpost-render" }
 escpost-profiles = { path = "../escpost-profiles" }
 pyo3.workspace = true
 

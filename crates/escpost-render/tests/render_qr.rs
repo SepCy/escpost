@@ -1,5 +1,5 @@
-use escpost::{RenderError, render};
 use escpost_profiles::compile_profile;
+use escpost_render::{RenderError, render};
 
 const CAPABILITIES_JSON: &[u8] =
     include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
@@ -179,7 +179,7 @@ fn test_profile() -> escpost_profiles::PrinterProfile {
 }
 
 fn assert_finder_pattern(
-    surface: &escpost::MonoSurface,
+    surface: &escpost_render::MonoSurface,
     module_left: u32,
     module_top: u32,
     module_size: u32,

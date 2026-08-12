@@ -3,7 +3,13 @@ name = "escpost"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "The most complete ESC/POS developer toolbox for receipt and label printers."
+readme = "README.md"
+keywords = ["escpos", "printer", "receipt", "cli", "pos"]
+categories = ["command-line-utilities", "development-tools"]
 
 [[bin]]
 name = "escpost"
@@ -13,8 +19,8 @@ path = "src/main.rs"
 axum.workspace = true
 clap.workspace = true
 directories.workspace = true
-escpost-render = { path = "../escpost-render" }
-escpost-profiles = { path = "../escpost-profiles" }
+escpost-render = { version = "0.1.0", path = "../escpost-render" }
+escpost-profiles = { version = "0.1.0", path = "../escpost-profiles" }
 inquire.workspace = true
 nusb.workspace = true
 serde.workspace = true

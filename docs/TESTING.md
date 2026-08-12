@@ -87,7 +87,7 @@ They should not duplicate the complete Rust conformance suite.
 
 ### Rust CLI and HTTP tests
 
-`crates/escpost-cli/tests/` exercises the developer command as a subprocess
+`crates/escpost/tests/` exercises the developer command as a subprocess
 and the embedded viewer over real loopback sockets. These tests cover:
 
 - binary, hexadecimal, stdin, and case-directory inputs;
@@ -106,7 +106,7 @@ and the embedded viewer over real loopback sockets. These tests cover:
 Run them with:
 
 ```bash
-docker compose run --rm test cargo test -p escpost-cli
+docker compose run --rm test cargo test -p escpost
 ```
 
 Browser verification uses the same Docker entry point and a real browser

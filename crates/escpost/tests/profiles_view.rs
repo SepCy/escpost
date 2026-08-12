@@ -1,4 +1,4 @@
-use escpost_cli::profiles_cmd::ProfileView;
+use escpost::profiles_cmd::ProfileView;
 use escpost_profiles::resolver;
 
 #[test]

@@ -396,7 +396,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "escpost-cli"
+name = "escpost"
 version = "0.1.0"
 dependencies = [
  "axum",

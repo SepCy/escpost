@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "crates/escpost-render",
-    "crates/escpost-cli",
+    "crates/escpost",
     "crates/escpost-python",
     "crates/escpost-profiles",
 ]

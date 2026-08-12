@@ -609,7 +609,7 @@ keeps the crate portable to any target Rust compiles to, including
 WebAssembly.
 
 Applications own I/O. USB and RAW TCP printing, the web server, and file
-handling live in `escpost-cli`. When a second consumer needs physical
+handling live in `escpost`. When a second consumer needs physical
 output, extract the transports into a sibling crate such as `escpost-print`
 instead of moving them into the renderer.
 

@@ -114,7 +114,7 @@ wrapper around `docker compose` or `cargo` and can be run directly. The native
 build produces `target/release/escpost`. To install it on `PATH`:
 
 ```bash
-cargo install --path crates/escpost-cli
+cargo install --path crates/escpost
 ```
 
 Additional tasks:

@@ -760,10 +760,7 @@ fn temporary_directory(case: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("the clock should be after the Unix epoch")
         .as_nanos();
-    let path = std::env::temp_dir().join(format!(
-        "escpost-cli-{case}-{}-{unique}",
-        std::process::id()
-    ));
+    let path = std::env::temp_dir().join(format!("escpost-{case}-{}-{unique}", std::process::id()));
     fs::create_dir(&path).expect("the test directory should be creatable");
     path
 }

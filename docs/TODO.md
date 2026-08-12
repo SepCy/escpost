@@ -26,14 +26,14 @@ without duplicating completion state in the contract.
 
 ## Rust CLI location
 
-`crates/escpost-cli/` is the Rust binary crate. Its executable remains named
+`crates/escpost/` is the Rust binary crate. Its executable remains named
 `escpost`.
 
 The crate should initially contain command parsing and the modules used only by
 the developer executable:
 
 ```text
-crates/escpost-cli/
+crates/escpost/
 └── src/
     ├── main.rs
     ├── commands/
@@ -76,7 +76,7 @@ input.
 
 ### Command foundation
 
-- [x] Create `crates/escpost-cli` with an `escpost` binary and `clap` derive
+- [x] Create `crates/escpost` with an `escpost` binary and `clap` derive
       command model. (`CLI-G01`)
 - [x] Add the global `--non-interactive` option and effective terminal-policy
       detection. (`CLI-G02`, `CLI-G03`)

@@ -13,7 +13,7 @@ default:
 
 # Compile the CLI in the container.
 docker-build:
-    {{docker_cargo}} build -p escpost-cli
+    {{docker_cargo}} build -p escpost
 
 # Run the test suite in the container.
 docker-test:
@@ -21,13 +21,13 @@ docker-test:
 
 # Run the CLI in the container, e.g. `just docker-run serve --no-open`.
 docker-run *args:
-    {{docker_cargo}} run -q -p escpost-cli -- {{args}}
+    {{docker_cargo}} run -q -p escpost -- {{args}}
 
 # --- Native (host Rust toolchain) ---
 
 # Build target/release/escpost.
 native-build:
-    cargo build --release -p escpost-cli
+    cargo build --release -p escpost
 
 # Run the test suite on the host.
 native-test:
@@ -35,7 +35,7 @@ native-test:
 
 # Run the CLI on the host, e.g. `just native-run serve`.
 native-run *args:
-    cargo run -q -p escpost-cli -- {{args}}
+    cargo run -q -p escpost -- {{args}}
 
 # --- Utilities ---
 

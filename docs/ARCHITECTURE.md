@@ -29,7 +29,7 @@ The Rust workspace contains four crates:
   profiles.
 - `escpost-render` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
-- `escpost-cli` provides the native `escpost` executable, PNG destinations,
+- `escpost` provides the native `escpost` executable, PNG destinations,
   embedded local web viewer, named USB and RAW TCP output, passive printer
   inventory, and platform-native machine configuration.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
@@ -45,11 +45,11 @@ interpreter lock while Rust renders.
 
 The Python package is only the render binding; it contains no CLI. The root
 development wrapper routes every command to the Rust executable. Hardware
-inventory and printing live in `escpost-cli`, not the Rust rendering library.
+inventory and printing live in `escpost`, not the Rust rendering library.
 
 ## Rust named-printer output
 
-`escpost-cli` loads a `print` source through the same immutable source loader
+`escpost` loads a `print` source through the same immutable source loader
 as `render`, resolves one configured printer name, then hands those decoded
 bytes directly to its USB or RAW TCP transport. It does not invoke the renderer
 or require a printer profile.
@@ -115,7 +115,7 @@ paths out of the Rust implementation.
 
 ## Rust render command
 
-`escpost-cli` is an application boundary around the renderer. It embeds the
+`escpost` is an application boundary around the renderer. It embeds the
 canonical profile pack and resolves a profile from an explicit argument,
 recognized source metadata, or an interactive selection. Non-interactive
 operation fails instead of silently choosing a physical printer.

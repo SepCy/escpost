@@ -18,7 +18,7 @@ backend is already implemented. Current implementation status remains visible
 in [`README.md`](../README.md) and `TODO.md`.
 
 Printer-model behavior does not belong here. Store firmware quirks and physical
-evidence under `profiles/<profile-id>/`. Store ESC/POS command coverage in
+evidence under `crates/escpost-profiles/profiles/<profile-id>/`. Store ESC/POS command coverage in
 `COMMAND_COVERAGE.md`.
 
 ## Status terms

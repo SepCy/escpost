@@ -1,17 +1,15 @@
-use escpost_profiles::compile_profile;
-use escpost_render::{RenderError, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::{RenderError, render};
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
 const LF: u8 = 0x0a;
 
 #[test]
 fn gs_l_and_gs_w_define_the_standard_mode_print_area() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         GS, b'L', 24, 0, GS, b'W', 120, 0, ESC, b'a', 1, GS, b'B', 1, b' ', LF,
     ];
@@ -28,8 +26,7 @@ fn gs_l_and_gs_w_define_the_standard_mode_print_area() {
 
 #[test]
 fn gs_l_and_gs_w_bound_right_justified_raster_graphics() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         GS,
         b'L',
@@ -65,8 +62,7 @@ fn gs_l_and_gs_w_bound_right_justified_raster_graphics() {
 
 #[test]
 fn gs_w_clips_raster_graphics_at_the_print_area_edge() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         GS, b'L', 24, 0, GS, b'W', 8, 0, GS, b'v', b'0', 0, 2, 0, 1, 0, 0xff, 0xff,
     ];
@@ -83,8 +79,7 @@ fn gs_w_clips_raster_graphics_at_the_print_area_edge() {
 
 #[test]
 fn text_wraps_at_the_active_print_area_width() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [GS, b'W', 24, 0, GS, b'B', 1, b' ', b' ', b' ', LF];
 
     let rendered = render(&input, &profile).expect("text should wrap inside GS W");
@@ -100,8 +95,7 @@ fn text_wraps_at_the_active_print_area_width() {
 
 #[test]
 fn gs_w_clips_column_format_graphics_at_the_print_area_edge() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let mut input = vec![GS, b'W', 8, 0, 0x1b, b'*', 1, 16, 0];
     input.extend([0b1000_0000; 16]);
     input.push(LF);
@@ -117,8 +111,7 @@ fn gs_w_clips_column_format_graphics_at_the_print_area_edge() {
 
 #[test]
 fn barcodes_use_the_configured_print_area_and_reject_oversized_symbols() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let barcode = [
         GS, b'h', 1, GS, b'w', 2, GS, b'k', 67, 12, b'5', b'9', b'0', b'1', b'2', b'3', b'4', b'1',
         b'2', b'3', b'4', b'5',
@@ -144,8 +137,7 @@ fn barcodes_use_the_configured_print_area_and_reject_oversized_symbols() {
 
 #[test]
 fn qr_symbols_use_the_configured_print_area_and_reject_oversized_symbols() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.features.qr_code = true;
     let qr = [
         GS, b'(', b'k', 3, 0, 49, 67, 2, GS, b'(', b'k', 4, 0, 49, 80, 48, b'A', GS, b'(', b'k', 3,

@@ -1,9 +1,8 @@
-use escpost_profiles::compile_profile;
-use escpost_render::{LimitKind, RenderError, RenderLimits, RenderOptions, render_with_options};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::{LimitKind, RenderError, RenderLimits, RenderOptions, render_with_options};
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
 const LF: u8 = 0x0a;
@@ -70,10 +69,6 @@ fn rejects_output_that_would_create_more_than_the_allowed_sheet_count() {
     let result = render_with_options(&input, &profile, &options);
 
     assert_limit(result, LimitKind::Sheets, 2, 1);
-}
-
-fn test_profile() -> escpost_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }
 
 fn options_with(update: impl FnOnce(&mut RenderLimits)) -> RenderOptions {

@@ -312,14 +312,13 @@ mod tests {
     use crate::surface::tracing::TracingSurface;
     use crate::{RenderOptions, render, render_surfaces_with_sink};
 
-    const CAPABILITIES_JSON: &[u8] =
-        include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-    const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
+    const CAPABILITIES_JSON: &[u8] = include_bytes!("../tests/fixtures/capabilities.json");
+    const PROFILE_TOML: &str = include_str!("../tests/fixtures/profile.toml");
 
     #[test]
     fn traced_render_attributes_centered_text_to_its_input_byte() {
-        let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-            .expect("the reference profile should compile");
+        let profile = compile_profile(CAPABILITIES_JSON, PROFILE_TOML)
+            .expect("the fictional renderer test profile should compile");
         let input = [0x1b, b'a', 1, b'A', 0x0a];
 
         let ordinary = render(&input, &profile).expect("ordinary rendering should succeed");
@@ -355,7 +354,7 @@ mod tests {
         };
         assert_eq!(
             (bounds.x, bounds.y, bounds.width, bounds.height),
-            (282, 0, 12, 24)
+            (186, 0, 12, 24)
         );
         assert_eq!(
             commands[2],
@@ -364,7 +363,7 @@ mod tests {
                 command: DecodedCommand::LineFeed,
                 paint_lifecycle: None,
                 effects: vec![Effect::Motion {
-                    before: Position { x: 294, y: 0 },
+                    before: Position { x: 198, y: 0 },
                     after: Position { x: 0, y: 30 },
                 }],
             }
@@ -380,7 +379,7 @@ mod tests {
         assert!(
             text_bounds
                 .iter()
-                .all(|region| region.x >= 282 && region.x < 294)
+                .all(|region| region.x >= 186 && region.x < 198)
         );
         assert!(
             traced_sheet
@@ -393,8 +392,8 @@ mod tests {
 
     #[test]
     fn unmodeled_paint_commands_have_no_fabricated_bounds() {
-        let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-            .expect("the reference profile should compile");
+        let profile = compile_profile(CAPABILITIES_JSON, PROFILE_TOML)
+            .expect("the fictional renderer test profile should compile");
         let input = [0x1b, b'*', 1, 1, 0, 0xff, 0x0a];
         let mut commands = TraceCollector::default();
 

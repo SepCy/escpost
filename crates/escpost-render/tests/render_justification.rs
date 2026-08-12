@@ -1,17 +1,16 @@
-use escpost_profiles::{PositioningBehavior, compile_profile};
-use escpost_render::render;
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_profiles::PositioningBehavior;
+use escpost_render::render;
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
 const LF: u8 = 0x0a;
 
 #[test]
 fn esc_a_centers_text_by_its_profile_cell_width() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b'a', 1, GS, b'B', 1, b' ', LF];
 
     let rendered = render(&input, &profile).expect("ESC a should center the line");
@@ -26,8 +25,7 @@ fn esc_a_centers_text_by_its_profile_cell_width() {
 
 #[test]
 fn esc_a_right_justifies_text_by_its_profile_cell_width() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b'a', 2, GS, b'B', 1, b' ', LF];
 
     let rendered = render(&input, &profile).expect("ESC a should right-justify the line");
@@ -40,8 +38,7 @@ fn esc_a_right_justifies_text_by_its_profile_cell_width() {
 
 #[test]
 fn esc_a_right_justifies_column_format_graphics() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b'a', 2, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
 
     let rendered = render(&input, &profile).expect("ESC * should use line justification");
@@ -56,8 +53,7 @@ fn esc_a_right_justifies_column_format_graphics() {
 
 #[test]
 fn esc_a_centers_a_raster_image_inside_the_active_print_area() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b'a', 1, GS, b'v', b'0', 0, 1, 0, 1, 0, 0b1000_0000];
 
     let rendered = render(&input, &profile).expect("the centered raster should render");
@@ -71,8 +67,7 @@ fn esc_a_centers_a_raster_image_inside_the_active_print_area() {
 
 #[test]
 fn esc_a_places_one_dimensional_barcodes_inside_the_active_print_area() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     for (justification, expected_left) in [(0, 0), (1, 97), (2, 194)] {
         let input = [
@@ -120,8 +115,7 @@ fn esc_a_places_one_dimensional_barcodes_inside_the_active_print_area() {
 
 #[test]
 fn esc_a_places_qr_symbols_inside_the_active_print_area() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.features.qr_code = true;
 
     for (justification, expected_left) in [(0, 0), (1, 171), (2, 342)] {
@@ -173,8 +167,7 @@ fn esc_a_places_qr_symbols_inside_the_active_print_area() {
 
 #[test]
 fn epson_justification_uses_the_farthest_composed_dot_after_moving_backwards() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.commands.esc_dollar_after_printable_data = PositioningBehavior::Apply;
     let input = [
         ESC,

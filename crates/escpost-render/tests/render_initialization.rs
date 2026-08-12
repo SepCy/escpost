@@ -1,9 +1,8 @@
-use escpost_profiles::compile_profile;
-use escpost_render::render;
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::render;
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
 const HT: u8 = 0x09;
@@ -11,8 +10,7 @@ const LF: u8 = 0x0a;
 
 #[test]
 fn esc_at_clears_pending_data_but_preserves_already_fed_paper() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         // Commit one visible reversed cell to the roll.
         GS, b'B', 1, b' ', LF, //
@@ -32,8 +30,7 @@ fn esc_at_clears_pending_data_but_preserves_already_fed_paper() {
 
 #[test]
 fn esc_at_restores_profile_layout_motion_and_text_defaults() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         GS,
         b'L',
@@ -91,8 +88,7 @@ fn esc_at_restores_profile_layout_motion_and_text_defaults() {
 
 #[test]
 fn esc_at_restores_default_code_page_and_tab_stops() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         ESC,
         b't',
@@ -126,8 +122,7 @@ fn esc_at_restores_default_code_page_and_tab_stops() {
 
 #[test]
 fn esc_at_restores_barcode_defaults() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         GS, b'h', 1, GS, b'w', 2, GS, b'H', 2, GS, b'f', 1, ESC, b'@', GS, b'k', 67, 12, b'5',
         b'9', b'0', b'1', b'2', b'3', b'4', b'1', b'2', b'3', b'4', b'5',
@@ -145,8 +140,7 @@ fn esc_at_restores_barcode_defaults() {
 
 #[test]
 fn esc_at_clears_qr_data_and_restores_qr_defaults() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.features.qr_code = true;
     let input = [
         GS, b'(', b'k', 3, 0, 49, 67, 2, GS, b'(', b'k', 3, 0, 49, 69, 51, GS, b'(', b'k', 4, 0,

@@ -1,6 +1,6 @@
 use escpost_profiles::{BarcodeSystem, CompileProfileError, ProfileSource, compile_profile};
 
-const REFERENCE_TOML: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
+const REFERENCE_TOML: &str = include_str!("../profiles/REFERENCE/profile.toml");
 
 #[test]
 fn reference_profile_compiles_without_an_upstream_database() {

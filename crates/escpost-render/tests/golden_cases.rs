@@ -1,14 +1,9 @@
-use escpost_profiles::{ProfileSource, compile_profile};
+use escpost_profiles::resolver;
 use escpost_render::render;
 use serde::Deserialize;
 use std::fs;
 use std::io::{BufReader, Cursor};
 use std::path::{Path, PathBuf};
-
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const NT_5890K_ENRICHMENT: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
-const REFERENCE_ENRICHMENT: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -16,13 +11,6 @@ struct CaseManifest {
     schema_version: u32,
     name: String,
     profile: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct CalibrationVerification {
-    renderer_commit: String,
-    last_verified: String,
 }
 
 #[derive(Debug)]
@@ -63,41 +51,6 @@ fn conformance_cases_match_their_golden_pngs() {
     assert!(
         failures.is_empty(),
         "golden PNG comparison failed:\n\n{}",
-        failures.join("\n\n")
-    );
-}
-
-#[test]
-fn profile_calibrations_match_the_shared_stream() {
-    let repository = repository_root();
-    let profiles_root = repository.join("profiles");
-    let output_root = repository.join("local/test-output/calibration");
-    let input = load_input_file(
-        &repository.join("calibration/input.hex"),
-        "shared printer calibration",
-    )
-    .expect("the shared calibration stream should load");
-    let profile_directories = find_profile_directories(&profiles_root)
-        .expect("printer profile directories should be discoverable");
-
-    assert!(
-        !profile_directories.is_empty(),
-        "no printer profiles found under {}",
-        display_path(&profiles_root, &repository)
-    );
-
-    let mut failures = Vec::new();
-    for profile_directory in profile_directories {
-        if let Err(error) =
-            compare_profile_calibration(&profile_directory, &input, &output_root, &repository)
-        {
-            failures.push(error);
-        }
-    }
-
-    assert!(
-        failures.is_empty(),
-        "profile calibration PNG comparison failed:\n\n{}",
         failures.join("\n\n")
     );
 }
@@ -146,35 +99,6 @@ fn compare_case(
         &manifest.profile,
         &input,
         case_directory,
-        &output_directory,
-        repository,
-    )
-}
-
-fn compare_profile_calibration(
-    profile_directory: &Path,
-    input: &[u8],
-    output_root: &Path,
-    repository: &Path,
-) -> Result<(), String> {
-    let profile_id = profile_directory
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| format!("invalid profile directory {profile_directory:?}"))?;
-    let profile = load_profile(profile_id)?;
-    if profile.source == ProfileSource::Reference {
-        // A virtual profile has deterministic golden cases, not a physical
-        // calibration date or a claim that paper was inspected.
-        return Ok(());
-    }
-    load_calibration_verification(profile_directory)?;
-    let output_directory = output_root.join(profile_id);
-
-    compare_receipt(
-        &format!("{profile_id} printer calibration"),
-        profile_id,
-        input,
-        profile_directory,
         &output_directory,
         repository,
     )
@@ -332,35 +256,6 @@ fn load_manifest(case_directory: &Path) -> Result<CaseManifest, String> {
     Ok(manifest)
 }
 
-fn load_calibration_verification(
-    profile_directory: &Path,
-) -> Result<CalibrationVerification, String> {
-    let path = profile_directory.join("verification.toml");
-    let source =
-        fs::read_to_string(&path).map_err(|error| format!("could not read {path:?}: {error}"))?;
-    let verification: CalibrationVerification =
-        toml::from_str(&source).map_err(|error| format!("invalid {path:?}: {error}"))?;
-
-    if verification.renderer_commit.len() != 40
-        || !verification
-            .renderer_commit
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-    {
-        return Err(format!(
-            "{}: renderer_commit must be a full 40-character Git commit",
-            path.display()
-        ));
-    }
-    if !looks_like_iso_date(&verification.last_verified) {
-        return Err(format!(
-            "{}: last_verified must use YYYY-MM-DD",
-            path.display()
-        ));
-    }
-    Ok(verification)
-}
-
 fn load_input_file(path: &Path, receipt_name: &str) -> Result<Vec<u8>, String> {
     let source = fs::read_to_string(path)
         .map_err(|error| format!("{receipt_name}: could not read {path:?}: {error}"))?;
@@ -386,16 +281,6 @@ fn load_input_file(path: &Path, receipt_name: &str) -> Result<Vec<u8>, String> {
     Ok(input)
 }
 
-fn looks_like_iso_date(value: &str) -> bool {
-    value.len() == 10
-        && value.as_bytes()[4] == b'-'
-        && value.as_bytes()[7] == b'-'
-        && value
-            .bytes()
-            .enumerate()
-            .all(|(index, byte)| index == 4 || index == 7 || byte.is_ascii_digit())
-}
-
 fn find_expected_sheets(case_directory: &Path) -> Result<Vec<PathBuf>, String> {
     let entries = fs::read_dir(case_directory)
         .map_err(|error| format!("could not inspect {case_directory:?}: {error}"))?;
@@ -419,13 +304,9 @@ fn find_expected_sheets(case_directory: &Path) -> Result<Vec<PathBuf>, String> {
 }
 
 fn load_profile(profile: &str) -> Result<escpost_profiles::PrinterProfile, String> {
-    let enrichment = match profile {
-        "NT-5890K" => NT_5890K_ENRICHMENT,
-        "REFERENCE" => REFERENCE_ENRICHMENT,
-        profile => return Err(format!("unknown golden-case profile {profile:?}")),
-    };
-    compile_profile(CAPABILITIES_JSON, enrichment)
-        .map_err(|error| format!("could not compile profile {profile:?}: {error}"))
+    resolver::resolve(profile)
+        .cloned()
+        .map_err(|error| format!("could not resolve profile {profile:?}: {error}"))
 }
 
 fn decode_png_file(path: &Path) -> Result<DecodedPng, String> {
@@ -644,25 +525,6 @@ fn find_case_directories(root: &Path) -> Vec<PathBuf> {
     let mut cases = Vec::new();
     visit_case_directories(root, &mut cases);
     cases
-}
-
-fn find_profile_directories(root: &Path) -> Result<Vec<PathBuf>, String> {
-    let entries =
-        fs::read_dir(root).map_err(|error| format!("could not inspect {root:?}: {error}"))?;
-    let mut profiles = entries
-        .map(|entry| entry.map(|entry| entry.path()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("could not inspect {root:?}: {error}"))?;
-    profiles.retain(|path| {
-        path.is_dir()
-            && !path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with('.'))
-            && path.join("profile.toml").is_file()
-    });
-    profiles.sort();
-    Ok(profiles)
 }
 
 fn clear_generated_artifacts(directory: &Path) -> Result<(), String> {

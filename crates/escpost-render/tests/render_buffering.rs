@@ -1,16 +1,14 @@
-use escpost_profiles::compile_profile;
-use escpost_render::render;
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::render;
+use support::test_profile;
+
 const GS: u8 = 0x1d;
 const LF: u8 = 0x0a;
 
 #[test]
 fn gs_l_and_gs_w_are_ignored_after_the_line_has_started() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         GS, b'B', 1, b' ', GS, b'L', 24, 0, GS, b'W', 120, 0, LF, b' ', LF,
     ];
@@ -26,8 +24,7 @@ fn gs_l_and_gs_w_are_ignored_after_the_line_has_started() {
 
 #[test]
 fn gs_v0_processes_its_parameters_as_normal_data_after_the_line_has_started() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         // Reverse mode makes otherwise blank spaces fully measurable.
         GS, b'B', 1, b' ', GS, b'v', b'0', b' ', b' ', LF,
@@ -45,8 +42,7 @@ fn gs_v0_processes_its_parameters_as_normal_data_after_the_line_has_started() {
 
 #[test]
 fn esc_a_is_ignored_after_the_line_has_started() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [GS, b'B', 1, b' ', 0x1b, b'a', 2, LF, b' ', LF];
 
     let rendered = render(&input, &profile).expect("mid-line ESC a should be ignored");
@@ -60,13 +56,12 @@ fn esc_a_is_ignored_after_the_line_has_started() {
 
 #[test]
 fn gs_v_is_ignored_after_the_line_has_started() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [GS, b'B', 1, b' ', GS, b'V', 0, LF, b' ', LF];
 
     let rendered = render(&input, &profile).expect("mid-line GS V should be ignored");
 
-    // The NT-5890K does not support cutting. Epson's beginning-of-line rule
+    // The fictional test profile does not support cutting. Epson's beginning-of-line rule
     // takes precedence, so this command is ignored without a capability error.
     assert_eq!(rendered.sheets.len(), 1);
     let surface = &rendered.sheets[0].surface;
@@ -76,8 +71,7 @@ fn gs_v_is_ignored_after_the_line_has_started() {
 
 #[test]
 fn gs_v_function_b_consumes_its_feed_operand_when_ignored_mid_line() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [GS, b'B', 1, b' ', GS, b'V', 65, b' ', LF];
 
     let rendered = render(&input, &profile).expect("mid-line Function B should be ignored");

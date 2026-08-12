@@ -265,7 +265,7 @@ restrictions. Its 203 DPI, 576-dot paper and cutter geometry are concrete
 virtual rendering parameters, not universal ESC/POS mechanism dimensions.
 
 Profile authoring and calibration assets are collocated in visible
-`profiles/<profile-id>/` directories. A physical profile also contains the
+`crates/escpost-profiles/profiles/<profile-id>/` directories. A physical profile also contains the
 expected rendering and physical verification of `calibration/input.hex`.
 Virtual profiles use focused automated golden cases instead of claiming
 physical evidence. Hidden `.escpos-printer-db/` and `.generated/` directories

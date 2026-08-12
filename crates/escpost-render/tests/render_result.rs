@@ -1,9 +1,8 @@
-use escpost_profiles::compile_profile;
-use escpost_render::{DeviceEvent, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::{DeviceEvent, render};
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const LF: u8 = 0x0a;
 
@@ -34,10 +33,6 @@ fn reports_the_renderer_and_canonical_profile_identity() {
         rendered.metadata.renderer_version,
         env!("CARGO_PKG_VERSION")
     );
-    assert_eq!(rendered.metadata.profile_id, "NT-5890K");
+    assert_eq!(rendered.metadata.profile_id, "TEST-RENDERER");
     assert_eq!(rendered.metadata.canonical_profile_sha256.len(), 64);
-}
-
-fn test_profile() -> escpost_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }

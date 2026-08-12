@@ -1,16 +1,14 @@
-use escpost_profiles::compile_profile;
-use escpost_render::render;
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::render;
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const LF: u8 = 0x0a;
 
 #[test]
 fn esc_p_consumes_a_supported_drawer_pulse_without_painting_dots() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b'p', 0, 50, 50, LF];
 
     let rendered = render(&input, &profile).expect("the profile supports standard drawer pulses");

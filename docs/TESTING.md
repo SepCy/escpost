@@ -272,7 +272,7 @@ calibration/
 ├── input.hex
 └── README.md
 
-profiles/
+crates/escpost-profiles/profiles/
 └── <profile-id>/
     ├── profile.toml
     ├── expected-001.png

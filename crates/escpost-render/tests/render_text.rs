@@ -1,17 +1,15 @@
-use escpost_profiles::compile_profile;
-use escpost_render::{RenderError, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::{RenderError, render};
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
 const LF: u8 = 0x0a;
 
 #[test]
 fn default_font_a_uses_profile_cells_instead_of_source_font_advance() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [b'A', b'B', ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
 
     let rendered = render(&input, &profile).expect("printable ASCII should render");
@@ -31,8 +29,7 @@ fn default_font_a_uses_profile_cells_instead_of_source_font_advance() {
 
 #[test]
 fn esc_m_selects_font_b_with_its_nine_dot_profile_cells() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         ESC,
         b'M',
@@ -60,8 +57,7 @@ fn esc_m_selects_font_b_with_its_nine_dot_profile_cells() {
 
 #[test]
 fn text_wraps_at_the_profile_font_column_boundary() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let mut input = vec![b'A'; 33];
     input.push(LF);
 
@@ -76,8 +72,7 @@ fn text_wraps_at_the_profile_font_column_boundary() {
 
 #[test]
 fn esc_bang_double_size_scales_font_a_cells_and_line_advance() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b'!', 0x30, b'A', ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
 
     let rendered = render(&input, &profile).expect("ESC ! should scale text");
@@ -91,8 +86,7 @@ fn esc_bang_double_size_scales_font_a_cells_and_line_advance() {
 
 #[test]
 fn gs_bang_scales_character_width_and_height_independently_up_to_eight_times() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [GS, b'!', 0x23, GS, b'B', 1, b' ', LF];
 
     let rendered = render(&input, &profile).expect("GS ! should scale the character");
@@ -106,8 +100,7 @@ fn gs_bang_scales_character_width_and_height_independently_up_to_eight_times() {
 
 #[test]
 fn esc_e_emphasizes_text_without_changing_cell_advance() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [b'A', ESC, b'E', 1, b'A', LF];
 
     let rendered = render(&input, &profile).expect("ESC E should emphasize text");
@@ -128,8 +121,7 @@ fn esc_e_emphasizes_text_without_changing_cell_advance() {
 
 #[test]
 fn esc_minus_underlines_spaces_across_the_profile_cell() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b'-', 1, b' ', LF];
 
     let rendered = render(&input, &profile).expect("ESC - should underline text");
@@ -143,8 +135,7 @@ fn esc_minus_underlines_spaces_across_the_profile_cell() {
 
 #[test]
 fn gs_b_reverse_prints_the_background_of_a_space_cell() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [GS, b'B', 1, b' ', LF];
 
     let rendered = render(&input, &profile).expect("GS B should reverse text");
@@ -155,8 +146,7 @@ fn gs_b_reverse_prints_the_background_of_a_space_cell() {
 
 #[test]
 fn esc_t_decodes_extended_bytes_with_the_profile_cp437_mapping() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, b't', 0, 0x82, ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
 
     let rendered = render(&input, &profile).expect("ESC t CP437 text should render");
@@ -171,8 +161,7 @@ fn esc_t_decodes_extended_bytes_with_the_profile_cp437_mapping() {
 
 #[test]
 fn esc_t_uses_the_encoding_mapped_to_each_profile_slot() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     // The cent sign is byte 9Bh in CP437 but byte BDh in CP850. Rendering
     // both through their profile slots must therefore produce the same dots.
@@ -186,8 +175,7 @@ fn esc_t_uses_the_encoding_mapped_to_each_profile_slot() {
 
 #[test]
 fn esc_t_decodes_a_windows_code_page_selected_by_the_profile() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     // The cent sign is byte 9Bh in CP437 and A2h in Windows-1252.
     let cp437 =
@@ -200,8 +188,7 @@ fn esc_t_decodes_a_windows_code_page_selected_by_the_profile() {
 
 #[test]
 fn esc_t_accepts_the_profiles_supported_single_byte_code_pages() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let supported_slots = [
         0,  // CP437
         2,  // CP850
@@ -239,8 +226,7 @@ fn esc_t_accepts_the_profiles_supported_single_byte_code_pages() {
 
 #[test]
 fn undefined_code_page_bytes_return_an_error_instead_of_a_replacement_glyph() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     let error = render(&[ESC, b't', 28, 0xa6], &profile)
         .expect_err("A6h is undefined in the profile's CP864 table");
@@ -261,8 +247,7 @@ fn undefined_code_page_bytes_return_an_error_instead_of_a_replacement_glyph() {
 
 #[test]
 fn characters_missing_from_the_bundled_font_return_an_error() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     let error = render(&[ESC, b't', 62, 0x80], &profile)
         .expect_err("CP862 80h is Hebrew alef, which is not in the current font asset");
@@ -278,11 +263,10 @@ fn characters_missing_from_the_bundled_font_return_an_error() {
 
 #[test]
 fn ascii_remains_printable_after_selecting_a_post_v1_multibyte_code_page() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     // Receiptful's html2escpos emitter selects CP932 for ordinary ASCII on the
-    // NT-5890K. ASCII 20h–7Eh is shared by ESC/POS character tables, so the
+    // test profile. ASCII 20h–7Eh is shared by ESC/POS character tables, so the
     // renderer does not need a Japanese decoder to preserve those positions.
     let cp437 = render(&[ESC, b't', 0, b'A', LF], &profile).expect("CP437 ASCII should render");
     let cp932 = render(&[ESC, b't', 1, b'A', LF], &profile).expect("CP932 ASCII should render");
@@ -292,8 +276,7 @@ fn ascii_remains_printable_after_selecting_a_post_v1_multibyte_code_page() {
 
 #[test]
 fn extended_bytes_in_post_v1_multibyte_code_pages_still_report_unsupported() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     let error = render(&[ESC, b't', 1, 0x82], &profile)
         .expect_err("CP932 multibyte decoding remains outside the v1 boundary");

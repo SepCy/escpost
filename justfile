@@ -39,9 +39,9 @@ native-run *args:
 
 # --- Utilities ---
 
-# Regenerate profiles/.generated/profiles.json.
+# Regenerate crates/escpost-profiles/profiles/.generated/profiles.json.
 pack:
-    {{docker_cargo}} run -q -p escpost-profiles --bin compile-profile-pack -- profiles/.escpos-printer-db/dist/capabilities.json profiles profiles/.generated/profiles.json
+    {{docker_cargo}} run -q -p escpost-profiles --bin compile-profile-pack -- crates/escpost-profiles/profiles/.escpos-printer-db/dist/capabilities.json crates/escpost-profiles/profiles crates/escpost-profiles/profiles/.generated/profiles.json
 
 # Build and test the Python render binding.
 python-test:

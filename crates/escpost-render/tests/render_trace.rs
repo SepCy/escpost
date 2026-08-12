@@ -1,18 +1,14 @@
-use escpost_profiles::compile_profile;
+mod support;
+
 use escpost_render::{
     CommandCode, DecodedCommand, Effect, Justification, PaintLifecycle, Position, StateChange,
     render_with_trace,
 };
-
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const REFERENCE_PROFILE: &str = include_str!("../../../profiles/REFERENCE/profile.toml");
-const NT_5890K_PROFILE: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use support::test_profile;
 
 #[test]
 fn paint_lifecycle_keeps_unfed_text_buffered_on_a_conceptual_sheet() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
 
     let traced = render_with_trace(b"A", &profile).expect("traced rendering should succeed");
 
@@ -29,8 +25,7 @@ fn paint_lifecycle_keeps_unfed_text_buffered_on_a_conceptual_sheet() {
 
 #[test]
 fn paint_lifecycle_promotes_text_when_lf_prints_the_line() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
 
     let traced = render_with_trace(b"A\n", &profile).expect("traced rendering should succeed");
 
@@ -43,8 +38,7 @@ fn paint_lifecycle_promotes_text_when_lf_prints_the_line() {
 
 #[test]
 fn paint_lifecycle_marks_raster_images_committed_immediately() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
     let input = [0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0x80];
 
     let traced = render_with_trace(&input, &profile).expect("traced rendering should succeed");
@@ -57,8 +51,7 @@ fn paint_lifecycle_marks_raster_images_committed_immediately() {
 
 #[test]
 fn paint_lifecycle_is_absent_for_state_commands() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
 
     let traced =
         render_with_trace(&[0x1b, b'a', 1], &profile).expect("traced rendering should succeed");
@@ -68,8 +61,7 @@ fn paint_lifecycle_is_absent_for_state_commands() {
 
 #[test]
 fn paint_lifecycle_distinguishes_printed_and_final_buffered_lines() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
 
     let traced = render_with_trace(b"A\nB", &profile).expect("traced rendering should succeed");
     let commands = &traced.trace.sheets[0].commands;
@@ -82,8 +74,7 @@ fn paint_lifecycle_distinguishes_printed_and_final_buffered_lines() {
 
 #[test]
 fn experimental_trace_exposes_sheet_commands_and_logical_bounds() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
     let traced = render_with_trace(&[0x1b, b'a', 1, b'A', 0x0a], &profile)
         .expect("traced rendering should succeed");
 
@@ -110,14 +101,14 @@ fn experimental_trace_exposes_sheet_commands_and_logical_bounds() {
     };
     assert_eq!(
         (bounds.x, bounds.y, bounds.width, bounds.height),
-        (282, 0, 12, 24)
+        (186, 0, 12, 24)
     );
     assert_eq!(commands[2].byte_range, 4..5);
     assert_eq!(commands[2].command, DecodedCommand::LineFeed);
     assert_eq!(
         commands[2].effects,
         [Effect::Motion {
-            before: Position { x: 294, y: 0 },
+            before: Position { x: 198, y: 0 },
             after: Position { x: 0, y: 30 },
         }]
     );
@@ -125,8 +116,7 @@ fn experimental_trace_exposes_sheet_commands_and_logical_bounds() {
 
 #[test]
 fn ignored_justification_has_no_state_change_effect() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
     let traced = render_with_trace(&[b'A', 0x1b, b'a', 1, 0x0a], &profile)
         .expect("traced rendering should succeed");
 
@@ -143,8 +133,7 @@ fn ignored_justification_has_no_state_change_effect() {
 
 #[test]
 fn a_space_has_logical_bounds_without_ink() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
     let traced =
         render_with_trace(&[b' ', 0x0a], &profile).expect("traced rendering should succeed");
 
@@ -160,8 +149,7 @@ fn a_space_has_logical_bounds_without_ink() {
 
 #[test]
 fn raster_image_trace_uses_the_complete_logical_image_area() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
     let input = [0x1d, b'v', b'0', 0, 1, 0, 2, 0, 0x80, 0x00];
 
     let traced = render_with_trace(&input, &profile).expect("the raster image should render");
@@ -182,8 +170,7 @@ fn raster_image_trace_uses_the_complete_logical_image_area() {
 
 #[test]
 fn qr_trace_attributes_bounds_to_the_print_command_only() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
     let input = [
         0x1d, b'(', b'k', 4, 0, 49, 80, 48, b'A', 0x1d, b'(', b'k', 3, 0, 49, 81, 48,
     ];
@@ -212,8 +199,7 @@ fn qr_trace_attributes_bounds_to_the_print_command_only() {
 
 #[test]
 fn commands_are_grouped_under_the_sheet_active_when_they_execute() {
-    let profile = compile_profile(CAPABILITIES_JSON, REFERENCE_PROFILE)
-        .expect("the reference profile should compile");
+    let profile = test_profile();
     let traced = render_with_trace(&[b'A', 0x0a, 0x1d, b'V', 0, b'B', 0x0a], &profile)
         .expect("traced rendering should succeed");
 
@@ -237,8 +223,7 @@ fn commands_are_grouped_under_the_sheet_active_when_they_execute() {
 
 #[test]
 fn a_profile_suppressed_line_feed_has_no_motion_effect() {
-    let profile = compile_profile(CAPABILITIES_JSON, NT_5890K_PROFILE)
-        .expect("the NT-5890K profile should compile");
+    let profile = test_profile();
     let traced = render_with_trace(&[0x1d, b'v', b'0', 0, 1, 0, 1, 0, 0x80, 0x0a], &profile)
         .expect("traced rendering should succeed");
 

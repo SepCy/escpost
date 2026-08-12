@@ -1,9 +1,9 @@
-use escpost_profiles::{CarriageReturnMode, FeedBehavior, compile_profile};
-use escpost_render::render;
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_profiles::{CarriageReturnMode, FeedBehavior};
+use escpost_render::render;
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
 const CR: u8 = 0x0d;
@@ -11,14 +11,13 @@ const LF: u8 = 0x0a;
 
 #[test]
 fn cr_uses_the_profile_auto_line_feed_behavior() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [GS, b'B', 1, b' ', CR, b' ', LF];
 
     let rendered = render(&input, &profile).expect("CR should use the selected printer behavior");
     let surface = &rendered.sheets[0].surface;
 
-    // The NT-5890K profile has auto line feed disabled, so CR is ignored.
+    // The fictional test profile has auto line feed disabled, so CR is ignored.
     // Both reversed spaces stay beside one another on the same logical line.
     assert_eq!((surface.width(), surface.height()), (384, 30));
     assert_eq!(count_printed_dots(surface, 0, 24, 24), 24 * 24);
@@ -26,8 +25,7 @@ fn cr_uses_the_profile_auto_line_feed_behavior() {
 
 #[test]
 fn cr_prints_and_feeds_when_the_profile_enables_auto_line_feed() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.defaults.carriage_return = CarriageReturnMode::LineFeed;
     let input = [GS, b'B', 1, b' ', CR, b' ', LF];
 
@@ -44,8 +42,7 @@ fn cr_prints_and_feeds_when_the_profile_enables_auto_line_feed() {
 
 #[test]
 fn esc_3_sets_line_spacing_in_profile_motion_units() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, 0x33, 7, LF];
 
     let rendered = render(&input, &profile).expect("ESC 3 should set line spacing");
@@ -56,8 +53,7 @@ fn esc_3_sets_line_spacing_in_profile_motion_units() {
 
 #[test]
 fn esc_2_restores_the_profile_default_line_spacing() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, 0x33, 7, LF, ESC, 0x32, LF];
 
     let rendered = render(&input, &profile).expect("ESC 2 should restore line spacing");
@@ -68,8 +64,7 @@ fn esc_2_restores_the_profile_default_line_spacing() {
 
 #[test]
 fn esc_d_feeds_n_current_lines_without_changing_line_spacing() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [ESC, 0x33, 7, ESC, 0x64, 3, LF];
 
     let rendered = render(&input, &profile).expect("ESC d should feed whole lines");
@@ -80,8 +75,7 @@ fn esc_d_feeds_n_current_lines_without_changing_line_spacing() {
 
 #[test]
 fn epson_esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.commands.esc_j = FeedBehavior::Feed;
     let input = [
         ESC,
@@ -113,9 +107,8 @@ fn epson_esc_j_prints_and_feeds_a_temporary_motion_unit_distance() {
 }
 
 #[test]
-fn nt_5890k_consumes_esc_j_without_feeding() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+fn test_profile_consumes_esc_j_without_feeding() {
+    let profile = test_profile();
     let raster = [GS, b'v', b'0', 0, 1, 0, 1, 0, 0b1000_0000];
     let input = [raster.as_slice(), &[ESC, b'J', 10], raster.as_slice()].concat();
 
@@ -129,8 +122,7 @@ fn nt_5890k_consumes_esc_j_without_feeding() {
 
 #[test]
 fn gs_v0_feeds_by_image_height_instead_of_the_selected_line_spacing() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         ESC,
         b'3',
@@ -159,8 +151,7 @@ fn gs_v0_feeds_by_image_height_instead_of_the_selected_line_spacing() {
 
 #[test]
 fn column_graphics_advance_by_the_selected_line_spacing() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = [
         ESC,
         b'3',

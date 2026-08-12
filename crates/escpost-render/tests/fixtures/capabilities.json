@@ -1,0 +1,56 @@
+{
+  "profiles": {
+    "TEST-RENDERER": {
+      "codePages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "25": "CP1257",
+        "27": "CP1258",
+        "28": "CP864",
+        "32": "CP1255",
+        "56": "CP861",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "64": "CP737",
+        "66": "CP869",
+        "72": "CP1250",
+        "73": "CP1251",
+        "90": "CP1253",
+        "91": "CP1254",
+        "92": "CP1256",
+        "93": "CP720",
+        "95": "CP775"
+      },
+      "features": {
+        "barcodeA": true,
+        "barcodeB": true,
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "fonts": {
+        "0": { "columns": 32, "name": "Font A" },
+        "1": { "columns": 42, "name": "Font B" }
+      },
+      "media": {
+        "dpi": 203,
+        "width": { "mm": 58, "pixels": 384 }
+      },
+      "name": "Renderer Test Printer",
+      "vendor": "Test Fixture"
+    }
+  }
+}

@@ -1,9 +1,9 @@
-use escpost_profiles::{PrinterProfile, compile_profile};
-use escpost_render::{LimitKind, RenderError, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_profiles::PrinterProfile;
+use escpost_render::{LimitKind, RenderError, render};
+use support::test_profile;
+
 const GS: u8 = 0x1d;
 const ESC: u8 = 0x1b;
 
@@ -143,12 +143,11 @@ fn esc_at_clears_buffered_graphics_before_restoring_defaults() {
 
 #[test]
 fn modern_graphics_are_rejected_by_a_profile_without_the_graphics_feature() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let input = gs_l_store(1, 1, 1, 1, &[0x80]);
 
     let error = render(&input, &profile)
-        .expect_err("the NT-5890K profile does not advertise modern graphics");
+        .expect_err("the fictional test profile does not advertise modern graphics");
 
     assert!(matches!(
         error,
@@ -156,7 +155,7 @@ fn modern_graphics_are_rejected_by_a_profile_without_the_graphics_feature() {
             command: "GS ( L graphics",
             ref profile,
             offset: 0,
-        } if profile == "NT-5890K"
+        } if profile == "TEST-RENDERER"
     ));
 }
 
@@ -198,8 +197,7 @@ fn gs_8_l_rejects_an_oversized_declared_payload_before_reading_it() {
 }
 
 fn graphics_profile() -> PrinterProfile {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.features.graphics = true;
     profile
 }

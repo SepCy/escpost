@@ -18,7 +18,7 @@ data or parses enrichment TOML while rendering.
 ## Repository layout
 
 ```text
-profiles/
+crates/escpost-profiles/profiles/
 ├── .escpos-printer-db/      # upstream Git submodule
 ├── .generated/
 │   └── profiles.json        # canonical runtime pack
@@ -60,7 +60,7 @@ to draw its explicit layer from.
 The upstream database is a Git submodule:
 
 ```text
-profiles/.escpos-printer-db
+crates/escpost-profiles/profiles/.escpos-printer-db
 ```
 
 The repository gitlink selects its exact commit and `.gitmodules` records the
@@ -189,7 +189,7 @@ canonical pack.
 
 ## Enrichment format
 
-Each `profiles/<profile-id>/profile.toml` is a typed TOML document:
+Each `crates/escpost-profiles/profiles/<profile-id>/profile.toml` is a typed TOML document:
 
 ```toml
 schema_version = 1
@@ -395,13 +395,14 @@ Regenerate it with:
 ```bash
 docker compose run --rm test cargo run --quiet \
   -p escpost-profiles --bin compile-profile-pack -- \
-  profiles/.escpos-printer-db/dist/capabilities.json \
-  profiles profiles/.generated/profiles.json
+  crates/escpost-profiles/profiles/.escpos-printer-db/dist/capabilities.json \
+  crates/escpost-profiles/profiles \
+  crates/escpost-profiles/profiles/.generated/profiles.json
 ```
 
 ## REFERENCE profile
 
-`profiles/REFERENCE/profile.toml` is a virtual standards baseline for previews,
+`crates/escpost-profiles/profiles/REFERENCE/profile.toml` is a virtual standards baseline for previews,
 automated tests, and integrations that must not inherit a physical printer's
 missing features. It enables every capability represented by the current
 canonical schema and turns on no deviations — the zero-deviation baseline

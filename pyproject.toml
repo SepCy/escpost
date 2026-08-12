@@ -25,12 +25,12 @@ python-source = "python"
 module-name = "escpost._native"
 include = [
     { path = "calibration/*", format = "sdist" },
-    { path = "profiles/*/profile.toml", format = "sdist" },
-    { path = "profiles/*/expected-*.png", format = "sdist" },
-    { path = "profiles/*/verification.toml", format = "sdist" },
-    { path = "profiles/*/notes.md", format = "sdist" },
-    { path = "profiles/*/TODO.md", format = "sdist" },
-    { path = "profiles/.generated/profiles.json", format = "sdist" },
-    { path = "profiles/.escpos-printer-db/LICENSE.md", format = "sdist" },
-    { path = "profiles/.escpos-printer-db/LICENSE.md", format = "wheel" },
+    { path = "crates/escpost-profiles/profiles/*/profile.toml", format = "sdist" },
+    { path = "crates/escpost-profiles/profiles/*/expected-*.png", format = "sdist" },
+    { path = "crates/escpost-profiles/profiles/*/verification.toml", format = "sdist" },
+    { path = "crates/escpost-profiles/profiles/*/notes.md", format = "sdist" },
+    { path = "crates/escpost-profiles/profiles/*/TODO.md", format = "sdist" },
+    { path = "crates/escpost-profiles/profiles/.generated/profiles.json", format = "sdist" },
+    { path = "crates/escpost-profiles/profiles/.escpos-printer-db/LICENSE.md", format = "sdist" },
+    { path = "crates/escpost-profiles/profiles/.escpos-printer-db/LICENSE.md", format = "wheel" },
 ]

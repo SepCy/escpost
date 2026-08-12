@@ -1,3 +1,3 @@
-[submodule "profiles/upstream/escpos-printer-db"]
-	path = profiles/.escpos-printer-db
+[submodule "crates/escpost-profiles/profiles/escpos-printer-db"]
+	path = crates/escpost-profiles/profiles/.escpos-printer-db
 	url = https://github.com/receipt-print-hq/escpos-printer-db.git

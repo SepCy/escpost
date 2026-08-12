@@ -4,12 +4,9 @@
 use std::env;
 use std::time::Instant;
 
-use escpost_profiles::compile_profile;
+use escpost_profiles::resolver;
 use escpost_render::render;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
 const CALIBRATION_HEX: &str = include_str!("../../../calibration/input.hex");
 
 const ITERATIONS: usize = 10_000;
@@ -19,8 +16,7 @@ fn main() {
     let workload = env::args()
         .nth(1)
         .unwrap_or_else(|| "calibration".to_owned());
-    let profile =
-        compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the profile should compile");
+    let profile = resolver::resolve("NT-5890K").expect("the benchmark profile should resolve");
     let input = match workload.as_str() {
         "calibration" => calibration_input(),
         "commands" => command_heavy_input(),
@@ -29,7 +25,7 @@ fn main() {
 
     // The warm-up render also proves the input renders at all and shows what
     // is being measured.
-    let rendered = render(&input, &profile).expect("the calibration receipt should render");
+    let rendered = render(&input, profile).expect("the calibration receipt should render");
     println!(
         "workload {workload}, input {} bytes, {} sheet(s)",
         input.len(),
@@ -47,7 +43,7 @@ fn main() {
     let mut nanos: Vec<u128> = Vec::with_capacity(ITERATIONS);
     for _ in 0..ITERATIONS {
         let start = Instant::now();
-        let result = render(&input, &profile).expect("the calibration receipt should render");
+        let result = render(&input, profile).expect("the calibration receipt should render");
         nanos.push(start.elapsed().as_nanos());
         std::hint::black_box(result);
     }

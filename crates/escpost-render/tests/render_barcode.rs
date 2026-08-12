@@ -1,9 +1,9 @@
-use escpost_profiles::{BarcodeSystem, compile_profile};
-use escpost_render::{RenderError, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_profiles::BarcodeSystem;
+use escpost_render::{RenderError, render};
+use support::test_profile;
+
 const GS: u8 = 0x1d;
 
 #[test]
@@ -1489,10 +1489,6 @@ fn rejects_native_barcodes_when_the_profile_does_not_support_them() {
             ..
         }
     ));
-}
-
-fn test_profile() -> escpost_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }
 
 fn test_profile_with_function_b(system: BarcodeSystem) -> escpost_profiles::PrinterProfile {

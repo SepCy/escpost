@@ -1,16 +1,14 @@
-use escpost_profiles::compile_profile;
-use escpost_render::{RenderError, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::{RenderError, render};
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const LF: u8 = 0x0a;
 
 #[test]
 fn esc_r_substitutes_the_documented_ascii_positions() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let german = [
         ESC, b'R', 2, b'@', b'[', b'\\', b']', b'{', b'|', b'}', b'~', LF,
     ];
@@ -30,8 +28,7 @@ fn esc_r_substitutes_the_documented_ascii_positions() {
 
 #[test]
 fn esc_at_restores_the_default_international_character_set() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
     let selected_then_reset = [ESC, b'R', 1, b'@', LF, ESC, b'@', b'@', LF];
     let direct_characters = [ESC, b't', 16, 0xe0, LF, ESC, b'@', b'@', LF];
 
@@ -45,8 +42,7 @@ fn esc_at_restores_the_default_international_character_set() {
 
 #[test]
 fn esc_r_rejects_a_set_outside_the_version_one_table() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     let error = render(&[ESC, b'R', 18], &profile)
         .expect_err("an unsupported set must not silently select different glyphs");
@@ -62,8 +58,7 @@ fn esc_r_rejects_a_set_outside_the_version_one_table() {
 
 #[test]
 fn truncated_esc_r_reports_its_command_boundary() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let profile = test_profile();
 
     let error =
         render(&[ESC, b'R'], &profile).expect_err("a missing operand must stop interpretation");

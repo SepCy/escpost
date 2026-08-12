@@ -1,18 +1,17 @@
-use escpost_profiles::{CutterGeometry, FeedBehavior, compile_profile};
-use escpost_render::{RenderWarning, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_profiles::{CutterGeometry, FeedBehavior};
+use escpost_render::{RenderWarning, render};
+use support::test_profile;
+
 const ESC: u8 = 0x1b;
 const GS: u8 = 0x1d;
 const LF: u8 = 0x0a;
 
 #[test]
 fn gs_v_full_cut_finishes_one_sheet_and_starts_the_next() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
-    // The physical NT-5890K has no cutter. Enable this capability only in the
+    let mut profile = test_profile();
+    // The fictional test profile has no cutter. Enable this capability only in the
     // test profile so the generic renderer's sheet behavior can be exercised.
     profile.features.paper_full_cut = true;
     let marker_line = [ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
@@ -34,8 +33,7 @@ fn gs_v_full_cut_finishes_one_sheet_and_starts_the_next() {
 
 #[test]
 fn gs_v_partial_cut_uses_its_own_profile_capability() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.features.paper_part_cut = true;
     let marker_line = [ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
     let input = [
@@ -60,9 +58,8 @@ fn gs_v_partial_cut_uses_its_own_profile_capability() {
 
 #[test]
 fn gs_v_full_cut_splits_the_preview_and_warns_without_a_cutter() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
-    // The real NT-5890K has no cutter, so the full cut cannot be performed. The
+    let profile = test_profile();
+    // The fictional test profile has no cutter, so the full cut cannot be performed. The
     // render still succeeds: the preview splits at the receipt boundary and a
     // warning records that the paper was not physically cut.
     let marker_line = [ESC, b'*', 1, 1, 0, 0b1000_0000, LF];
@@ -88,14 +85,13 @@ fn gs_v_full_cut_splits_the_preview_and_warns_without_a_cutter() {
             ref profile,
             // The cut follows the seven-byte marker line.
             offset: 7,
-        } if profile == "NT-5890K"
+        } if profile == "TEST-RENDERER"
     ));
 }
 
 #[test]
 fn epson_gs_v_function_b_splits_and_warns_for_both_modes_without_an_autocutter() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.commands.gs_v_function_b_partial = FeedBehavior::Feed;
     let input = [
         // At 203 dpi, 101 vertical units per inch make each unit two dots.
@@ -114,14 +110,13 @@ fn epson_gs_v_function_b_splits_and_warns_for_both_modes_without_an_autocutter()
     assert_eq!(rendered.warnings.len(), 2);
     assert!(rendered.warnings.iter().all(|warning| matches!(
         warning,
-        RenderWarning::UncuttableCut { profile, .. } if profile == "NT-5890K"
+        RenderWarning::UncuttableCut { profile, .. } if profile == "TEST-RENDERER"
     )));
 }
 
 #[test]
 fn gs_v_function_b_feeds_to_an_autocutter_then_finishes_the_sheet() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     // A synthetic cutter keeps this public rendering test independent of
     // tomorrow's physical profile. The distances are deliberately distinct:
     // 12 dots from print head to blade, then 5 units × 2 dots per unit.
@@ -150,8 +145,7 @@ fn gs_v_function_b_feeds_to_an_autocutter_then_finishes_the_sheet() {
 
 #[test]
 fn gs_v_function_b_partial_cut_uses_the_same_cutter_geometry() {
-    let mut profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+    let mut profile = test_profile();
     profile.features.paper_part_cut = true;
     profile.commands.gs_v_function_b_partial = FeedBehavior::Feed;
     profile.cutter = Some(CutterGeometry {
@@ -177,9 +171,8 @@ fn gs_v_function_b_partial_cut_uses_the_same_cutter_geometry() {
 }
 
 #[test]
-fn nt_5890k_splits_for_gs_v_65_but_ignores_gs_v_66() {
-    let profile = compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML)
-        .expect("the test profile should compile");
+fn test_profile_splits_for_gs_v_65_but_ignores_gs_v_66() {
+    let profile = test_profile();
     let input = [
         // At 203 dpi, 101 vertical units per inch make each unit two dots.
         GS, b'P', 203, 101, GS, b'V', 65, 5, GS, b'V', 66, 5,

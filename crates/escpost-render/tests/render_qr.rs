@@ -1,9 +1,8 @@
-use escpost_profiles::compile_profile;
-use escpost_render::{RenderError, render};
+mod support;
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
-const ENRICHMENT_TOML: &str = include_str!("../../../profiles/NT-5890K/profile.toml");
+use escpost_render::{RenderError, render};
+use support::test_profile;
+
 const GS: u8 = 0x1d;
 
 #[test]
@@ -172,10 +171,6 @@ fn reports_an_empty_qr_store_when_print_is_requested() {
     let error = render(&input, &profile).expect_err("print requires stored QR data");
 
     assert!(matches!(error, RenderError::QrDataEmpty { .. }));
-}
-
-fn test_profile() -> escpost_profiles::PrinterProfile {
-    compile_profile(CAPABILITIES_JSON, ENRICHMENT_TOML).expect("the test profile should compile")
 }
 
 fn assert_finder_pattern(

@@ -7,25 +7,23 @@ use std::time::Instant;
 use escpost_profiles::resolver;
 use escpost_render::render;
 
-const CALIBRATION_HEX: &str = include_str!("../../escpost-profiles/calibration-job.hex");
+const RECEIPT_HEX: &str = include_str!("fixtures/render-workload.hex");
 
 const ITERATIONS: usize = 10_000;
 const COMMAND_REPETITIONS: usize = 1_000;
 
 fn main() {
-    let workload = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "calibration".to_owned());
+    let workload = env::args().nth(1).unwrap_or_else(|| "receipt".to_owned());
     let profile = resolver::resolve("NT-5890K").expect("the benchmark profile should resolve");
     let input = match workload.as_str() {
-        "calibration" => calibration_input(),
+        "receipt" => receipt_input(),
         "commands" => command_heavy_input(),
-        workload => panic!("unknown workload {workload:?}; use calibration or commands"),
+        workload => panic!("unknown workload {workload:?}; use receipt or commands"),
     };
 
     // The warm-up render also proves the input renders at all and shows what
     // is being measured.
-    let rendered = render(&input, profile).expect("the calibration receipt should render");
+    let rendered = render(&input, profile).expect("the benchmark workload should render");
     println!(
         "workload {workload}, input {} bytes, {} sheet(s)",
         input.len(),
@@ -43,7 +41,7 @@ fn main() {
     let mut nanos: Vec<u128> = Vec::with_capacity(ITERATIONS);
     for _ in 0..ITERATIONS {
         let start = Instant::now();
-        let result = render(&input, profile).expect("the calibration receipt should render");
+        let result = render(&input, profile).expect("the benchmark workload should render");
         nanos.push(start.elapsed().as_nanos());
         std::hint::black_box(result);
     }
@@ -58,8 +56,8 @@ fn main() {
     println!("max    {:>10.1} us", micros_at(1.0));
 }
 
-fn calibration_input() -> Vec<u8> {
-    CALIBRATION_HEX
+fn receipt_input() -> Vec<u8> {
+    RECEIPT_HEX
         .split_whitespace()
         .map(|token| u8::from_str_radix(token, 16).expect("the input should be hex bytes"))
         .collect()

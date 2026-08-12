@@ -18,6 +18,7 @@ docker-build:
 # Run the test suite in the container.
 docker-test:
     {{docker_cargo}} test --workspace --exclude escpost-python
+    scripts/test-development-wrapper
 
 # Run the CLI in the container, e.g. `just docker-run serve --no-open`.
 docker-run *args:
@@ -32,6 +33,7 @@ native-build:
 # Run the test suite on the host.
 native-test:
     cargo test --workspace --exclude escpost-python
+    scripts/test-development-wrapper
 
 # Run the CLI on the host, e.g. `just native-run serve`.
 native-run *args:

@@ -15,7 +15,7 @@ use std::process::Output;
 #[cfg(unix)]
 use std::thread;
 #[cfg(unix)]
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn printers_list_is_a_rust_cli_command() {
@@ -778,48 +778,6 @@ fn printers_list_does_not_create_missing_configuration() {
 }
 
 #[cfg(unix)]
-#[test]
-fn development_wrapper_creates_the_checkout_config_source() {
-    let directory = temporary_directory("wrapper-config");
-    let executable_directory = directory.join("bin");
-    fs::create_dir(&executable_directory).expect("the fake PATH should be creatable");
-    let repository = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    fs::copy(repository.join("escpost"), directory.join("escpost"))
-        .expect("the development wrapper should be copyable");
-    write_executable(
-        &executable_directory.join("docker"),
-        "#!/bin/sh\nprintf 'docker: %s\\n' \"$*\"\n",
-    );
-
-    let output = run_freshly_written_wrapper(
-        Command::new(directory.join("escpost"))
-            .args(["printers", "list"])
-            .env_remove("ESCPOST_CONFIG_HOST_DIR")
-            .env(
-                "PATH",
-                format!(
-                    "{}:/usr/bin:/bin",
-                    executable_directory
-                        .to_str()
-                        .expect("the test path should be UTF-8")
-                ),
-            ),
-    );
-
-    assert!(
-        output.status.success(),
-        "wrapper failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(directory.join(".config").is_dir());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "docker: compose run --rm cli printers list\n"
-    );
-    fs::remove_dir_all(directory).expect("the test directory should be removable");
-}
-
-#[cfg(unix)]
 fn run_non_interactive_add(config: &Path, arguments: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args(["--non-interactive", "printers", "--config"])
@@ -838,25 +796,6 @@ fn run_printers_list(config: &Path) -> Output {
         .args(["list", "--transport", "network"])
         .output()
         .expect("the escpost command should finish")
-}
-
-#[cfg(unix)]
-fn run_freshly_written_wrapper(command: &mut Command) -> Output {
-    // Writing an executable and immediately running it races with sibling test
-    // threads that fork to spawn their own children: a child can momentarily
-    // inherit the still-open write handle, so the exec observes the file as busy
-    // (ETXTBSY, raw OS error 26). Retry across that short window rather than
-    // failing the run.
-    for _ in 0..100 {
-        match command.output() {
-            Ok(output) => return output,
-            Err(error) if error.raw_os_error() == Some(26) => {
-                thread::sleep(Duration::from_millis(10));
-            }
-            Err(error) => panic!("the development wrapper should finish: {error}"),
-        }
-    }
-    panic!("the development wrapper stayed busy after repeated retries")
 }
 
 #[cfg(unix)]
@@ -880,16 +819,6 @@ fn assert_failed_without_configuration(output: &Output, config: &Path, message: 
         !config.exists(),
         "an invalid command must not create configuration"
     );
-}
-
-#[cfg(unix)]
-fn write_executable(path: &std::path::Path, contents: &str) {
-    fs::write(path, contents).expect("the fake executable should be writable");
-    let mut permissions = fs::metadata(path)
-        .expect("the fake executable should have metadata")
-        .permissions();
-    permissions.set_mode(0o755);
-    fs::set_permissions(path, permissions).expect("the fake executable should be executable");
 }
 
 #[cfg(unix)]

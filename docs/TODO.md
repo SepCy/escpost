@@ -65,7 +65,7 @@ CLI, networking, storage, and web concerns.
 The Python package is now only the render binding; the Click CLI has been
 removed. The root `./escpost` container wrapper invokes the Rust executable for
 every command. Physical calibration reuses `render` and `print` against
-`calibration/input.hex` rather than a dedicated command group.
+`crates/escpost-profiles/calibration-job.hex` rather than a dedicated command group.
 
 ## Rust CLI foundation and render migration
 
@@ -551,7 +551,7 @@ would target.
 - [ ] Add transparent proxy mode with response forwarding.
 - [x] Retire the Click CLI. Its commands were either superseded by the Rust
       `render`/`print`/`printers` commands or reduced to `render`/`print`
-      invocations against `calibration/input.hex`. The richer guided
+      invocations against `crates/escpost-profiles/calibration-job.hex`. The richer guided
       calibration workflow remains future Phase-5 work.
 
 ### Phase 5: realistic emulation and integration testing

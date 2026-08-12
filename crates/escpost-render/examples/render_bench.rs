@@ -7,7 +7,7 @@ use std::time::Instant;
 use escpost_profiles::resolver;
 use escpost_render::render;
 
-const CALIBRATION_HEX: &str = include_str!("../../../calibration/input.hex");
+const CALIBRATION_HEX: &str = include_str!("../../escpost-profiles/calibration-job.hex");
 
 const ITERATIONS: usize = 10_000;
 const COMMAND_REPETITIONS: usize = 1_000;

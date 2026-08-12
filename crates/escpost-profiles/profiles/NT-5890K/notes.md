@@ -31,7 +31,7 @@ font. Compare:
 Render the exact stream with:
 
 ```bash
-./escpost render calibration/input.hex \
+./escpost render crates/escpost-profiles/calibration-job.hex \
   --profile NT-5890K \
   --web \
   --non-interactive

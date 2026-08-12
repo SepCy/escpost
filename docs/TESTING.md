@@ -268,17 +268,16 @@ Focused cases isolate one behavior for automated diagnosis. Physical-printer
 calibration instead uses one comprehensive stream for every physical profile:
 
 ```text
-calibration/
-├── input.hex
-└── README.md
-
-crates/escpost-profiles/profiles/
-└── <profile-id>/
-    ├── profile.toml
-    ├── expected-001.png
-    ├── verification.toml
-    ├── notes.md
-    └── TODO.md              # only when hardware work remains
+crates/escpost-profiles/
+├── calibration-job.hex
+├── CALIBRATION.md
+└── profiles/
+    └── <profile-id>/
+        ├── profile.toml
+        ├── expected-001.png
+        ├── verification.toml
+        ├── notes.md
+        └── TODO.md              # only when hardware work remains
 ```
 
 The shared stream exercises the broad supported receipt surface. Do not fork
@@ -315,7 +314,7 @@ verification.
 Physical calibration reuses the general-purpose Rust commands; there is no
 dedicated calibration command group. Register the printer once, then render and
 print the same version-controlled input — a conformance case, or the shared
-receipt at `calibration/input.hex`:
+receipt at `crates/escpost-profiles/calibration-job.hex`:
 
 ```text
 escpost printers add <local-name> --transport usb \
@@ -443,7 +442,7 @@ This is repeated one vertical slice at a time. Do not write a large suite of
 speculative command tests before exercising the first command end to end.
 
 For a new printer profile, first complete `profile.toml`, then `render` and
-`print` `calibration/input.hex`. Compare the one long physical receipt with the
+`print` `crates/escpost-profiles/calibration-job.hex`. Compare the one long physical receipt with the
 profile's generated PNG, accept it as `expected-001.png`, record evidence in
 `notes.md`, and write `verification.toml`. This broad calibration complements
 the focused workflow; it does not replace it.

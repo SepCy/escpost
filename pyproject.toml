@@ -24,7 +24,8 @@ manifest-path = "crates/escpost-python/Cargo.toml"
 python-source = "python"
 module-name = "escpost._native"
 include = [
-    { path = "calibration/*", format = "sdist" },
+    { path = "crates/escpost-profiles/calibration-job.hex", format = "sdist" },
+    { path = "crates/escpost-profiles/CALIBRATION.md", format = "sdist" },
     { path = "crates/escpost-profiles/profiles/*/profile.toml", format = "sdist" },
     { path = "crates/escpost-profiles/profiles/*/expected-*.png", format = "sdist" },
     { path = "crates/escpost-profiles/profiles/*/verification.toml", format = "sdist" },

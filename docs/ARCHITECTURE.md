@@ -266,7 +266,7 @@ virtual rendering parameters, not universal ESC/POS mechanism dimensions.
 
 Profile authoring and calibration assets are collocated in visible
 `crates/escpost-profiles/profiles/<profile-id>/` directories. A physical profile also contains the
-expected rendering and physical verification of `calibration/input.hex`.
+expected rendering and physical verification of `crates/escpost-profiles/calibration-job.hex`.
 Virtual profiles use focused automated golden cases instead of claiming
 physical evidence. Hidden `.escpos-printer-db/` and `.generated/` directories
 contain infrastructure, not profiles.

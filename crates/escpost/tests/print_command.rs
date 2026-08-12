@@ -103,7 +103,7 @@ port = {port}
 #[test]
 fn non_interactive_print_requires_a_named_printer() {
     let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles/input.hex");
+        .join("tests/fixtures/cases/single-sheet/input.hex");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -125,7 +125,7 @@ fn non_interactive_print_requires_a_named_printer() {
 #[test]
 fn unknown_named_printer_fails_without_attempting_a_connection() {
     let source = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles/input.hex");
+        .join("tests/fixtures/cases/single-sheet/input.hex");
     let directory = temporary_directory("unknown-printer");
     fs::create_dir_all(&directory).expect("the test directory should be creatable");
     let configuration = directory.join("printers.toml");

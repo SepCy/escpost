@@ -7,7 +7,7 @@ visible: the selected profile is the only rendering input that changes.
 Each physical profile directory contains the printer-specific
 `expected-NNN.png` output and its calibration records. Virtual profiles use
 focused golden cases without claiming a paper comparison. Smaller conformance
-cases remain under `tests/cases/` because they are easier to diagnose when one
+cases remain under `crates/escpost-render/tests/cases/` because they are easier to diagnose when one
 command or interaction fails.
 
 Do not customize this stream for one printer. Extend it when the shared

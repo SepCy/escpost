@@ -197,7 +197,7 @@ profile = "NT-5890K"
 
 sources = [
     "upstream:escpos-printer-db/NT-5890K",
-    "case:tests/cases/text/ascii-fonts-and-styles",
+    "case:crates/escpost-render/tests/cases/text/ascii-fonts-and-styles",
 ]
 
 [source]

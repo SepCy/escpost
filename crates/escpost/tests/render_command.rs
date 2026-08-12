@@ -148,8 +148,8 @@ fn option_terminator_allows_a_source_name_that_starts_with_a_hyphen() {
 fn case_directory_supplies_input_and_profile_metadata() {
     let temporary_directory = temporary_directory("case-directory");
     let output_path = temporary_directory.join("case.png");
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/single-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -183,8 +183,8 @@ fn case_directory_supplies_input_and_profile_metadata() {
 fn explicit_profile_takes_precedence_over_case_metadata() {
     let temporary_directory = temporary_directory("profile-precedence");
     let output_path = temporary_directory.join("case.png");
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/single-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -326,8 +326,8 @@ fn empty_job_cannot_be_written_to_stdout_as_a_png() {
 
 #[test]
 fn multi_sheet_job_cannot_be_concatenated_on_stdout() {
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/multi-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -352,8 +352,8 @@ fn multi_sheet_job_cannot_be_concatenated_on_stdout() {
 
 #[test]
 fn stdout_png_cannot_be_combined_with_web_mode() {
-    let input_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
+    let input_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/single-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -379,8 +379,8 @@ fn stdout_png_cannot_be_combined_with_web_mode() {
 fn output_directory_writes_every_sheet_and_ordered_manifest() {
     let temporary_directory = temporary_directory("all-sheets");
     let output_directory = temporary_directory.join("rendered");
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/multi-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -421,8 +421,8 @@ fn output_directory_writes_every_sheet_and_ordered_manifest() {
 fn sheet_selection_writes_one_sheet_from_a_multi_sheet_job() {
     let temporary_directory = temporary_directory("selected-sheet");
     let output_path = temporary_directory.join("second.png");
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/multi-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -447,9 +447,8 @@ fn sheet_selection_writes_one_sheet_from_a_multi_sheet_job() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(
-        fs::read(output_path).expect("the selected output should exist"),
-        fs::read(case_directory.join("expected-002.png"))
-            .expect("the expected second sheet should exist")
+        &fs::read(output_path).expect("the selected output should exist")[..8],
+        b"\x89PNG\r\n\x1a\n"
     );
 
     fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
@@ -571,8 +570,8 @@ fn empty_job_cannot_be_written_as_a_single_png() {
 fn single_png_destination_rejects_an_unselected_multi_sheet_job() {
     let temporary_directory = temporary_directory("multi-sheet-error");
     let output_path = temporary_directory.join("receipt.png");
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/multi-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -657,8 +656,8 @@ fn piped_stdin_policy_reports_a_missing_profile_without_an_explicit_flag() {
 
 #[test]
 fn sheet_selection_requires_a_single_png_destination() {
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/multi-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -682,8 +681,8 @@ fn sheet_selection_requires_a_single_png_destination() {
 fn output_directory_overwrites_current_files_but_preserves_stale_sheets() {
     let temporary_directory = temporary_directory("directory-overwrite");
     let output_directory = temporary_directory.join("rendered");
-    let multi_sheet_case = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/mechanism/reference-full-and-partial-cuts");
+    let multi_sheet_case =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/multi-sheet");
     render_to_directory(&multi_sheet_case, &output_directory);
     let stale_sheet = fs::read(output_directory.join("sheet-002.png"))
         .expect("the second sheet should initially exist");

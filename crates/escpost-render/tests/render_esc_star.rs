@@ -4,8 +4,7 @@ use escpost_render::{RenderError, render};
 use std::io::Cursor;
 use support::test_profile;
 
-const INPUT_HEX: &str =
-    include_str!("../../../tests/cases/graphics/esc-star-8dot-double-density/input.hex");
+const INPUT_HEX: &str = include_str!("cases/graphics/esc-star-8dot-double-density/input.hex");
 
 #[test]
 fn renders_test_profile_8_dot_mode_with_adjacent_vertical_rows() {

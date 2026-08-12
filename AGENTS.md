@@ -45,7 +45,8 @@ docker compose run --rm cli render examples/hello.escpos --output-dir local/out
 ## Golden images
 
 Renderer tests compare decoded pixels against version-controlled
-`expected-NNN.png` fixtures under `tests/cases/<case>/` (and `profiles/<id>/`
+`expected-NNN.png` fixtures under `crates/escpost-render/tests/cases/<case>/` (and
+`crates/escpost-profiles/profiles/<id>/`
 for calibration). Tests never rewrite expectations. When a rendering change is
 intentional, review the regenerated `local/test-output/<case>/actual-NNN.png`
 by eye, then copy it over the matching `expected-NNN.png` to accept it. Never

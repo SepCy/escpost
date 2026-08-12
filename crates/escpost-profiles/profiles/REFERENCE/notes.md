@@ -16,6 +16,6 @@ commands. As new standard command handlers and profile capabilities are added,
 `REFERENCE` must expose them without a printer-specific restriction.
 
 The focused
-`tests/cases/mechanism/reference-full-and-partial-cuts` case creates three
+`crates/escpost-render/tests/cases/mechanism/reference-full-and-partial-cuts` case creates three
 ordered PNG sheets from two `GS V` Function B cuts. Virtual profiles need
 automated golden evidence, but no physical `verification.toml`.

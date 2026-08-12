@@ -6,7 +6,7 @@ paper_width_mm = 80.0
 
 sources = [
     "manual:epson-escpos",
-    "case:tests/cases/mechanism/reference-full-and-partial-cuts",
+    "case:crates/escpost-render/tests/cases/mechanism/reference-full-and-partial-cuts",
 ]
 
 [source]

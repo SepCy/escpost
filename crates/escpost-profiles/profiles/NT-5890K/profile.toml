@@ -7,12 +7,12 @@ sources = [
     "manual:epson-escpos/cr#print-and-carriage-return",
     "manual:epson-escpos/esc_r#select-international-character-set",
     "manual:epson-escpos/esc_t#select-character-code-table",
-    "case:tests/cases/graphics/esc-star-8dot-double-density",
-    "case:tests/cases/graphics/gs-v0-all-scaling-modes",
-    "case:tests/cases/motion/gs-v-function-b-feed",
-    "case:tests/cases/motion/line-spacing-and-feed",
-    "case:tests/cases/motion/positioning-and-print-area",
-    "case:tests/cases/symbols/native-symbols-nt-5890k",
+    "case:crates/escpost-render/tests/cases/graphics/esc-star-8dot-double-density",
+    "case:crates/escpost-render/tests/cases/graphics/gs-v0-all-scaling-modes",
+    "case:crates/escpost-render/tests/cases/motion/gs-v-function-b-feed",
+    "case:crates/escpost-render/tests/cases/motion/line-spacing-and-feed",
+    "case:crates/escpost-render/tests/cases/motion/positioning-and-print-area",
+    "case:crates/escpost-render/tests/cases/symbols/native-symbols-nt-5890k",
 ]
 
 [source]

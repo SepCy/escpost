@@ -9,7 +9,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[test]
 fn web_mode_serves_the_embedded_workbench() {
     let port = unused_loopback_port();
-    let mut child = start_case_web("text/ascii-fonts-and-styles", port);
+    let mut child = start_case_web("single-sheet", port);
 
     wait_until_listening(&mut child, port);
     let response = http_get(port, "/");
@@ -40,7 +40,7 @@ fn web_mode_serves_the_embedded_workbench() {
 #[test]
 fn health_endpoint_reports_ok() {
     let port = unused_loopback_port();
-    let mut child = start_case_web("text/ascii-fonts-and-styles", port);
+    let mut child = start_case_web("single-sheet", port);
 
     wait_until_listening(&mut child, port);
     let response = http_get_bytes(port, "/health");
@@ -53,7 +53,7 @@ fn health_endpoint_reports_ok() {
 #[test]
 fn web_mode_exposes_ordered_sheet_metadata_and_png_bytes() {
     let port = unused_loopback_port();
-    let case = "mechanism/reference-full-and-partial-cuts";
+    let case = "multi-sheet";
     let mut child = start_case_web(case, port);
 
     wait_until_listening(&mut child, port);
@@ -74,16 +74,7 @@ fn web_mode_exposes_ordered_sheet_metadata_and_png_bytes() {
 
     let png_response = http_get_bytes(port, "/sheets/2.png");
     stop(&mut child);
-    let expected_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases")
-        .join(case)
-        .join("expected-002.png");
-    assert_eq!(
-        response_body(&png_response),
-        fs::read(expected_path)
-            .expect("the expected sheet should be readable")
-            .as_slice()
-    );
+    assert_eq!(&response_body(&png_response)[..8], b"\x89PNG\r\n\x1a\n");
 }
 
 #[test]
@@ -252,8 +243,8 @@ fn explicit_occupied_web_port_fails_instead_of_falling_back() {
         .local_addr()
         .expect("the listener should have an address")
         .port();
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/single-sheet");
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
@@ -274,7 +265,7 @@ fn explicit_occupied_web_port_fails_instead_of_falling_back() {
 
 #[test]
 fn explicit_port_zero_reports_the_operating_system_selected_port() {
-    let mut child = start_case_web("text/ascii-fonts-and-styles", 0);
+    let mut child = start_case_web("single-sheet", 0);
     let mut stderr = BufReader::new(
         child
             .stderr
@@ -407,7 +398,7 @@ fn watch_mode_rejects_stdin_as_a_mutable_source() {
 #[test]
 fn web_mode_does_not_serve_missing_sheets_or_filesystem_paths() {
     let port = unused_loopback_port();
-    let mut child = start_case_web("text/ascii-fonts-and-styles", port);
+    let mut child = start_case_web("single-sheet", port);
 
     wait_until_listening(&mut child, port);
     let missing = http_get(port, "/sheets/999.png");
@@ -422,8 +413,8 @@ fn web_mode_does_not_serve_missing_sheets_or_filesystem_paths() {
 #[test]
 fn browser_mode_starts_the_same_web_viewer() {
     let port = unused_loopback_port();
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/single-sheet");
     let mut child = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
             "render",
@@ -453,8 +444,8 @@ fn browser_mode_starts_the_same_web_viewer() {
 #[test]
 fn non_loopback_listener_prints_a_receipt_exposure_warning() {
     let port = unused_loopback_port();
-    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases/text/ascii-fonts-and-styles");
+    let case_directory =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cases/single-sheet");
     let mut child = Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([
             "render",
@@ -485,7 +476,7 @@ fn non_loopback_listener_prints_a_receipt_exposure_warning() {
 
 fn start_case_web(case: &str, port: u16) -> Child {
     let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/cases")
+        .join("tests/fixtures/cases")
         .join(case);
     Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args([

@@ -49,6 +49,6 @@ a focused checklist, not a request to test every possible command ordering.
 - Command-specific files continue to own framing, valid operands, scaling, and
   malformed-input behavior for that command.
 
-Conformance cases under `tests/cases/` may combine several interactions into a
+Conformance cases under `crates/escpost-render/tests/cases/` may combine several interactions into a
 receipt suitable for physical comparison. Small dot-level interaction tests do
 not each need a separate PNG fixture.

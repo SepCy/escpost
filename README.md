@@ -129,6 +129,7 @@ Additional tasks:
 - [Command coverage](docs/COMMAND_COVERAGE.md) — implemented protocol surface and validation
 - [Printer profiles](docs/PROFILE_SCHEMA.md) — profile schema, enrichment, and corrections
 - [Architecture](docs/ARCHITECTURE.md) — crate boundaries and render pipeline
+- [Command tracing](docs/TRACING.md) — tracer architecture and command-effect semantics
 - [Platform support](docs/PLATFORMS.md) — release targets and transport caveats
 - [Testing and calibration](docs/TESTING.md) — conformance cases, golden images, and physical printers
 - [Design decisions](docs/DESIGN_DECISIONS.md) — accepted technical decisions and rationale

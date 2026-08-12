@@ -13,6 +13,8 @@
 //! Dot-space drawing (`print_dot`, barcodes, bitmaps, reverse fills, underlines)
 //! always fills hard `scale × scale` blocks; only glyphs write soft coverage.
 
+use super::RenderSurface;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MonoSurface {
     pub(crate) width: u32,  // dots
@@ -51,6 +53,44 @@ impl MonoSurface {
 
     fn stride(&self) -> u32 {
         self.width * self.scale
+    }
+}
+
+impl RenderSurface for MonoSurface {
+    fn new(width: u32, scale: u32, antialias: bool) -> Self {
+        Self::new(width, scale, antialias)
+    }
+
+    fn fork(&self, width: u32) -> Self {
+        Self::new(width, self.scale, self.antialias)
+    }
+
+    fn width(&self) -> u32 {
+        self.width
+    }
+
+    fn height(&self) -> u32 {
+        self.height
+    }
+
+    fn print_dot(&mut self, x: u32, y: u32) {
+        self.print_dot(x, y);
+    }
+
+    fn blend_subpixel(&mut self, sx: u32, sy: u32, value: u8, add: bool) {
+        self.blend_subpixel(sx, sy, value, add);
+    }
+
+    fn composite_at(&mut self, source: &Self, left: u32, top: u32) {
+        self.composite_at(source, left, top);
+    }
+
+    fn ensure_height(&mut self, height: u32) {
+        self.ensure_height(height);
+    }
+
+    fn clear(&mut self) {
+        self.clear();
     }
 }
 

@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 
-use escpost::{RenderOptions, render_with_options};
+use escpost::{RenderOptions, render_with_trace_and_options};
 
 use crate::cli::InputFormat;
 use crate::error::CliError;
@@ -68,7 +68,7 @@ async fn run(
     }
 }
 
-fn rerender(config: &WatchConfig) -> Result<escpost::RenderResult, CliError> {
+fn rerender(config: &WatchConfig) -> Result<escpost::TracedRenderResult, CliError> {
     let input = source::load(&config.source, config.format)?;
     let profile = profiles::load(&config.profile)?;
     let options = RenderOptions {
@@ -76,13 +76,13 @@ fn rerender(config: &WatchConfig) -> Result<escpost::RenderResult, CliError> {
         antialias: config.antialias,
         ..RenderOptions::default()
     };
-    let rendered = render_with_options(&input.bytes, profile, &options)
+    let rendered = render_with_trace_and_options(&input.bytes, profile, &options)
         .map_err(|error| CliError::Render(error.to_string()))?;
     if let Some(path) = &config.output {
-        output::write_single(&rendered, path, config.sheet)?;
+        output::write_single(&rendered.render, path, config.sheet)?;
     }
     if let Some(directory) = &config.output_dir {
-        output::write_all(&rendered, directory)?;
+        output::write_all(&rendered.render, directory)?;
     }
     Ok(rendered)
 }

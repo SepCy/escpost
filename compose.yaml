@@ -36,7 +36,13 @@ services:
     group_add:
       - "${USB_GROUP_ID:-7}"
     entrypoint:
-      - /workspace/scripts/cli-entrypoint
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        cargo build --quiet --locked --package escpost-cli
+        exec "$${CARGO_TARGET_DIR}/debug/escpost" "$$@"
+      - escpost
 
 volumes:
   cargo-home:

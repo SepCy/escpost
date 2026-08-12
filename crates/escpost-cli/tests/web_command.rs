@@ -29,7 +29,12 @@ fn web_mode_serves_the_embedded_workbench() {
     assert!(response.contains("id=\"download\""));
     assert!(response.contains("id=\"warnings\""));
     assert!(response.contains("id=\"magnifyHint\""));
-    assert!(response.contains("fetch(\"/api/render\""));
+    assert!(response.contains("id=\"footerPanel\""));
+    assert!(response.contains("id=\"footerMessages\""));
+    assert!(response.contains("id=\"previewPanel\""));
+    assert!(response.contains("id=\"traceWorkspace\""));
+    assert!(response.contains("id=\"commandPanel\""));
+    assert!(response.contains("id=\"commandList\""));
 }
 
 #[test]
@@ -79,6 +84,102 @@ fn web_mode_exposes_ordered_sheet_metadata_and_png_bytes() {
             .expect("the expected sheet should be readable")
             .as_slice()
     );
+}
+
+#[test]
+fn web_mode_exposes_experimental_command_traces() {
+    let temporary_directory = temporary_directory("command-trace");
+    let input_path = temporary_directory.join("receipt.bin");
+    let qr_content = b"https://example.test";
+    let mut input = vec![0x1b, b'a', 1, b'A', 0x0a];
+    input.extend_from_slice(&[
+        0x1d,
+        b'(',
+        b'k',
+        (qr_content.len() + 3) as u8,
+        0,
+        49,
+        80,
+        48,
+    ]);
+    input.extend_from_slice(qr_content);
+    input.extend_from_slice(&[0x1d, b'(', b'k', 3, 0, 49, 81, 48]);
+    fs::write(&input_path, input).expect("the traced input should be writable");
+    let port = unused_loopback_port();
+    let mut child = start_file_web(&input_path, port, false);
+
+    wait_until_listening(&mut child, port);
+    let response = http_get_bytes(port, "/api/render");
+    let metadata: serde_json::Value = serde_json::from_slice(response_body(&response))
+        .expect("the render response should be JSON");
+    stop(&mut child);
+
+    assert!(metadata.get("commands").is_none());
+    let commands = metadata["sheets"][0]["commands"]
+        .as_array()
+        .expect("commands should be an array");
+    assert_eq!(commands.len(), 5);
+    assert_eq!(commands[0]["byte_start"], 0);
+    assert_eq!(commands[0]["byte_end"], 3);
+    assert_eq!(commands[0]["name"], "ESC a");
+    assert_eq!(commands[0]["detail"], "Set justification: center");
+    assert!(commands[0].get("paint_lifecycle").is_none());
+    assert_eq!(commands[0]["effects"][0]["type"], "state_change");
+    assert_eq!(commands[1]["name"], "Text");
+    assert_eq!(commands[1]["detail"], "A");
+    assert_eq!(commands[1]["paint_lifecycle"], "committed");
+    let bounds = &commands[1]["effects"][0]["bounds"];
+    assert_eq!(bounds["x"], 282);
+    assert_eq!(bounds["y"], 0);
+    assert_eq!(bounds["width"], 12);
+    assert_eq!(bounds["height"], 24);
+    assert_eq!(commands[2]["name"], "LF");
+    assert_eq!(commands[2]["effects"][0]["type"], "motion");
+    assert_eq!(commands[3]["name"], "GS (");
+    assert_eq!(
+        commands[3]["detail"],
+        "Parsed command · annotations not yet modeled"
+    );
+    assert_eq!(commands[3]["effects"].as_array().unwrap().len(), 0);
+    assert_eq!(commands[4]["name"], "GS ( k");
+    assert_eq!(commands[4]["detail"], "Print QR code · Function 181");
+    assert_eq!(commands[4]["paint_lifecycle"], "committed");
+    assert_eq!(commands[4]["annotation"]["label"], "https://example.test");
+    assert_eq!(commands[4]["annotation"]["content"], "https://example.test");
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
+}
+
+#[test]
+fn web_mode_lists_buffered_text_without_fabricating_a_sheet_image() {
+    let temporary_directory = temporary_directory("buffered-command-trace");
+    let input_path = temporary_directory.join("receipt.bin");
+    fs::write(&input_path, b"A").expect("the buffered input should be writable");
+    let port = unused_loopback_port();
+    let mut child = start_file_web(&input_path, port, false);
+
+    wait_until_listening(&mut child, port);
+    let response = http_get_bytes(port, "/api/render");
+    let metadata: serde_json::Value = serde_json::from_slice(response_body(&response))
+        .expect("the render response should be JSON");
+    stop(&mut child);
+
+    let sheets = metadata["sheets"]
+        .as_array()
+        .expect("conceptual sheets should be an array");
+    assert_eq!(sheets.len(), 1);
+    assert!(sheets[0].get("url").is_none());
+    assert!(sheets[0].get("width_dots").is_none());
+    assert!(sheets[0].get("height_dots").is_none());
+    let commands = sheets[0]["commands"]
+        .as_array()
+        .expect("commands should be an array");
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0]["name"], "Text");
+    assert_eq!(commands[0]["paint_lifecycle"], "buffered");
+    assert!(commands[0]["effects"].as_array().unwrap().is_empty());
+
+    fs::remove_dir_all(temporary_directory).expect("the test directory should be removable");
 }
 
 #[test]

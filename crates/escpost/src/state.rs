@@ -1,7 +1,8 @@
 //! Printer state: motion, margins, fonts, line buffering, and sheets.
 
-use crate::surface::MonoSurface;
+use crate::surface::{MonoSurface, RenderSurface};
 use crate::symbols::barcode_system_command_name;
+use crate::trace::PaintLifecycle;
 use crate::{DeviceEvent, LimitKind, RenderError, RenderLimits, RenderWarning, qr};
 use escpost_profiles::{
     BarcodeSystem, CarriageReturnMode, FeedBehavior, Font as ProfileFont, PositioningBehavior,
@@ -40,19 +41,19 @@ pub(crate) struct BufferedGraphics {
 }
 
 #[derive(Debug)]
-pub(crate) struct PrinterState {
+pub(crate) struct PrinterState<S: RenderSurface = MonoSurface> {
     pub(crate) profile_id: String,
     pub(crate) limits: RenderLimits,
     pub(crate) device_events: Vec<DeviceEvent>,
     pub(crate) warnings: Vec<RenderWarning>,
-    pub(crate) completed_sheets: Vec<MonoSurface>,
+    pub(crate) completed_sheets: Vec<S>,
     // Subpixels per dot and whether glyph edges stay soft (grayscale preview).
     pub(crate) scale: u32,
     pub(crate) antialias: bool,
-    pub(crate) roll: MonoSurface,
+    pub(crate) roll: S,
     // Text and ESC * data are composed on a line first because ESC a applies
     // justification when the printer receives the line feed, not per glyph.
-    pub(crate) line: MonoSurface,
+    pub(crate) line: S,
     pub(crate) print_area_left: u32,
     pub(crate) print_area_width: u32,
     pub(crate) line_top: u32,
@@ -119,7 +120,55 @@ pub(crate) struct PrinterState {
     pub(crate) supports_standard_drawer_pulse: bool,
 }
 
-impl PrinterState {
+impl<S: RenderSurface> PrinterState<S> {
+    pub(crate) fn trace_paint_lifecycle(&self, command_offset: usize) -> Option<PaintLifecycle> {
+        if self.roll.has_command_region(command_offset) {
+            Some(PaintLifecycle::Committed)
+        } else if self.line.has_command_region(command_offset) {
+            Some(PaintLifecycle::Buffered)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn trace_justification(&self) -> Justification {
+        self.justification
+    }
+
+    pub(crate) fn trace_qr_data(&self) -> &[u8] {
+        self.stored_qr_data.as_deref().unwrap_or_default()
+    }
+
+    pub(crate) fn trace_position(&self) -> (u32, u32) {
+        (
+            self.print_area_left.saturating_add(self.print_x),
+            self.line_top,
+        )
+    }
+
+    pub(crate) fn trace_line_feed_start_position(&self) -> (u32, u32) {
+        let line_left = if self.line_used_width == 0 {
+            0
+        } else {
+            let remaining_width = self.line.width().saturating_sub(self.line_used_width);
+            match self.justification {
+                Justification::Left => 0,
+                Justification::Center => remaining_width / 2,
+                Justification::Right => remaining_width,
+            }
+        };
+        (
+            self.print_area_left
+                .saturating_add(line_left)
+                .saturating_add(self.print_x),
+            self.line_top,
+        )
+    }
+
+    pub(crate) fn trace_sheet_index(&self) -> usize {
+        self.completed_sheets.len()
+    }
+
     pub(crate) fn new(
         profile: &PrinterProfile,
         limits: RenderLimits,
@@ -146,8 +195,8 @@ impl PrinterState {
             completed_sheets: Vec::new(),
             scale,
             antialias,
-            roll: MonoSurface::new(width, scale, antialias),
-            line: MonoSurface::new(width, scale, antialias),
+            roll: S::new(width, scale, antialias),
+            line: S::new(width, scale, antialias),
             print_area_left: 0,
             print_area_width: width,
             line_top: 0,
@@ -216,12 +265,22 @@ impl PrinterState {
         }
     }
 
+    pub(crate) fn begin_command(&mut self, offset: usize) {
+        self.roll.begin_command(offset);
+        self.line.begin_command(offset);
+    }
+
+    pub(crate) fn end_command(&mut self) {
+        self.roll.end_command();
+        self.line.end_command();
+    }
+
     pub(crate) fn initialize(&mut self) {
         // Epson defines ESC @ as clearing the print buffer before restoring
         // modes. Already committed rows on `roll` represent fed paper and stay.
         self.print_area_left = 0;
-        self.print_area_width = self.roll.width;
-        self.line = MonoSurface::new(self.print_area_width, self.scale, self.antialias);
+        self.print_area_width = self.roll.width();
+        self.line = self.roll.fork(self.print_area_width);
         self.print_x = 0;
         self.line_used_width = 0;
         self.line_has_printable_data = false;
@@ -302,7 +361,7 @@ impl PrinterState {
         let position = self.horizontal_motion_units_to_dots(motion_units);
         // Epson specifies that out-of-area settings are ignored, leaving the
         // previous cursor untouched.
-        if position <= self.line.width {
+        if position <= self.line.width() {
             self.print_x = position;
         }
         self.at_beginning_of_line = false;
@@ -331,14 +390,14 @@ impl PrinterState {
 
         let margin = self
             .horizontal_motion_units_to_dots(motion_units)
-            .min(self.roll.width);
+            .min(self.roll.width());
         self.print_area_left = margin;
         self.print_area_width = self
             .print_area_width
-            .min(self.roll.width.saturating_sub(margin));
+            .min(self.roll.width().saturating_sub(margin));
         // Line coordinates are relative to the active print area. Rebuilding
         // is safe here because GS L is honored only at the beginning of a line.
-        self.line = MonoSurface::new(self.print_area_width, self.scale, self.antialias);
+        self.line = self.roll.fork(self.print_area_width);
         self.print_x = 0;
         self.line_used_width = 0;
         self.line_has_printable_data = false;
@@ -349,13 +408,13 @@ impl PrinterState {
             return;
         }
 
-        let available_width = self.roll.width.saturating_sub(self.print_area_left);
+        let available_width = self.roll.width().saturating_sub(self.print_area_left);
         self.print_area_width = self
             .horizontal_motion_units_to_dots(motion_units)
             .min(available_width);
         // Keeping the line buffer print-area-sized makes wrapping and
         // justification independent of the physical left margin.
-        self.line = MonoSurface::new(self.print_area_width, self.scale, self.antialias);
+        self.line = self.roll.fork(self.print_area_width);
         self.print_x = 0;
         self.line_used_width = 0;
         self.line_has_printable_data = false;
@@ -369,7 +428,7 @@ impl PrinterState {
             .find(|&position| position > self.print_x);
 
         match next_position {
-            Some(position) if position <= self.line.width => {
+            Some(position) if position <= self.line.width() => {
                 self.print_x = position;
                 self.line_used_width = self.line_used_width.max(position);
             }
@@ -381,7 +440,7 @@ impl PrinterState {
                     .tab_positions
                     .iter()
                     .copied()
-                    .find(|&position| position <= self.line.width)
+                    .find(|&position| position <= self.line.width())
                 {
                     self.print_x = position;
                     self.line_used_width = position;
@@ -419,7 +478,7 @@ impl PrinterState {
 
         // Moving left of the print-area origin or right of its edge is an
         // ignored setting, not a clamped position.
-        if let Some(position) = position.filter(|&position| position <= self.line.width) {
+        if let Some(position) = position.filter(|&position| position <= self.line.width()) {
             self.print_x = position;
         }
         self.at_beginning_of_line = false;
@@ -512,7 +571,7 @@ impl PrinterState {
     }
 
     pub(crate) fn feed_lines(&mut self, lines: u8) -> Result<(), RenderError> {
-        let remaining_width = self.line.width.saturating_sub(self.line_used_width);
+        let remaining_width = self.line.width().saturating_sub(self.line_used_width);
         // Track logical data width rather than scanning black dots. This keeps
         // spaces significant and preserves far-right data after ESC $ or
         // ESC \ moves the cursor back to an earlier position.
@@ -530,7 +589,7 @@ impl PrinterState {
         };
         let required_height = self
             .line_top
-            .saturating_add(feed.max(self.line.height).max(self.line_height));
+            .saturating_add(feed.max(self.line.height()).max(self.line_height));
         self.validate_roll_height(required_height)?;
 
         self.roll.composite_at(
@@ -629,7 +688,7 @@ impl PrinterState {
 
         // Function A cuts at the current paper position; it does not add a
         // model-dependent feed-to-cutter distance.
-        let next_roll = MonoSurface::new(self.roll.width, self.scale, self.antialias);
+        let next_roll = self.roll.fork(self.roll.width());
         self.completed_sheets
             .push(std::mem::replace(&mut self.roll, next_roll));
         self.line_top = 0;
@@ -717,9 +776,9 @@ impl PrinterState {
         let completed_dots = self
             .completed_sheets
             .iter()
-            .map(|sheet| u64::from(sheet.width) * u64::from(sheet.height))
+            .map(|sheet| u64::from(sheet.width()) * u64::from(sheet.height()))
             .sum::<u64>();
-        let current_dots = u64::from(self.roll.width) * u64::from(height_dots);
+        let current_dots = u64::from(self.roll.width()) * u64::from(height_dots);
         let total_dots = completed_dots.saturating_add(current_dots);
         if total_dots > self.limits.max_total_dots {
             return Err(RenderError::LimitExceeded {
@@ -783,10 +842,10 @@ impl PrinterState {
         }
     }
 
-    pub(crate) fn into_surfaces(mut self) -> Result<Vec<MonoSurface>, RenderError> {
+    pub(crate) fn into_surfaces(mut self) -> Result<Vec<S>, RenderError> {
         // A cut already finalized the preceding roll. Do not invent a blank
         // trailing receipt when the job ends immediately after that cut.
-        if self.roll.height > 0 {
+        if self.roll.height() > 0 {
             let sheet_count = self.completed_sheets.len().saturating_add(1);
             if sheet_count > self.limits.max_sheets {
                 return Err(RenderError::LimitExceeded {

@@ -12,14 +12,20 @@ mod state;
 mod surface;
 mod symbols;
 mod text;
+mod trace;
 
 pub use error::{LimitKind, RenderError, RenderWarning};
 pub use surface::MonoSurface;
+pub use trace::{
+    CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintLifecycle, PaintRegion,
+    Position, SheetTrace, StateChange, Trace,
+};
 
 use command::{execute_esc_command, execute_gs_command};
 use escpost_profiles::PrinterProfile;
 use state::PrinterState;
-use surface::encode_png;
+use surface::{RenderSurface, encode_png};
+use trace::{CommandSink, NoTrace, TraceCollector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RenderOptions {
@@ -99,6 +105,13 @@ pub struct RenderedSheet {
     pub png: Vec<u8>,
 }
 
+/// Experimental result containing both the rendered sheets and command trace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TracedRenderResult {
+    pub render: RenderResult,
+    pub trace: Trace,
+}
+
 pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, RenderError> {
     render_with_options(data, profile, &RenderOptions::default())
 }
@@ -108,58 +121,144 @@ pub fn render_with_options(
     profile: &PrinterProfile,
     options: &RenderOptions,
 ) -> Result<RenderResult, RenderError> {
-    validate_initial_limits(data, profile, &options.limits)?;
-    let mut state = PrinterState::new(profile, options.limits, options.scale, options.antialias);
-    let mut offset = 0;
-
-    while offset < data.len() {
-        let byte = data[offset];
-        if byte != 0x0a {
-            state.clear_pending_gs_v_0_lf();
-        }
-
-        offset += match byte {
-            0x09 => {
-                state.horizontal_tab()?;
-                1
-            }
-            0x0a => {
-                state.line_feed()?;
-                1
-            }
-            0x0d => {
-                state.carriage_return()?;
-                1
-            }
-            0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
-            0x1d => execute_gs_command(&data[offset..], offset, &mut state)?,
-            // ESC/POS code pages retain ASCII in 20h–7Eh and assign printable
-            // characters to 80h–FFh. Control bytes remain parser input.
-            byte @ (0x20..=0x7e | 0x80..=0xff) => {
-                state.print_byte(byte, offset)?;
-                1
-            }
-            byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
-        };
-    }
-
-    let device_events = std::mem::take(&mut state.device_events);
-    let warnings = std::mem::take(&mut state.warnings);
+    let rendered = render_surfaces::<MonoSurface>(data, profile, options)?;
     let mut sheets = Vec::new();
-    for surface in state.into_surfaces()? {
+    for surface in rendered.surfaces {
         let png = encode_png(&surface)?;
         sheets.push(RenderedSheet { surface, png });
     }
 
     Ok(RenderResult {
         sheets,
-        device_events,
-        warnings,
+        device_events: rendered.device_events,
+        warnings: rendered.warnings,
         metadata: RenderMetadata {
             renderer_version: env!("CARGO_PKG_VERSION"),
             profile_id: profile.id.clone(),
             canonical_profile_sha256: profile.canonical_profile_sha256.clone(),
         },
+    })
+}
+
+/// Render with the experimental command trace using default options.
+pub fn render_with_trace(
+    data: &[u8],
+    profile: &PrinterProfile,
+) -> Result<TracedRenderResult, RenderError> {
+    render_with_trace_and_options(data, profile, &RenderOptions::default())
+}
+
+/// Render with the experimental command trace and explicit options.
+pub fn render_with_trace_and_options(
+    data: &[u8],
+    profile: &PrinterProfile,
+    options: &RenderOptions,
+) -> Result<TracedRenderResult, RenderError> {
+    use surface::tracing::TracingSurface;
+
+    let mut collector = TraceCollector::default();
+    let rendered =
+        render_surfaces_with_sink::<TracingSurface, _>(data, profile, options, &mut collector)?;
+    let trace = collector.finish(&rendered.surfaces);
+    let mut sheets = Vec::new();
+    for surface in rendered.surfaces {
+        let png = encode_png(&surface.inner)?;
+        sheets.push(RenderedSheet {
+            surface: surface.inner,
+            png,
+        });
+    }
+
+    Ok(TracedRenderResult {
+        render: RenderResult {
+            sheets,
+            device_events: rendered.device_events,
+            warnings: rendered.warnings,
+            metadata: RenderMetadata {
+                renderer_version: env!("CARGO_PKG_VERSION"),
+                profile_id: profile.id.clone(),
+                canonical_profile_sha256: profile.canonical_profile_sha256.clone(),
+            },
+        },
+        trace,
+    })
+}
+
+struct SurfaceRender<S> {
+    surfaces: Vec<S>,
+    device_events: Vec<DeviceEvent>,
+    warnings: Vec<RenderWarning>,
+}
+
+fn render_surfaces<S: RenderSurface>(
+    data: &[u8],
+    profile: &PrinterProfile,
+    options: &RenderOptions,
+) -> Result<SurfaceRender<S>, RenderError> {
+    render_surfaces_with_sink(data, profile, options, &mut NoTrace)
+}
+
+fn render_surfaces_with_sink<S: RenderSurface, C: CommandSink>(
+    data: &[u8],
+    profile: &PrinterProfile,
+    options: &RenderOptions,
+    command_sink: &mut C,
+) -> Result<SurfaceRender<S>, RenderError> {
+    validate_initial_limits(data, profile, &options.limits)?;
+    let mut state = PrinterState::new(profile, options.limits, options.scale, options.antialias);
+    let mut offset = 0;
+
+    while offset < data.len() {
+        let byte = data[offset];
+        if C::ENABLED {
+            state.end_command();
+            state.begin_command(offset);
+            command_sink.begin_command(
+                state.trace_sheet_index(),
+                offset,
+                trace::fallback_command(&data[offset..]),
+            );
+        }
+        if byte != 0x0a {
+            state.clear_pending_gs_v_0_lf();
+        }
+
+        let command_length = match byte {
+            0x09 => {
+                state.horizontal_tab()?;
+                1
+            }
+            0x0a => {
+                trace::execute_line_feed(&mut state, command_sink)?;
+                1
+            }
+            0x0d => {
+                state.carriage_return()?;
+                1
+            }
+            0x1b => execute_esc_command(&data[offset..], offset, &mut state, command_sink)?,
+            0x1d => execute_gs_command(&data[offset..], offset, &mut state, command_sink)?,
+            // ESC/POS code pages retain ASCII in 20h–7Eh and assign printable
+            // characters to 80h–FFh. Control bytes remain parser input.
+            byte @ (0x20..=0x7e | 0x80..=0xff) => {
+                trace::execute_text_byte(&mut state, command_sink, byte, offset)?;
+                1
+            }
+            byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
+        };
+        if C::ENABLED {
+            command_sink
+                .finish_command(offset + command_length, state.trace_paint_lifecycle(offset));
+        }
+        offset += command_length;
+    }
+
+    let device_events = std::mem::take(&mut state.device_events);
+    let warnings = std::mem::take(&mut state.warnings);
+    Ok(SurfaceRender {
+        surfaces: state.into_surfaces()?,
+        device_events,
+        warnings,
     })
 }
 

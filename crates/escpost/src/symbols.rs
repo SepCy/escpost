@@ -1,11 +1,12 @@
 //! Barcode and QR symbol painting.
 
 use crate::state::{HriPosition, Justification, PrinterState};
+use crate::surface::RenderSurface;
 use crate::text::render_hri;
 use crate::{RenderError, barcode, qr};
 use escpost_profiles::BarcodeSystem;
 
-impl PrinterState {
+impl<S: RenderSurface> PrinterState<S> {
     pub(crate) fn print_barcode(
         &mut self,
         barcode: &barcode::EncodedBarcode,
@@ -30,11 +31,18 @@ impl PrinterState {
                 reason: "symbol is wider than the active print area",
             });
         }
-        let hri = (self.hri_position != HriPosition::None)
-            .then(|| render_hri(&barcode.hri, &self.hri_font, self.scale, self.antialias));
+        let hri: Option<S> = (self.hri_position != HriPosition::None).then(|| {
+            render_hri(
+                &barcode.hri,
+                &self.hri_font,
+                &self.roll,
+                self.scale,
+                self.antialias,
+            )
+        });
         let content_width = hri
             .as_ref()
-            .map_or(barcode_width, |surface| barcode_width.max(surface.width));
+            .map_or(barcode_width, |surface| barcode_width.max(surface.width()));
         let remaining_width = self.print_area_width.saturating_sub(content_width);
         let content_left = match self.justification {
             Justification::Left => 0,
@@ -47,7 +55,7 @@ impl PrinterState {
         let barcode_height = self.barcode_height.max(
             u32::from(barcode.minimum_height_modules).saturating_mul(self.barcode_module_width),
         );
-        let hri_height = hri.as_ref().map_or(0, |surface| surface.height);
+        let hri_height = hri.as_ref().map_or(0, RenderSurface::height);
         let hri_rows = u32::from(matches!(
             self.hri_position,
             HriPosition::Above | HriPosition::Below
@@ -69,7 +77,7 @@ impl PrinterState {
 
         if let Some(hri) = hri.as_ref() {
             let hri_left =
-                physical_content_left.saturating_add(content_width.saturating_sub(hri.width) / 2);
+                physical_content_left.saturating_add(content_width.saturating_sub(hri.width()) / 2);
             if matches!(
                 self.hri_position,
                 HriPosition::Above | HriPosition::AboveAndBelow
@@ -204,6 +212,8 @@ impl PrinterState {
         let physical_left = self.print_area_left.saturating_add(symbol_left);
         let next_line_top = self.line_top.saturating_add(symbol_size);
         self.validate_roll_height(next_line_top)?;
+        self.roll
+            .mark_region(physical_left, self.line_top, symbol_size, symbol_size);
 
         for (index, dark) in encoded.modules.into_iter().enumerate() {
             if !dark {

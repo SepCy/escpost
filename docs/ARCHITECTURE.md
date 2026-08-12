@@ -195,7 +195,7 @@ barcode.rs        one-dimensional barcode encoders
 databar.rs        GS1 DataBar encoding
 qr.rs             QR matrix adapter
 international.rs  ESC R character substitutions
-surface.rs        bit-packed dot surface and PNG encoding
+surface/          rendering contract, monochrome raster, and tracing decorator
 error.rs          renderer error types
 ```
 
@@ -203,6 +203,12 @@ error.rs          renderer error types
 symbols modules extend it with their own `impl` blocks so each painting
 domain stays readable on its own. The public API is re-exported from the
 crate root, so module boundaries are not visible to embedders.
+
+The private `RenderSurface` contract keeps command interpretation independent
+from raster storage. `MonoSurface` is the ordinary bitmap implementation; the
+experimental tracing decorator retains command provenance without duplicating
+the interpreter. See [`TRACING.md`](TRACING.md) for the current vertical slice
+and intended trace semantics.
 
 ## Printer state
 
@@ -303,17 +309,23 @@ render receipt content.
 
 ## Dot surfaces and sheets
 
-`MonoSurface` stores one printed/not-printed value per printer dot, packed
-eight dots per byte in PNG's one-bit row layout so encoding a sheet is a
-per-byte polarity inversion. All current commands compose into this
-monochrome representation.
+Surface code is divided into the private rendering contract, the canonical
+`MonoSurface`, and an experimental tracing decorator. Ordinary rendering
+selects `MonoSurface` statically and carries no trace records; traced rendering
+wraps the same raster implementation and is opt-in.
+
+`MonoSurface` stores one byte of ink coverage per scaled subpixel. Faithful
+rendering thresholds glyph coverage to hard dots and encodes a one-bit
+grayscale PNG. Optional antialiased preview rendering retains soft glyph
+coverage and encodes an eight-bit grayscale PNG. Dot-space graphics remain
+hard-edged in both modes.
 
 A cut finalizes the active surface. Later output starts another sheet. Without
 a cut, final sheet height follows painted content and paper-feed position.
 
-Each `RenderedSheet` contains the logical surface and its one-bit grayscale PNG.
-Tests inspect surfaces for exact command behavior and decode PNGs for
-end-to-end fixtures.
+Each `RenderedSheet` contains the logical surface and its encoded PNG. Tests
+inspect faithful surfaces for exact command behavior and decode their one-bit
+PNGs for end-to-end fixtures.
 
 Additional color or tone models will be designed when an implemented command
 requires them. V1 carries no unused color-plane abstraction.

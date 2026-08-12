@@ -12,7 +12,7 @@ use fontdue::{Font, FontSettings};
 use std::sync::OnceLock;
 
 const DEFAULT_FONT_BYTES: &[u8] =
-    include_bytes!("../../../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
+    include_bytes!("../assets/fonts/noto-sans-mono/NotoSansMono-Regular.ttf");
 
 /// Alpha value at or above which a glyph dot's mean coverage becomes ink.
 pub(crate) const GLYPH_ALPHA_THRESHOLD: u8 = 80;

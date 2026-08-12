@@ -284,9 +284,8 @@ then applies only its profile-selected explicit feed behavior.
 
 Each canonical profile carries:
 
-- a typed source — `Reference`, hash-pinned `Upstream`, or synthesized
-  `UpstreamDefault` — including the resolved profile SHA-256 for upstream
-  sources; and
+- a typed source — `Reference`, curated `Upstream`, or synthesized
+  `UpstreamDefault`; and
 - a canonical-profile SHA-256 covering every runtime field.
 
 The canonical hash is the profile's rendering identity. Manually maintained

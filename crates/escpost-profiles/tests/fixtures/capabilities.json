@@ -1,0 +1,49 @@
+{
+  "profiles": {
+    "TEST-THERMAL-80": {
+      "codePages": {
+        "0": "CP437",
+        "16": "CP1252"
+      },
+      "features": {
+        "barcodeA": true,
+        "barcodeB": true,
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "fonts": {
+        "0": { "columns": 42, "name": "Font A" },
+        "1": { "columns": 56, "name": "Font B" }
+      },
+      "media": {
+        "dpi": 180,
+        "width": { "mm": 80, "pixels": 512 }
+      },
+      "name": "Test Thermal 80",
+      "vendor": "Fixture Vendor"
+    },
+    "TEST-WIDTHLESS": {
+      "codePages": { "0": "CP437" },
+      "features": {
+        "barcodeA": false,
+        "barcodeB": false,
+        "bitImageColumn": false,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": false,
+        "qrCode": false
+      },
+      "fonts": {},
+      "media": {},
+      "name": "Test Widthless",
+      "vendor": "Fixture Vendor"
+    }
+  }
+}

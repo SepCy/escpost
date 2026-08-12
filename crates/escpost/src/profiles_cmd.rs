@@ -163,8 +163,8 @@ fn map_resolve_error(error: ResolveError) -> CliError {
 /// its physical fidelity was obtained (see the profiles-command design doc).
 pub fn source_label(source: &ProfileSource) -> &'static str {
     match source {
-        ProfileSource::Upstream { .. } => "calibrated",
-        ProfileSource::UpstreamDefault { .. } => "synthesized",
+        ProfileSource::Upstream => "calibrated",
+        ProfileSource::UpstreamDefault => "synthesized",
         ProfileSource::Reference => "virtual",
     }
 }
@@ -435,18 +435,8 @@ mod tests {
 
     #[test]
     fn source_label_maps_every_variant() {
-        assert_eq!(
-            source_label(&ProfileSource::Upstream {
-                profile_sha256: String::new()
-            }),
-            "calibrated"
-        );
-        assert_eq!(
-            source_label(&ProfileSource::UpstreamDefault {
-                profile_sha256: String::new()
-            }),
-            "synthesized"
-        );
+        assert_eq!(source_label(&ProfileSource::Upstream), "calibrated");
+        assert_eq!(source_label(&ProfileSource::UpstreamDefault), "synthesized");
         assert_eq!(source_label(&ProfileSource::Reference), "virtual");
     }
 

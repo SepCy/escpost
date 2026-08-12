@@ -361,27 +361,28 @@ however, describe all geometry and behavior required by an emulator.
 
 ### Decision
 
-Pin the upstream database as a source repository and import it at build time.
+Track the upstream database as a source repository and import it at build time.
 Maintain ESCPost enrichment files that state exact descriptors and the
 behavioral deviations a printer confirms (DD-031). Resolve and validate both
 sources into a canonical profile pack embedded in the Rust library.
 
-Do not fetch profile data at installation or render time. The Git submodule
-pins the upstream repository, and the canonical content hash identifies the
-runtime profile.
+Do not fetch profile data at installation or render time. The selected Git
+submodule revision supplies the build input, and the canonical content hash
+identifies the resulting runtime profile. Per-profile input hashes do not
+duplicate Git and code review as change-approval mechanisms.
 
 ### Consequences
 
 - python-escpos generators and ESCPost previews can share profile names.
 - Receiptful custom profiles can feed both systems.
-- Upstream updates are deliberate, reviewable dependency changes.
+- Upstream updates are ordinary reviewable dependency changes.
 - The renderer is insulated from upstream schema changes by its importer and
   canonical internal schema.
 - A large catalog does not imply high-fidelity support: a profile without
   enrichment rests on default base values and is marked as synthesized rather
   than calibrated (DD-031, DD-032).
 
-## DD-022 — Use typed, hash-guarded profile enrichments
+## DD-022 — Use typed profile enrichments
 
 **Status:** Accepted
 
@@ -392,28 +393,27 @@ database. A mature per-field evidence and patch protocol would provide strong
 audit detail but would impose substantial authoring and implementation cost
 before the first profile is calibrated.
 
-Pinning only the complete upstream repository is reproducible, but it does not
-distinguish an unrelated profile change from a change to the selected printer
-or one of its inherited ancestors.
+Git and pull-request review already record and review changes to both upstream
+inputs and local enrichments. A second per-profile approval mechanism would
+duplicate that workflow and complicate the source model.
 
 ### Decision
-
-Use the Git submodule itself as the global repository and commit pin. For each
-enriched printer, store the SHA-256 of its fully resolved, deterministically
-normalized upstream profile.
 
 Express enrichments as typed TOML with simple source references, and generate
 deterministic canonical JSON with a canonical profile hash.
 
-Reject unknown enrichment fields and stale upstream-profile hashes. Defer a
-generic patch language, operation declarations, separate evidence records,
-per-field provenance wrappers, and numeric confidence values until real
-maintenance needs require them.
+Reject unknown enrichment fields and invalid resolved values. Do not store or
+check per-profile hashes of upstream inputs; upstream changes flow into the next
+generated runtime pack and are reviewed as ordinary Git changes. Defer a generic
+patch language, operation declarations, separate evidence records, per-field
+provenance wrappers, and numeric confidence values until real maintenance needs
+require them.
 
 ### Consequences
 
-- Upstream drift affecting an enriched printer cannot pass silently.
-- Unrelated upstream profile changes do not force every enrichment to change.
+- Profile compilation validates correctness without acting as a change-approval
+  system.
+- Upstream and enrichment changes remain visible and reversible in Git.
 - Profile authors edit ordinary typed values rather than patch operations.
 - The canonical renderer input is independent of the upstream YAML schema.
 - Git history records evidence and review without copying authoring provenance
@@ -885,14 +885,14 @@ real-named printer: an upstream entry that states no width — the generic
 human-authored profile may still omit width and accept the 58 mm default, because
 a person then owns that choice.
 
-A synthesized profile carries a distinct source marker, separate from a
-hash-pinned enrichment (DD-022), so an assumed profile never presents as a
-physically reviewed one; that marker is the runtime signal that a profile rests
-on base defaults rather than calibration.
+A synthesized profile carries a distinct source marker, separate from a curated
+enrichment, so an assumed profile never presents as a physically reviewed one;
+that marker is the runtime signal that a profile rests on base defaults rather
+than calibration.
 
-All profiles resolve at build time into the single canonical pack (DD-018). An
-equality check between the committed pack and a fresh compile guards against
-silent upstream or default drift.
+All profiles resolve at build time into the single canonical pack (DD-018).
+Git records changes to the source inputs and generated output; compilation does
+not add a separate approval gate.
 
 ### Consequences
 

@@ -583,8 +583,7 @@ flags.
 `CAL` is the calibration marker, ESCPost's honesty signal about how a
 profile's physical fidelity was obtained:
 
-- `✓` **calibrated** — hash-pinned upstream data, enrichment measured against
-  real hardware.
+- `✓` **calibrated** — an enrichment measured against real hardware.
 - `~` **synthesized** — real capabilities and width from upstream, but
   physical metrics (font cells, baselines, and similar) default rather than
   being measured.

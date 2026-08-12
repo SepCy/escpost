@@ -217,7 +217,7 @@ changing the receipt.
 Golden conformance tests always preserve each newly rendered sheet under:
 
 ```text
-local/test-output/<case-path>/actual-001.png
+.test-output/<case-path>/actual-001.png
 ```
 
 The output directory mirrors `crates/escpost-render/tests/cases/`, uses the same three-digit sheet
@@ -225,7 +225,7 @@ numbers, and is ignored by Git. This lets developers inspect successful
 renders as well as failures.
 
 Shared calibration outputs use
-`local/test-output/calibration/<profile-id>/actual-001.png`.
+`.test-output/calibration/<profile-id>/actual-001.png`.
 
 `escpost render --output-dir` writes `sheet-NNN.png` and a `manifest.json`
 whose `sheets` array lists those files in receipt order. The manifest is the
@@ -366,7 +366,7 @@ Use `escpost print` when an exact byte stream should be sent to a named
 configured printer. Unlike rendering, this does not require or apply a profile:
 
 ```bash
-./escpost print examples/rust-print-smoke.hex \
+./escpost print example-jobs/rust-print-smoke.hex \
   --printer netum-usb \
   --non-interactive
 ```
@@ -386,7 +386,7 @@ that can resolve and write to a developer's configured physical printer.
 ## Local printer configuration
 
 When commands run through the development wrapper, connection details belong
-in the ignored `local/config/printers.toml`:
+in the ignored `.config/printers.toml`:
 
 ```toml
 [netum-usb]
@@ -400,8 +400,7 @@ out_endpoint = "0x01"
 in_endpoint = "0x81"
 ```
 
-[`examples/printers.toml`](../examples/printers.toml) is the committed template.
-Use native `escpost printers add` for new USB and network entries. It preserves
+Use `escpost printers add` for new USB and network entries. It preserves
 comments and other printer entries and shares the legacy calibration CLI's
 resolved configuration path. The wrapper creates the local directory before
 Compose mounts it, preventing Docker from creating a root-owned bind source.

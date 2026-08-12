@@ -517,10 +517,10 @@ mod tests {
         let display = display_path_with(
             Path::new("/home/developer/.config/escpost/printers.toml"),
             Some(Path::new("/home/developer/.config/escpost")),
-            Some(Path::new("/checkout/local/config")),
+            Some(Path::new("/checkout/.config")),
         );
 
-        assert_eq!(display, "/checkout/local/config/printers.toml");
+        assert_eq!(display, "/checkout/.config/printers.toml");
     }
 
     #[test]
@@ -528,7 +528,7 @@ mod tests {
         let display = display_path_with(
             Path::new("/tmp/explicit/printers.toml"),
             Some(Path::new("/home/developer/.config/escpost")),
-            Some(Path::new("/checkout/local/config")),
+            Some(Path::new("/checkout/.config")),
         );
 
         assert_eq!(display, "/tmp/explicit/printers.toml");

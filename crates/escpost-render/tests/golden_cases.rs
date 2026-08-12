@@ -31,7 +31,7 @@ struct PixelDifference {
 fn conformance_cases_match_their_golden_pngs() {
     let repository = repository_root();
     let cases_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/cases");
-    let output_root = repository.join("local/test-output");
+    let output_root = repository.join(".test-output");
     let mut case_directories = find_case_directories(&cases_root);
     case_directories.sort();
 

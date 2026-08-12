@@ -6,7 +6,7 @@
 # Usage:
 #   scripts/send-receipt [PORT] [HOST] [HOLD_SECONDS]
 #
-# With no piped input it sends examples/cafe-order-voucher.hex. Otherwise it
+# With no piped input it sends example-jobs/cafe-order-voucher.hex. Otherwise it
 # streams stdin to the printer verbatim, so raw ESC/POS bytes survive unchanged:
 #
 #   scripts/send-receipt 9100 < receipt.bin
@@ -29,7 +29,7 @@ script_directory="${script_path%/*}"
 if [ "$script_directory" = "$script_path" ]; then
     script_directory="."
 fi
-sample_receipt="${script_directory}/../examples/cafe-order-voucher.hex"
+sample_receipt="${script_directory}/../example-jobs/cafe-order-voucher.hex"
 
 # Open the TCP connection on fd 3 so it can be held open after sending.
 if ! exec 3<>"/dev/tcp/${host}/${port}" 2>/dev/null; then

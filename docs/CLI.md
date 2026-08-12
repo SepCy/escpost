@@ -151,7 +151,7 @@ A directory is accepted only when it is a recognized ESCPost bundle, such as:
   input bytes.
 
 An arbitrary directory of PNGs is not an ESC/POS source. The temporary
-`local/preview/manifest.json` workflow is not part of the Rust CLI contract.
+`.test-output/preview/manifest.json` workflow is not part of the Rust CLI contract.
 
 ### Captures
 

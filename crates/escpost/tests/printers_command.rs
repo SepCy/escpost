@@ -779,7 +779,7 @@ fn printers_list_does_not_create_missing_configuration() {
 
 #[cfg(unix)]
 #[test]
-fn development_wrapper_creates_the_checkout_local_config_source() {
+fn development_wrapper_creates_the_checkout_config_source() {
     let directory = temporary_directory("wrapper-config");
     let executable_directory = directory.join("bin");
     fs::create_dir(&executable_directory).expect("the fake PATH should be creatable");
@@ -811,7 +811,7 @@ fn development_wrapper_creates_the_checkout_local_config_source() {
         "wrapper failed:\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    assert!(directory.join("local/config").is_dir());
+    assert!(directory.join(".config").is_dir());
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "docker: compose run --rm cli printers list\n"

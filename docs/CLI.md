@@ -10,8 +10,9 @@ This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
 be reviewed. `render`, named USB and RAW-network `print`, USB and
 configured-network `printers list`, USB/network registration through
-`printers add`, and `profiles` (`list`, `show`, `find`) are implemented. An
-initial `serve` captures RAW TCP jobs framed by connection close and previews
+`printers add`, network-printer discovery through `printers discover`, and
+`profiles` (`list`, `show`, `find`) are implemented. An initial `serve`
+captures RAW TCP jobs framed by connection close and previews
 the most recent one; its job history, `FF`/cut boundary handling, and limits
 remain planned, as do the other top-level commands. The
 [project README](../README.md) describes what works today, while `TODO.md` is
@@ -375,7 +376,12 @@ escpost printers [--config <FILE>] add [<NAME>]
     [--host <HOST>]
     [--port <PORT>]
     [--profile <PROFILE>]
+    [--discover [--subnet <CIDR>]... [--timeout <MS>]]
 escpost printers [--config <FILE>] list [--transport <TRANSPORT>] [--json]
+escpost printers [--config <FILE>] discover
+    [--port <PORT>]
+    [--subnet <CIDR>]...
+    [--timeout <MS>]
 escpost printers [--config <FILE>] scan [--transport <TRANSPORT>]
 escpost printers [--config <FILE>] pair <CANDIDATE>
 ```
@@ -432,6 +438,26 @@ unprofiled. Sending an existing ESC/POS stream does not require a rendering
 profile, and no profile—including `REFERENCE`—is inferred for an unknown
 printer.
 
+`--discover` finds the host instead of requiring an already-known `--host`:
+it runs the same scan as `printers discover` and feeds the chosen result into
+this same registration flow.
+
+```bash
+escpost printers add kitchen --transport network --discover
+```
+
+`--discover` and `--host` are mutually exclusive, and `--discover` is only
+valid for the network transport; omitting `--transport` alongside
+`--discover` implies `network`. `--subnet` and `--timeout` are valid only
+together with `--discover` and behave exactly as documented under
+`printers discover` below. `--port` serves both roles at once: the port
+probed during the scan and the port saved for the registered printer. At an
+interactive terminal, several discovered hosts open a selection menu; under
+`--non-interactive` exactly one discovered host is required. Zero discovered
+hosts is an error naming the probed port, and several is an error listing
+every discovered candidate so the developer can retry with an explicit
+`--host`.
+
 A USB printer can also be selected without a menu by naming its stable
 descriptor. `--vendor-id` and `--product-id` accept decimal or `0x`-prefixed
 hexadecimal and must be given together; `--serial` further narrows otherwise
@@ -483,10 +509,11 @@ Adding a printer:
 - creates a new file with mode `0600` on Unix; and
 - reports the resolved configuration path.
 
-Registration reads USB descriptors or records the supplied network endpoint.
-It does not send bytes, infer a profile, or prove that paper can be printed.
-Manual editing remains supported. Active Bluetooth and network discovery
-remain separate planned capabilities.
+Registration reads USB descriptors or records the supplied network endpoint,
+whether that endpoint came from `--host` or from `--discover`. It does not
+send bytes, infer a profile, or prove that paper can be printed. Manual
+editing remains supported. Active Bluetooth discovery remains a separate
+planned capability.
 
 ### `printers list`
 
@@ -522,6 +549,47 @@ start a broad Bluetooth or network search. It opens and immediately closes one
 TCP connection to each configured network target, using a one-second timeout.
 These probes run concurrently and send zero bytes. Reading USB descriptors is
 also part of listing.
+
+### `printers discover`
+
+`discover` is a read-only sweep for network printers that are not yet
+configured. It probes a TCP connection on one port across small directly
+connected IPv4 networks and reports which hosts accept it:
+
+```bash
+escpost printers discover
+escpost printers discover --subnet 10.42.0.0/24 --port 9100
+```
+
+Without `--subnet`, ESCPost enumerates the machine's directly connected IPv4
+networks and scans each one automatically, but only when it is at most a
+`/24`; a larger directly connected network is skipped rather than swept in
+full, and finding no eligible network at all is an error pointing at
+`--subnet`. Passing one or more `--subnet <CIDR>` values scans exactly those
+networks instead: it disables the automatic network enumeration and removes
+the `/24` cap, so an explicit subnet may be arbitrarily large. `--subnet` may
+be repeated to scan several networks in one sweep.
+
+`--port` selects the probed port and defaults to `9100`. `--timeout <MS>`
+bounds each per-host connection attempt and defaults to `1000`. Probes run
+concurrently and send zero bytes; a reachable port is reported as-is and is
+never assumed to be a printer.
+
+Results are numbered in scan order. Each entry shows the host and port;
+results reached through a directly connected network additionally show that
+interface, and any result matching a saved network printer's host and port
+shows the configured name:
+
+```text
+[1] 10.42.0.5:9100
+[2] 10.42.0.71:9100
+    interface: enx0
+    configured as: kitchen
+```
+
+An empty sweep prints `No listening printers discovered.` and exits
+successfully; no reachable host is not an error. `discover` never writes to
+`printers.toml`. Use `printers add --discover` to register a result.
 
 ### `printers scan`
 

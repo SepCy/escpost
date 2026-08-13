@@ -231,6 +231,20 @@ pub(crate) struct AddPrinterArgs {
     /// Optional rendering profile.
     #[arg(long)]
     pub(crate) profile: Option<String>,
+
+    /// Discover listening network printers and register the chosen one
+    /// instead of passing --host.
+    #[arg(long, conflicts_with = "host")]
+    pub(crate) discover: bool,
+
+    /// Scan this network (CIDR notation, for example 10.42.0.0/24) instead
+    /// of the directly connected networks. May be repeated.
+    #[arg(long, value_name = "CIDR", value_parser = Subnet::parse, requires = "discover")]
+    pub(crate) subnet: Vec<Subnet>,
+
+    /// Per-host connection timeout in milliseconds during discovery.
+    #[arg(long, value_name = "MS", requires = "discover")]
+    pub(crate) timeout: Option<u64>,
 }
 
 /// Parse a USB vendor or product identifier given in decimal or `0x`-prefixed

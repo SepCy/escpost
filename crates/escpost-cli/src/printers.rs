@@ -154,7 +154,22 @@ pub(crate) async fn run(arguments: PrintersArgs, non_interactive: bool) -> Resul
                 &mut io::stdout().lock(),
             )
         }
-        PrintersCommand::Add(add) => add_printer(arguments.config.as_deref(), add, non_interactive),
+        PrintersCommand::Add(mut add) => {
+            if add.discover {
+                if add.transport == Some(PrinterTransport::Usb) {
+                    return Err(CliError::DiscoverForUsbPrinter);
+                }
+                // Discovery implies the network transport, so the wizard must
+                // not ask for one.
+                add.transport = Some(PrinterTransport::Network);
+                let host =
+                    discover_host_for_add(arguments.config.as_deref(), &add, non_interactive)
+                        .await?;
+                add.host = Some(host.address.to_string());
+                add.port = Some(host.port);
+            }
+            add_printer(arguments.config.as_deref(), add, non_interactive)
+        }
         PrintersCommand::Discover(discover) => {
             let path = configuration::resolved_path(arguments.config.as_deref())?;
             // Unlike `list`, a scan does not require a saved configuration to
@@ -199,6 +214,9 @@ pub(crate) fn add_interactively(config_path: Option<&std::path::Path>) -> Result
             product_id: None,
             serial: None,
             profile: None,
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         },
         true,
         &mut InquireAddPrompter,
@@ -277,6 +295,11 @@ fn resolve_add(
         product_id,
         serial,
         profile,
+        // Already resolved to --host/--port by the Discover arm of `run`
+        // before this function is reached.
+        discover: _,
+        subnet: _,
+        timeout: _,
     } = arguments;
     if !can_prompt && name.is_none() {
         return Err(CliError::MissingPrinterName);
@@ -616,6 +639,106 @@ async fn probe_network_printers(printers: &[ConfiguredNetworkPrinter]) -> Vec<bo
         }
     }
     statuses
+}
+
+/// A discovered endpoint offered for registration, labeled with any saved
+/// printers already pointing at it.
+#[derive(Debug)]
+struct DiscoverChoice {
+    host: DiscoveredHost,
+    configured_as: Vec<String>,
+}
+
+impl fmt::Display for DiscoverChoice {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{}",
+            format_network_endpoint(&self.host.address.to_string(), self.host.port)
+        )?;
+        let mut notes = Vec::new();
+        if let Some(interface) = &self.host.interface {
+            notes.push(format!("via {interface}"));
+        }
+        if !self.configured_as.is_empty() {
+            notes.push(format!("configured as {}", self.configured_as.join(", ")));
+        }
+        if !notes.is_empty() {
+            write!(formatter, " ({})", notes.join("; "))?;
+        }
+        Ok(())
+    }
+}
+
+trait DiscoverPicker {
+    fn discovered_host(&mut self, choices: Vec<DiscoverChoice>)
+    -> Result<DiscoverChoice, CliError>;
+}
+
+struct InquireDiscoverPicker;
+
+impl DiscoverPicker for InquireDiscoverPicker {
+    fn discovered_host(
+        &mut self,
+        choices: Vec<DiscoverChoice>,
+    ) -> Result<DiscoverChoice, CliError> {
+        Select::new("Network printer", choices)
+            .prompt()
+            .map_err(|error| CliError::PrinterPrompt(error.to_string()))
+    }
+}
+
+async fn discover_host_for_add(
+    config_path: Option<&std::path::Path>,
+    arguments: &AddPrinterArgs,
+    non_interactive: bool,
+) -> Result<DiscoveredHost, CliError> {
+    let port = arguments.port.unwrap_or(9100);
+    if port == 0 {
+        return Err(CliError::InvalidPrinterPort);
+    }
+    let targets = discovery_targets(&arguments.subnet)?;
+    let hosts = discovery::scan(
+        &targets,
+        port,
+        Duration::from_millis(arguments.timeout.unwrap_or(1000)),
+    )
+    .await;
+    let configuration = configuration::load_for_update(config_path)?;
+    let choices = hosts
+        .into_iter()
+        .map(|host| {
+            let configured_as = configured_names(&configuration, &host)
+                .into_iter()
+                .map(str::to_owned)
+                .collect();
+            DiscoverChoice {
+                host,
+                configured_as,
+            }
+        })
+        .collect();
+    let can_prompt = !non_interactive && io::stdin().is_terminal() && io::stderr().is_terminal();
+    choose_discovered_host(choices, port, can_prompt, &mut InquireDiscoverPicker)
+}
+
+/// Resolve the sweep result to one endpoint. Exactly one candidate needs no
+/// prompt; several candidates need a terminal, because choosing a printer
+/// implicitly could register a stranger's device.
+fn choose_discovered_host(
+    mut choices: Vec<DiscoverChoice>,
+    port: u16,
+    can_prompt: bool,
+    picker: &mut impl DiscoverPicker,
+) -> Result<DiscoveredHost, CliError> {
+    match choices.len() {
+        0 => Err(CliError::NoDiscoveredPrinters(port)),
+        1 => Ok(choices.remove(0).host),
+        _ if can_prompt => Ok(picker.discovered_host(choices)?.host),
+        _ => Err(CliError::AmbiguousDiscoveredPrinters(
+            choices.iter().map(ToString::to_string).collect(),
+        )),
+    }
 }
 
 async fn run_discover(
@@ -1169,10 +1292,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        AddPrompter, ResolvedAddConnection, ResolvedAddPrinter, UsbAddTarget, UsbInventory,
-        UsbPrinter, UsbPrinterInterface, UsbSelector, execute, execute_add, filter_usb_targets,
-        printer_interfaces, resolve_add, select_usb_target, usb_add_targets, usb_selector,
-        write_discovered_hosts,
+        AddPrompter, DiscoverChoice, DiscoverPicker, ResolvedAddConnection, ResolvedAddPrinter,
+        UsbAddTarget, UsbInventory, UsbPrinter, UsbPrinterInterface, UsbSelector,
+        choose_discovered_host, execute, execute_add, filter_usb_targets, printer_interfaces,
+        resolve_add, select_usb_target, usb_add_targets, usb_selector, write_discovered_hosts,
     };
     use crate::cli::{AddPrinterArgs, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
@@ -1191,6 +1314,9 @@ mod tests {
             product_id: None,
             serial: None,
             profile: None,
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
         let mut prompter = FixedAddPrompter::with_names(["kitchen"]);
 
@@ -1230,6 +1356,9 @@ mod tests {
             product_id: None,
             serial: None,
             profile: None,
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
 
         let resolved = resolve_add(
@@ -1257,6 +1386,9 @@ mod tests {
             product_id: None,
             serial: None,
             profile: None,
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
 
         let error = resolve_add(
@@ -1293,6 +1425,9 @@ port = 9100
             product_id: None,
             serial: None,
             profile: Some("REFERENCE".to_owned()),
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
         let mut prompter = FixedAddPrompter::with_names(["counter"]);
 
@@ -1328,6 +1463,9 @@ port = 9100
             product_id: None,
             serial: None,
             profile: None,
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
         let mut inventory = FixedInventory {
             printers: vec![UsbPrinter {
@@ -1924,6 +2062,9 @@ out_endpoint = \"0x01\"
             product_id: Some(0x5011),
             serial: Some("B120300001".to_owned()),
             profile: Some("NT-5890K".to_owned()),
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
         let mut inventory = FixedInventory {
             printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
@@ -1967,6 +2108,9 @@ out_endpoint = \"0x01\"
             product_id: None,
             serial: None,
             profile: None,
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
 
         let error = resolve_add(
@@ -1997,6 +2141,9 @@ out_endpoint = \"0x01\"
             product_id: Some(0x5011),
             serial: None,
             profile: None,
+            discover: false,
+            subnet: Vec::new(),
+            timeout: None,
         };
 
         let error = resolve_add(
@@ -2246,5 +2393,103 @@ port = 9100
             String::from_utf8(output).expect("the listing should be UTF-8"),
             "No listening printers discovered.\n"
         );
+    }
+
+    struct UnexpectedDiscoverPicker;
+
+    impl DiscoverPicker for UnexpectedDiscoverPicker {
+        fn discovered_host(
+            &mut self,
+            _choices: Vec<DiscoverChoice>,
+        ) -> Result<DiscoverChoice, CliError> {
+            panic!("no discovery selection prompt was expected");
+        }
+    }
+
+    struct FirstChoiceDiscoverPicker;
+
+    impl DiscoverPicker for FirstChoiceDiscoverPicker {
+        fn discovered_host(
+            &mut self,
+            mut choices: Vec<DiscoverChoice>,
+        ) -> Result<DiscoverChoice, CliError> {
+            Ok(choices.remove(0))
+        }
+    }
+
+    fn discovered(address: [u8; 4], port: u16) -> DiscoveredHost {
+        DiscoveredHost {
+            address: Ipv4Addr::from(address),
+            port,
+            interface: Some("enx0".to_owned()),
+        }
+    }
+
+    #[test]
+    fn a_single_discovered_host_is_chosen_without_prompting() {
+        let choices = vec![DiscoverChoice {
+            host: discovered([10, 42, 0, 71], 9100),
+            configured_as: Vec::new(),
+        }];
+
+        let chosen = choose_discovered_host(choices, 9100, false, &mut UnexpectedDiscoverPicker)
+            .expect("one candidate needs no prompt");
+
+        assert_eq!(chosen, discovered([10, 42, 0, 71], 9100));
+    }
+
+    #[test]
+    fn zero_discovered_hosts_is_an_error() {
+        let error = choose_discovered_host(Vec::new(), 9100, true, &mut UnexpectedDiscoverPicker)
+            .expect_err("nothing to add must fail");
+
+        assert!(matches!(error, CliError::NoDiscoveredPrinters(9100)));
+    }
+
+    #[test]
+    fn several_discovered_hosts_without_a_terminal_is_an_error_naming_them() {
+        let choices = vec![
+            DiscoverChoice {
+                host: discovered([10, 42, 0, 5], 9100),
+                configured_as: Vec::new(),
+            },
+            DiscoverChoice {
+                host: discovered([10, 42, 0, 71], 9100),
+                configured_as: vec!["kitchen".to_owned()],
+            },
+        ];
+
+        let error = choose_discovered_host(choices, 9100, false, &mut UnexpectedDiscoverPicker)
+            .expect_err("an implicit choice among several hosts must be refused");
+
+        let CliError::AmbiguousDiscoveredPrinters(names) = error else {
+            panic!("expected AmbiguousDiscoveredPrinters, got {error:?}");
+        };
+        assert_eq!(
+            names,
+            vec![
+                "10.42.0.5:9100 (via enx0)".to_owned(),
+                "10.42.0.71:9100 (via enx0; configured as kitchen)".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn several_discovered_hosts_with_a_terminal_are_prompted() {
+        let choices = vec![
+            DiscoverChoice {
+                host: discovered([10, 42, 0, 5], 9100),
+                configured_as: Vec::new(),
+            },
+            DiscoverChoice {
+                host: discovered([10, 42, 0, 71], 9100),
+                configured_as: Vec::new(),
+            },
+        ];
+
+        let chosen = choose_discovered_host(choices, 9100, true, &mut FirstChoiceDiscoverPicker)
+            .expect("the prompted selection should resolve");
+
+        assert_eq!(chosen, discovered([10, 42, 0, 5], 9100));
     }
 }

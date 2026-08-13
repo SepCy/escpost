@@ -1032,3 +1032,115 @@ fn printers_discover_reports_an_empty_sweep() {
     assert!(stdout.contains("No listening printers discovered."));
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_registers_the_single_discovered_printer() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    let directory = temporary_directory("add-discover");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--transport",
+            "network",
+            "--discover",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ],
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "command failed:\n{stderr}");
+    let document =
+        fs::read_to_string(&config).expect("the printer configuration should be readable");
+    let table = toml::from_str::<toml::Table>(&document).expect("the configuration should be TOML");
+    let printer = table["kitchen"]
+        .as_table()
+        .expect("the configured printer should be a table");
+    assert_eq!(printer["transport"].as_str(), Some("network"));
+    assert_eq!(printer["host"].as_str(), Some("127.0.0.1"));
+    assert_eq!(printer["port"].as_integer(), Some(i64::from(port)));
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_fails_when_nothing_is_listening() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    drop(listener);
+    let directory = temporary_directory("add-discover-miss");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--transport",
+            "network",
+            "--discover",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ],
+    );
+
+    assert_failed_without_configuration(&output, &config, "no printer is listening on port");
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_rejects_an_explicit_host() {
+    let directory = temporary_directory("add-discover-host");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--transport",
+            "network",
+            "--discover",
+            "--host",
+            "10.42.0.71",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "clap should reject --discover with --host:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_rejects_usb_transport() {
+    let directory = temporary_directory("add-discover-usb");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(&config, &["counter", "--transport", "usb", "--discover"]);
+
+    assert_failed_without_configuration(
+        &output,
+        &config,
+        "--discover is only valid for network printers",
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}

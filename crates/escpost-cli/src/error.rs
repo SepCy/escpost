@@ -127,6 +127,18 @@ pub(crate) enum CliError {
     )]
     NoDiscoverableSubnets,
 
+    #[error("--discover is only valid for network printers")]
+    DiscoverForUsbPrinter,
+
+    #[error("no printer is listening on port {0} in the scanned networks")]
+    NoDiscoveredPrinters(u16),
+
+    #[error(
+        "several printers were discovered; choose one interactively or pass --host:\n{}",
+        .0.join("\n")
+    )]
+    AmbiguousDiscoveredPrinters(Vec<String>),
+
     #[error("no USB device matches vendor {vendor_id:#06x} and product {product_id:#06x}")]
     UsbDeviceNotFound { vendor_id: u16, product_id: u16 },
 

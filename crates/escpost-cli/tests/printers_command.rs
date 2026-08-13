@@ -996,10 +996,17 @@ fn printers_discover_finds_a_listening_loopback_printer() {
         .output()
         .expect("the escpost command should finish");
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(output.status.success(), "command failed:\n{stdout}");
     assert!(stdout.contains(&format!("[1] 127.0.0.1:{port}")));
     assert!(stdout.contains("status: new"));
+    assert!(
+        stderr.contains(&format!(
+            "Register it with: escpost printers add <NAME> --transport network --host 127.0.0.1 --port {port}"
+        )),
+        "stderr should hint at registering the new printer:\n{stderr}"
+    );
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
 
@@ -1028,9 +1035,14 @@ fn printers_discover_reports_an_empty_sweep() {
         .output()
         .expect("the escpost command should finish");
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(output.status.success(), "command failed:\n{stdout}");
     assert!(stdout.contains("No listening printers discovered."));
+    assert!(
+        !stderr.contains("Register"),
+        "an empty sweep should not hint at registering a printer:\n{stderr}"
+    );
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
 

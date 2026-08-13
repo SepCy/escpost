@@ -1,5 +1,12 @@
 use std::fmt;
 use std::net::Ipv4Addr;
+use std::sync::Arc;
+use std::time::Duration;
+
+use tokio::net::TcpStream;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
+use tokio::time::timeout;
 
 use crate::error::CliError;
 
@@ -52,7 +59,6 @@ impl Subnet {
     /// Probe candidates. Ordinary subnets exclude the network and broadcast
     /// addresses; /31 and /32 have neither (RFC 3021), so every address is a
     /// host — the integration tests rely on /32 working.
-    #[allow(dead_code)]
     pub(crate) fn hosts(&self) -> Vec<Ipv4Addr> {
         let network = u32::from(self.network);
         let broadcast = network | !prefix_mask(self.prefix);
@@ -139,11 +145,73 @@ pub(crate) fn local_scan_targets() -> Result<Vec<ScanTarget>, CliError> {
     Ok(auto_scan_targets(addresses))
 }
 
+/// A bound on simultaneous connection attempts, well below typical file
+/// descriptor limits while keeping a /24 sweep to a couple of batches.
+const MAX_CONCURRENT_PROBES: usize = 128;
+
+/// A host that accepted a TCP connection on the probed port.
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DiscoveredHost {
+    pub(crate) address: Ipv4Addr,
+    pub(crate) port: u16,
+    pub(crate) interface: Option<String>,
+}
+
+/// Sweep every candidate address of every target. Opening and immediately
+/// dropping a stream proves a listener without sending a byte the printer
+/// could interpret as ESC/POS data. Failures and timeouts are the normal
+/// case for a sweep and are silently skipped.
+#[allow(dead_code)]
+pub(crate) async fn scan(
+    targets: &[ScanTarget],
+    port: u16,
+    probe_timeout: Duration,
+) -> Vec<DiscoveredHost> {
+    let limiter = Arc::new(Semaphore::new(MAX_CONCURRENT_PROBES));
+    let mut probes = JoinSet::new();
+    for target in targets {
+        for address in target.subnet.hosts() {
+            if target.excluded == Some(address) {
+                continue;
+            }
+            let interface = target.interface.clone();
+            let limiter = Arc::clone(&limiter);
+            probes.spawn(async move {
+                let _permit = limiter
+                    .acquire_owned()
+                    .await
+                    .expect("the probe semaphore is never closed");
+                let connected = timeout(probe_timeout, TcpStream::connect((address, port)))
+                    .await
+                    .is_ok_and(|result| result.is_ok());
+                connected.then_some(DiscoveredHost {
+                    address,
+                    port,
+                    interface,
+                })
+            });
+        }
+    }
+
+    let mut hosts = Vec::new();
+    while let Some(result) = probes.join_next().await {
+        if let Ok(Some(host)) = result {
+            hosts.push(host);
+        }
+    }
+    // Overlapping explicit --subnet values may find one address twice.
+    hosts.sort_by_key(|host| u32::from(host.address));
+    hosts.dedup_by_key(|host| host.address);
+    hosts
+}
+
 #[cfg(test)]
 mod tests {
     use std::net::Ipv4Addr;
+    use std::time::Duration;
 
-    use super::{InterfaceAddress, ScanTarget, Subnet, auto_scan_targets};
+    use super::{DiscoveredHost, InterfaceAddress, ScanTarget, Subnet, auto_scan_targets, scan};
 
     #[test]
     fn parse_normalizes_host_bits_to_the_network_address() {
@@ -249,5 +317,55 @@ mod tests {
 
         assert_eq!(targets.len(), 1);
         assert_eq!(targets[0].interface.as_deref(), Some("eth0"));
+    }
+
+    #[tokio::test]
+    async fn scan_reports_a_listening_host_and_ignores_closed_ports() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .expect("an ephemeral loopback port should bind");
+        let port = listener
+            .local_addr()
+            .expect("the listener should report its address")
+            .port();
+        let target = ScanTarget {
+            subnet: Subnet::parse("127.0.0.1/32").expect("a valid CIDR should parse"),
+            interface: Some("lo".to_owned()),
+            excluded: None,
+        };
+
+        let hosts = scan(std::slice::from_ref(&target), port, Duration::from_secs(1)).await;
+        assert_eq!(
+            hosts,
+            vec![DiscoveredHost {
+                address: Ipv4Addr::new(127, 0, 0, 1),
+                port,
+                interface: Some("lo".to_owned()),
+            }]
+        );
+
+        drop(listener);
+        let hosts = scan(&[target], port, Duration::from_secs(1)).await;
+        assert!(hosts.is_empty());
+    }
+
+    #[tokio::test]
+    async fn scan_never_probes_the_excluded_own_address() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .expect("an ephemeral loopback port should bind");
+        let port = listener
+            .local_addr()
+            .expect("the listener should report its address")
+            .port();
+        let target = ScanTarget {
+            subnet: Subnet::parse("127.0.0.1/32").expect("a valid CIDR should parse"),
+            interface: None,
+            excluded: Some(Ipv4Addr::new(127, 0, 0, 1)),
+        };
+
+        assert!(
+            scan(&[target], port, Duration::from_secs(1))
+                .await
+                .is_empty()
+        );
     }
 }

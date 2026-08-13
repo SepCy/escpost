@@ -2410,7 +2410,7 @@ out_endpoint = \"0x01\"
     }
 
     #[test]
-    fn discovered_hosts_are_listed_with_interface_and_configured_names() {
+    fn discovered_hosts_print_full_listing_blocks_by_configuration_state() {
         let configuration = PrinterConfiguration::parse(
             r#"
 [kitchen]

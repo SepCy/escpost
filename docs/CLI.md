@@ -587,17 +587,17 @@ and further saved names sharing the same host and port appear as `also
 configured as:` lines:
 
 ```text
-[1] kitchen
+[1] 10.42.0.5:9100
+    status: new
+    transport: network
+    network: 10.42.0.5:9100
+    interface: enx0
+[2] kitchen
     status: configured
     profile: unassigned
     transport: network
     network: 10.42.0.71:9100
     interface: enx00e04cb8aba8
-[2] 10.42.0.5:9100
-    status: new
-    transport: network
-    network: 10.42.0.5:9100
-    interface: enx0
 ```
 
 An empty sweep prints `No listening printers discovered.` and exits

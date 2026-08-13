@@ -10,9 +10,9 @@ This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
 be reviewed. `render`, named USB and RAW-network `print`, USB and
 configured-network `printers list`, USB/network registration through
-`printers add`, network-printer discovery through `printers discover`, and
-`profiles` (`list`, `show`, `find`) are implemented. An initial `serve`
-captures RAW TCP jobs framed by connection close and previews
+`printers add`, USB and network-printer discovery through `printers
+discover`, and `profiles` (`list`, `show`, `find`) are implemented. An
+initial `serve` captures RAW TCP jobs framed by connection close and previews
 the most recent one; its job history, `FF`/cut boundary handling, and limits
 remain planned, as do the other top-level commands. The
 [project README](../README.md) describes what works today, while `TODO.md` is
@@ -552,14 +552,21 @@ also part of listing.
 
 ### `printers discover`
 
-`discover` is a read-only sweep for network printers that are not yet
-configured. It probes a TCP connection on one port across small directly
-connected IPv4 networks and reports which hosts accept it:
+`discover` is a read-only sweep for USB and network printers that are not yet
+configured. It enumerates connected USB printer-class interfaces the same way
+`printers list` does, and probes a TCP connection on one port across small
+directly connected IPv4 networks, reporting which hosts accept it:
 
 ```bash
 escpost printers discover
 escpost printers discover --subnet 10.42.0.0/24 --port 9100
+escpost printers discover --transport usb
 ```
+
+`--transport usb|network` narrows the sweep to one connection transport;
+without it, both run. `--subnet`, `--port`, and `--timeout` configure the
+network sweep only, and are rejected together with `--transport usb` since
+there is then no network sweep for them to configure.
 
 Without `--subnet`, ESCPost enumerates the machine's directly connected IPv4
 networks and scans each one automatically, but only when it is at most a
@@ -575,38 +582,55 @@ bounds each per-host connection attempt and defaults to `1000`. Probes run
 concurrently and send zero bytes; a reachable port is reported as-is and is
 never assumed to be a printer.
 
-Results are numbered in ascending IPv4 address order, regardless of the order
-`--subnet` was given, and each entry uses the same block format as `printers
-list` so the two commands cannot drift apart. A result matching a saved
-network printer's host and port heads the block with that name, `status:
-configured`, and `profile:` (falling back to `unassigned`, exactly like
-`printers list`); an unmatched host heads the block with its bare `host:port`
-endpoint and `status: new`, and omits the `profile:` line entirely. Results
-reached through a directly connected network additionally show `interface:`,
-and further saved names sharing the same host and port appear as `also
-configured as:` lines:
+USB results are listed first, then network results, numbered continuously
+across both; network results are ordered by ascending IPv4 address,
+regardless of the order `--subnet` was given. Each entry uses the same block
+format as `printers list` so the commands cannot drift apart. A connected
+USB printer matching a saved
+identity heads its block with that name, `status: configured`, a `model:`
+line, and a `profile:` line (falling back to `unassigned`, exactly like
+`printers list`); an unmatched USB printer heads its block with its
+descriptor-derived label and `status: new`, omitting both the `model:` and
+`profile:` lines. A network result matching a saved printer's host and port
+heads its block with that name, `status: configured`, and `profile:`
+(falling back to `unassigned`); an unmatched host heads its block with its
+bare `host:port` endpoint and `status: new`, and omits the `profile:` line
+entirely. Network results reached through a directly connected network
+additionally show `interface:`, and further saved names sharing the same
+host and port appear as `also configured as:` lines:
 
 ```text
-[1] 10.42.0.5:9100
+[1] USB Portable Printer (YICHIP3121)
+    status: new
+    transport: usb
+    usb: 0416:5011; bus 3 address 57; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+[2] netum-usb
+    status: configured
+    model: USB Portable Printer (YICHIP3121)
+    profile: NT-5890K
+    transport: usb
+    usb: 0416:5011; bus 3 address 60; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300002
+[3] 10.42.0.5:9100
     status: new
     transport: network
     network: 10.42.0.5:9100
     interface: enx0
-[2] kitchen
-    status: configured
-    profile: unassigned
-    transport: network
-    network: 10.42.0.71:9100
-    interface: enx00e04cb8aba8
 ```
 
-An empty sweep prints `No listening printers discovered.` and exits
-successfully; no reachable host is not an error. `discover` never writes to
-`printers.toml`. Use `printers add --discover` to register a result. When the
-sweep finds at least one host with `status: new`, a hint on stderr suggests
-running `printers add <NAME> --transport network --discover` next; the same
-`--discover` command auto-selects a single new host or opens the picker for
-several, so the hint never depends on how many were found.
+An empty combined sweep prints `No printers discovered.` and exits
+successfully; finding nothing on either transport is not an error. `discover`
+never writes to `printers.toml`. Use `printers add --discover` (or `add
+--transport usb` for a USB printer) to register a result. When the sweep
+finds at least one printer with `status: new`, a hint on stderr suggests how
+to register it, USB first: a new USB printer hints at `printers add <NAME>
+--transport usb`, and a new network host hints at `printers add <NAME>
+--transport network --discover`. The network hint's target command
+auto-selects a single new host or opens the picker for several, so it never
+depends on how many were found.
 
 ### `printers scan`
 
@@ -869,7 +893,7 @@ the completed implementation must satisfy.
 | CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |
 | CLI-M14 | List configured network targets as connected or unavailable using concurrent, bounded TCP handshakes that send zero bytes. |
 | CLI-M15 | Exclude configured USB identities, never persist temporary bus/address values, and require explicit selection when endpoint or device identity is ambiguous, whether that selection is an interactive menu choice or a unique non-interactive descriptor match. |
-| CLI-M16 | Reserve `printers discover` for a read-only sweep whose probe is a bare connect-and-drop TCP handshake that never sends a byte and never writes to `printers.toml`. |
+| CLI-M16 | Reserve `printers discover` for a read-only sweep that enumerates USB printer interfaces and probes network hosts with a bare connect-and-drop TCP handshake that never sends a byte; neither ever writes to `printers.toml`. |
 | CLI-M17 | Without `--subnet`, scan only directly connected IPv4 networks at most a `/24` automatically, skipping larger ones; an explicit `--subnet` scans exactly the given networks instead and removes the `/24` cap. |
 | CLI-M18 | Resolve `printers add --discover` from the sweep: zero discovered hosts is always an error naming the probed port, exactly one is selected automatically, and several open an interactive selection menu or, under `--non-interactive`, are an error listing every candidate. |
 

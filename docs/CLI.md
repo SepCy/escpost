@@ -575,7 +575,8 @@ bounds each per-host connection attempt and defaults to `1000`. Probes run
 concurrently and send zero bytes; a reachable port is reported as-is and is
 never assumed to be a printer.
 
-Results are numbered in scan order. Each entry shows the host and port;
+Results are numbered in ascending IPv4 address order, regardless of the order
+`--subnet` was given. Each entry shows the host and port;
 results reached through a directly connected network additionally show that
 interface, and any result matching a saved network printer's host and port
 shows the configured name:
@@ -852,6 +853,9 @@ the completed implementation must satisfy.
 | CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |
 | CLI-M14 | List configured network targets as connected or unavailable using concurrent, bounded TCP handshakes that send zero bytes. |
 | CLI-M15 | Exclude configured USB identities, never persist temporary bus/address values, and require explicit selection when endpoint or device identity is ambiguous, whether that selection is an interactive menu choice or a unique non-interactive descriptor match. |
+| CLI-M16 | Reserve `printers discover` for a read-only sweep whose probe is a bare connect-and-drop TCP handshake that never sends a byte and never writes to `printers.toml`. |
+| CLI-M17 | Without `--subnet`, scan only directly connected IPv4 networks at most a `/24` automatically, skipping larger ones; an explicit `--subnet` scans exactly the given networks instead and removes the `/24` cap. |
+| CLI-M18 | Resolve `printers add --discover` from the sweep: zero discovered hosts is always an error naming the probed port, exactly one is selected automatically, and several open an interactive selection menu or, under `--non-interactive`, are an error listing every candidate. |
 
 ### Web requirements
 

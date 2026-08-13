@@ -999,6 +999,7 @@ fn printers_discover_finds_a_listening_loopback_printer() {
 
     assert!(output.status.success(), "command failed:\n{stdout}");
     assert!(stdout.contains(&format!("[1] 127.0.0.1:{port}")));
+    assert!(stdout.contains("status: new"));
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
 

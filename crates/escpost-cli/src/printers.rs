@@ -789,33 +789,61 @@ fn write_discovered_hosts(
         return Ok(());
     }
     for (offset, host) in hosts.iter().enumerate() {
-        writeln!(
-            output,
-            "[{}] {}",
-            offset + 1,
-            format_network_endpoint(&host.address.to_string(), host.port)
-        )
-        .map_err(CliError::WriteHumanOutput)?;
-        if let Some(interface) = &host.interface {
-            writeln!(output, "    interface: {interface}").map_err(CliError::WriteHumanOutput)?;
-        }
-        for name in configured_names(configuration, host) {
-            writeln!(output, "    configured as: {name}").map_err(CliError::WriteHumanOutput)?;
-        }
+        let address = host.address.to_string();
+        let endpoint = format_network_endpoint(&address, host.port);
+        let matches = configured_network_printers(configuration, host);
+        let also_configured: Vec<&str> = matches
+            .iter()
+            .skip(1)
+            .map(|printer| printer.name.as_str())
+            .collect();
+        let listing = if let Some(first) = matches.first() {
+            NetworkListing {
+                heading: &first.name,
+                status: "configured",
+                profile: Some(first.profile.as_deref()),
+                host: &address,
+                port: host.port,
+                interface: host.interface.as_deref(),
+                also_configured: &also_configured,
+            }
+        } else {
+            NetworkListing {
+                heading: &endpoint,
+                status: "new",
+                profile: None,
+                host: &address,
+                port: host.port,
+                interface: host.interface.as_deref(),
+                also_configured: &[],
+            }
+        };
+        write_network_listing(output, offset + 1, &listing)?;
     }
     Ok(())
 }
 
-/// Names of saved network printers matching a discovered endpoint. Matching
-/// is textual on host and exact on port; saved hostnames never match.
-fn configured_names<'a>(
+/// Saved network printers matching a discovered endpoint, in configuration
+/// order. Matching is textual on host and exact on port; saved hostnames
+/// never match.
+fn configured_network_printers<'a>(
     configuration: &'a PrinterConfiguration,
     host: &DiscoveredHost,
-) -> Vec<&'a str> {
+) -> Vec<&'a ConfiguredNetworkPrinter> {
     configuration
         .network_printers()
         .iter()
         .filter(|printer| printer.port == host.port && printer.host == host.address.to_string())
+        .collect()
+}
+
+/// Names of saved network printers matching a discovered endpoint.
+fn configured_names<'a>(
+    configuration: &'a PrinterConfiguration,
+    host: &DiscoveredHost,
+) -> Vec<&'a str> {
+    configured_network_printers(configuration, host)
+        .into_iter()
         .map(|printer| printer.name.as_str())
         .collect()
 }
@@ -1165,36 +1193,74 @@ fn write_unavailable_printer(
     Ok(())
 }
 
+/// A network printer entry as shown by both `printers list` and `printers
+/// discover`, so the two commands cannot drift apart. `profile` distinguishes
+/// "no profile line at all" (a freshly discovered, unconfigured host) from
+/// "print the line, falling back to `unassigned`" (a configured printer).
+struct NetworkListing<'a> {
+    heading: &'a str,
+    status: &'a str,
+    profile: Option<Option<&'a str>>,
+    host: &'a str,
+    port: u16,
+    interface: Option<&'a str>,
+    also_configured: &'a [&'a str],
+}
+
+fn write_network_listing(
+    output: &mut impl Write,
+    number: usize,
+    listing: &NetworkListing<'_>,
+) -> Result<(), CliError> {
+    writeln!(output, "[{number}] {}", listing.heading).map_err(CliError::WriteHumanOutput)?;
+    writeln!(output, "    status: {}", listing.status).map_err(CliError::WriteHumanOutput)?;
+    if let Some(profile) = listing.profile {
+        writeln!(
+            output,
+            "    profile: {}",
+            profile.unwrap_or(UNASSIGNED_PROFILE)
+        )
+        .map_err(CliError::WriteHumanOutput)?;
+    }
+    writeln!(output, "    transport: network").map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "    network: {}",
+        format_network_endpoint(listing.host, listing.port)
+    )
+    .map_err(CliError::WriteHumanOutput)?;
+    if let Some(interface) = listing.interface {
+        writeln!(output, "    interface: {interface}").map_err(CliError::WriteHumanOutput)?;
+    }
+    for name in listing.also_configured {
+        writeln!(output, "    also configured as: {name}").map_err(CliError::WriteHumanOutput)?;
+    }
+    Ok(())
+}
+
 fn write_network_printer(
     output: &mut impl Write,
     number: usize,
     printer: &ConfiguredNetworkPrinter,
     connected: bool,
 ) -> Result<(), CliError> {
-    writeln!(output, "[{number}] {}", printer.name).map_err(CliError::WriteHumanOutput)?;
-    writeln!(
+    write_network_listing(
         output,
-        "    status: {}",
-        if connected {
-            "connected"
-        } else {
-            "unavailable"
-        }
+        number,
+        &NetworkListing {
+            heading: &printer.name,
+            status: if connected {
+                "connected"
+            } else {
+                "unavailable"
+            },
+            profile: Some(printer.profile.as_deref()),
+            host: &printer.host,
+            port: printer.port,
+            interface: None,
+            also_configured: &[],
+        },
     )
-    .map_err(CliError::WriteHumanOutput)?;
-    writeln!(
-        output,
-        "    profile: {}",
-        printer.profile.as_deref().unwrap_or(UNASSIGNED_PROFILE)
-    )
-    .map_err(CliError::WriteHumanOutput)?;
-    writeln!(output, "    transport: network").map_err(CliError::WriteHumanOutput)?;
-    writeln!(
-        output,
-        "    network: {}",
-        format_network_endpoint(&printer.host, printer.port)
-    )
-    .map_err(CliError::WriteHumanOutput)
 }
 
 fn format_network_endpoint(host: &str, port: u16) -> String {
@@ -2351,9 +2417,26 @@ out_endpoint = \"0x01\"
 transport = "network"
 host = "10.42.0.71"
 port = 9100
+profile = "TM-T88V"
+
+[office]
+transport = "network"
+host = "10.42.0.9"
+port = 9100
+
+[counter]
+transport = "network"
+host = "10.42.0.20"
+port = 9100
+profile = "EPSON-TM88"
+
+[counter-spare]
+transport = "network"
+host = "10.42.0.20"
+port = 9100
 "#,
         )
-        .expect("the existing printer should parse");
+        .expect("the existing printers should parse");
         let hosts = vec![
             DiscoveredHost {
                 address: Ipv4Addr::new(10, 42, 0, 5),
@@ -2365,6 +2448,16 @@ port = 9100
                 port: 9100,
                 interface: Some("enx0".to_owned()),
             },
+            DiscoveredHost {
+                address: Ipv4Addr::new(10, 42, 0, 9),
+                port: 9100,
+                interface: None,
+            },
+            DiscoveredHost {
+                address: Ipv4Addr::new(10, 42, 0, 20),
+                port: 9100,
+                interface: None,
+            },
         ];
         let mut output = Vec::new();
 
@@ -2375,9 +2468,26 @@ port = 9100
             String::from_utf8(output).expect("the listing should be UTF-8"),
             "\
 [1] 10.42.0.5:9100
-[2] 10.42.0.71:9100
+    status: new
+    transport: network
+    network: 10.42.0.5:9100
+[2] kitchen
+    status: configured
+    profile: TM-T88V
+    transport: network
+    network: 10.42.0.71:9100
     interface: enx0
-    configured as: kitchen
+[3] office
+    status: configured
+    profile: unassigned
+    transport: network
+    network: 10.42.0.9:9100
+[4] counter
+    status: configured
+    profile: EPSON-TM88
+    transport: network
+    network: 10.42.0.20:9100
+    also configured as: counter-spare
 "
         );
     }

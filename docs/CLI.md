@@ -604,8 +604,9 @@ An empty sweep prints `No listening printers discovered.` and exits
 successfully; no reachable host is not an error. `discover` never writes to
 `printers.toml`. Use `printers add --discover` to register a result. When the
 sweep finds at least one host with `status: new`, a hint on stderr suggests
-the `printers add` command to run next, with `--host` filled in for a single
-new host or `--discover` for several.
+running `printers add <NAME> --transport network --discover` next; the same
+`--discover` command auto-selects a single new host or opens the picker for
+several, so the hint never depends on how many were found.
 
 ### `printers scan`
 

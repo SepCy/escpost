@@ -854,33 +854,29 @@ fn configured_names<'a>(
 
 /// A one-line nudge toward registering a freshly discovered printer, printed
 /// to stderr after the listing. `None` when every discovered host is already
-/// configured, including an empty sweep. A single new host gets a ready-to-run
-/// `--host` command; several new hosts point at the interactive `--discover`
-/// picker instead, since guessing which one to register would be wrong.
+/// configured, including an empty sweep. The hint always points at `--discover`
+/// rather than a concrete `--host`, regardless of how many new hosts were
+/// found: `add --discover` already auto-selects a single discovered host and
+/// opens the picker for several, so one command covers both cases.
 fn registration_hint(
     hosts: &[DiscoveredHost],
     configuration: &PrinterConfiguration,
     port: u16,
 ) -> Option<String> {
-    let mut new_hosts = hosts
+    let any_new_host = hosts
         .iter()
-        .filter(|host| configured_names(configuration, host).is_empty());
-    let first = new_hosts.next()?;
+        .any(|host| configured_names(configuration, host).is_empty());
+    if !any_new_host {
+        return None;
+    }
     let port_suffix = if port == 9100 {
         String::new()
     } else {
         format!(" --port {port}")
     };
-    Some(if new_hosts.next().is_some() {
-        format!(
-            "Register a new printer with: escpost printers add <NAME> --transport network --discover{port_suffix}"
-        )
-    } else {
-        format!(
-            "Register it with: escpost printers add <NAME> --transport network --host {}{port_suffix}",
-            first.address
-        )
-    })
+    Some(format!(
+        "Register a new printer with: escpost printers add <NAME> --transport network --discover{port_suffix}"
+    ))
 }
 
 fn listed_printers<'a>(
@@ -2572,41 +2568,8 @@ port = 9100
     }
 
     #[test]
-    fn registration_hint_for_one_new_host_at_the_default_port() {
+    fn registration_hint_for_a_new_host_at_the_default_port() {
         let hosts = vec![discovered([10, 42, 0, 71], 9100)];
-
-        let hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9100);
-
-        assert_eq!(
-            hint,
-            Some(
-                "Register it with: escpost printers add <NAME> --transport network --host 10.42.0.71"
-                    .to_owned()
-            )
-        );
-    }
-
-    #[test]
-    fn registration_hint_for_one_new_host_at_a_non_default_port() {
-        let hosts = vec![discovered([10, 42, 0, 71], 9200)];
-
-        let hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9200);
-
-        assert_eq!(
-            hint,
-            Some(
-                "Register it with: escpost printers add <NAME> --transport network --host 10.42.0.71 --port 9200"
-                    .to_owned()
-            )
-        );
-    }
-
-    #[test]
-    fn registration_hint_for_several_new_hosts() {
-        let hosts = vec![
-            discovered([10, 42, 0, 5], 9100),
-            discovered([10, 42, 0, 71], 9100),
-        ];
 
         let hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9100);
 
@@ -2620,11 +2583,8 @@ port = 9100
     }
 
     #[test]
-    fn registration_hint_for_several_new_hosts_at_a_non_default_port() {
-        let hosts = vec![
-            discovered([10, 42, 0, 5], 9200),
-            discovered([10, 42, 0, 71], 9200),
-        ];
+    fn registration_hint_for_a_new_host_at_a_non_default_port() {
+        let hosts = vec![discovered([10, 42, 0, 71], 9200)];
 
         let hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9200);
 
@@ -2632,6 +2592,28 @@ port = 9100
             hint,
             Some(
                 "Register a new printer with: escpost printers add <NAME> --transport network --discover --port 9200"
+                    .to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn registration_hint_does_not_depend_on_how_many_new_hosts_were_found() {
+        let one_new_host = vec![discovered([10, 42, 0, 71], 9100)];
+        let several_new_hosts = vec![
+            discovered([10, 42, 0, 5], 9100),
+            discovered([10, 42, 0, 71], 9100),
+        ];
+
+        let hint_for_one = registration_hint(&one_new_host, &PrinterConfiguration::default(), 9100);
+        let hint_for_several =
+            registration_hint(&several_new_hosts, &PrinterConfiguration::default(), 9100);
+
+        assert_eq!(hint_for_one, hint_for_several);
+        assert_eq!(
+            hint_for_one,
+            Some(
+                "Register a new printer with: escpost printers add <NAME> --transport network --discover"
                     .to_owned()
             )
         );

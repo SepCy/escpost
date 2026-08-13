@@ -697,6 +697,7 @@ async fn discover_host_for_add(
     if port == 0 {
         return Err(CliError::InvalidPrinterPort);
     }
+    let configuration = configuration::load_for_update(config_path)?;
     let targets = discovery_targets(&arguments.subnet)?;
     let hosts = discovery::scan(
         &targets,
@@ -704,7 +705,6 @@ async fn discover_host_for_add(
         Duration::from_millis(arguments.timeout.unwrap_or(1000)),
     )
     .await;
-    let configuration = configuration::load_for_update(config_path)?;
     let choices = hosts
         .into_iter()
         .map(|host| {

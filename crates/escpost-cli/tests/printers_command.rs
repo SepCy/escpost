@@ -1131,6 +1131,33 @@ fn printers_add_discover_rejects_an_explicit_host() {
 
 #[cfg(unix)]
 #[test]
+fn printers_add_discover_rejects_usb_selectors() {
+    let directory = temporary_directory("add-discover-usb-selectors");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--discover",
+            "--vendor-id",
+            "0x0416",
+            "--product-id",
+            "0x5011",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "clap should reject --discover with USB selectors:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
 fn printers_add_discover_rejects_usb_transport() {
     let directory = temporary_directory("add-discover-usb");
     let config = directory.join("printers.toml");

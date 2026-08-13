@@ -234,7 +234,10 @@ pub(crate) struct AddPrinterArgs {
 
     /// Discover listening network printers and register the chosen one
     /// instead of passing --host.
-    #[arg(long, conflicts_with = "host")]
+    #[arg(
+        long,
+        conflicts_with_all = ["host", "vendor_id", "product_id", "serial"]
+    )]
     pub(crate) discover: bool,
 
     /// Scan this network (CIDR notation, for example 10.42.0.0/24) instead

@@ -452,11 +452,11 @@ valid for the network transport; omitting `--transport` alongside
 together with `--discover` and behave exactly as documented under
 `printers discover` below. `--port` serves both roles at once: the port
 probed during the scan and the port saved for the registered printer. At an
-interactive terminal, several discovered hosts open a selection menu; under
-`--non-interactive` exactly one discovered host is required. Zero discovered
-hosts is an error naming the probed port, and several is an error listing
-every discovered candidate so the developer can retry with an explicit
-`--host`.
+interactive terminal, one discovered host is used automatically and several
+open a selection menu. Zero discovered hosts is always an error naming the
+probed port. Under `--non-interactive`, exactly one discovered host is
+required: several is an error listing every discovered candidate so the
+developer can retry with an explicit `--host`.
 
 A USB printer can also be selected without a menu by naming its stable
 descriptor. `--vendor-id` and `--product-id` accept decimal or `0x`-prefixed

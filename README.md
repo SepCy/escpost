@@ -29,9 +29,14 @@ physical USB and network printers from the same CLI.
 
 ## Render and capture ESC/POS data
 
-ESCPost is currently built from source. Packaged releases for Homebrew and
-Cargo are planned. See [Development](#development) for the available build
-workflows.
+Install the ESCPost CLI from crates.io with Rust 1.87 or newer:
+
+```bash
+cargo install escpost
+```
+
+Homebrew installation will follow. See [Development](#development) to build
+ESCPost from the source checkout.
 
 Render raw ESC/POS bytes, readable hexadecimal input, or stdin to PNG:
 
@@ -78,9 +83,9 @@ and validation matrix.
 ## Libraries
 
 The CLI is backed by reusable Rust crates for applications that need to process
-ESC/POS data directly, plus a Python binding to the same preview engine. These
-packages are currently available from the source workspace and have not yet
-been published to crates.io or PyPI.
+ESC/POS data directly, plus a Python binding to the same preview engine. The
+Rust crates are published on crates.io; the Python package remains available
+from the source workspace and has not yet been published to PyPI.
 
 | Library or API | Available today |
 |---|---|
@@ -111,7 +116,7 @@ The [`justfile`](justfile) wraps both workflows:
 
 Run `just --list` to see every recipe. Without `just`, each recipe is a short
 wrapper around `docker compose` or `cargo` and can be run directly. The native
-build produces `target/release/escpost`. To install it on `PATH`:
+build produces `target/release/escpost`. To install that checkout on `PATH`:
 
 ```bash
 cargo install --path crates/escpost

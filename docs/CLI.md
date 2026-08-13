@@ -576,16 +576,28 @@ concurrently and send zero bytes; a reachable port is reported as-is and is
 never assumed to be a printer.
 
 Results are numbered in ascending IPv4 address order, regardless of the order
-`--subnet` was given. Each entry shows the host and port;
-results reached through a directly connected network additionally show that
-interface, and any result matching a saved network printer's host and port
-shows the configured name:
+`--subnet` was given, and each entry uses the same block format as `printers
+list` so the two commands cannot drift apart. A result matching a saved
+network printer's host and port heads the block with that name, `status:
+configured`, and `profile:` (falling back to `unassigned`, exactly like
+`printers list`); an unmatched host heads the block with its bare `host:port`
+endpoint and `status: new`, and omits the `profile:` line entirely. Results
+reached through a directly connected network additionally show `interface:`,
+and further saved names sharing the same host and port appear as `also
+configured as:` lines:
 
 ```text
-[1] 10.42.0.5:9100
-[2] 10.42.0.71:9100
+[1] kitchen
+    status: configured
+    profile: unassigned
+    transport: network
+    network: 10.42.0.71:9100
+    interface: enx00e04cb8aba8
+[2] 10.42.0.5:9100
+    status: new
+    transport: network
+    network: 10.42.0.5:9100
     interface: enx0
-    configured as: kitchen
 ```
 
 An empty sweep prints `No listening printers discovered.` and exits

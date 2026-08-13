@@ -23,7 +23,6 @@ pub(crate) struct Subnet {
 impl Subnet {
     /// Parse CIDR notation such as `10.42.0.0/24`. Host bits are cleared, so
     /// `10.42.0.71/24` names the same subnet as `10.42.0.0/24`.
-    #[allow(dead_code)]
     pub(crate) fn parse(text: &str) -> Result<Self, String> {
         let error = || format!("expected CIDR notation such as 10.42.0.0/24, found `{text}`");
         let (address, prefix) = text.split_once('/').ok_or_else(error)?;
@@ -128,7 +127,6 @@ pub(crate) fn auto_scan_targets(addresses: Vec<InterfaceAddress>) -> Vec<ScanTar
     targets
 }
 
-#[allow(dead_code)]
 pub(crate) fn local_scan_targets() -> Result<Vec<ScanTarget>, CliError> {
     let interfaces = if_addrs::get_if_addrs().map_err(CliError::EnumerateNetworkInterfaces)?;
     let addresses = interfaces
@@ -150,7 +148,6 @@ pub(crate) fn local_scan_targets() -> Result<Vec<ScanTarget>, CliError> {
 const MAX_CONCURRENT_PROBES: usize = 128;
 
 /// A host that accepted a TCP connection on the probed port.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DiscoveredHost {
     pub(crate) address: Ipv4Addr,
@@ -162,7 +159,6 @@ pub(crate) struct DiscoveredHost {
 /// dropping a stream proves a listener without sending a byte the printer
 /// could interpret as ESC/POS data. Failures and timeouts are the normal
 /// case for a sweep and are silently skipped.
-#[allow(dead_code)]
 pub(crate) async fn scan(
     targets: &[ScanTarget],
     port: u16,

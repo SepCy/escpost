@@ -122,6 +122,11 @@ pub(crate) enum CliError {
     #[error("could not enumerate network interfaces: {0}")]
     EnumerateNetworkInterfaces(std::io::Error),
 
+    #[error(
+        "no directly connected IPv4 network is small enough to scan automatically (at most /24); pass --subnet <CIDR>"
+    )]
+    NoDiscoverableSubnets,
+
     #[error("no USB device matches vendor {vendor_id:#06x} and product {product_id:#06x}")]
     UsbDeviceNotFound { vendor_id: u16, product_id: u16 },
 

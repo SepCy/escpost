@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use crate::discovery::Subnet;
+
 #[derive(Debug, Parser)]
 #[command(
     name = "escpost",
@@ -163,6 +165,9 @@ pub(crate) enum PrintersCommand {
 
     /// Register a printer in the local configuration.
     Add(AddPrinterArgs),
+
+    /// Scan directly connected networks for listening printers.
+    Discover(DiscoverPrintersArgs),
 }
 
 #[derive(Debug, Args)]
@@ -170,6 +175,22 @@ pub(crate) struct ListPrintersArgs {
     /// Show only one connection transport.
     #[arg(long, value_enum)]
     pub(crate) transport: Option<InventoryTransport>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct DiscoverPrintersArgs {
+    /// Raw TCP port to probe.
+    #[arg(long, default_value_t = 9100)]
+    pub(crate) port: u16,
+
+    /// Scan this network (CIDR notation, for example 10.42.0.0/24) instead
+    /// of the directly connected networks. May be repeated.
+    #[arg(long, value_name = "CIDR", value_parser = Subnet::parse)]
+    pub(crate) subnet: Vec<Subnet>,
+
+    /// Per-host connection timeout in milliseconds.
+    #[arg(long, value_name = "MS", default_value_t = 1000)]
+    pub(crate) timeout: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]

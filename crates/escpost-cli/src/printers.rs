@@ -3,12 +3,14 @@ use std::io::{self, IsTerminal, Write};
 use std::time::Duration;
 
 use crate::cli::{
-    AddPrinterArgs, InventoryTransport, PrinterTransport, PrintersArgs, PrintersCommand,
+    AddPrinterArgs, DiscoverPrintersArgs, InventoryTransport, PrinterTransport, PrintersArgs,
+    PrintersCommand,
 };
 use crate::configuration::{
     self, ConfiguredNetworkPrinter, ConfiguredUsbPrinter, PrinterConfiguration,
     UsbPrinterRegistration,
 };
+use crate::discovery::{self, DiscoveredHost, ScanTarget, Subnet};
 use crate::error::CliError;
 use inquire::validator::Validation;
 use inquire::{CustomType, Select, Text};
@@ -153,6 +155,19 @@ pub(crate) async fn run(arguments: PrintersArgs, non_interactive: bool) -> Resul
             )
         }
         PrintersCommand::Add(add) => add_printer(arguments.config.as_deref(), add, non_interactive),
+        PrintersCommand::Discover(discover) => {
+            let path = configuration::resolved_path(arguments.config.as_deref())?;
+            // Unlike `list`, a scan does not require a saved configuration to
+            // already exist: an explicit --config naming a not-yet-created
+            // file (the common case on a machine's first discovery run) is
+            // not an error, only invalid TOML in an existing file is.
+            let configuration = configuration::load_for_update(arguments.config.as_deref())?;
+            eprintln!(
+                "Reading configuration from {}",
+                configuration::display_path(&path)
+            );
+            run_discover(discover, &configuration).await
+        }
     }
 }
 
@@ -601,6 +616,85 @@ async fn probe_network_printers(printers: &[ConfiguredNetworkPrinter]) -> Vec<bo
         }
     }
     statuses
+}
+
+async fn run_discover(
+    arguments: DiscoverPrintersArgs,
+    configuration: &PrinterConfiguration,
+) -> Result<(), CliError> {
+    if arguments.port == 0 {
+        return Err(CliError::InvalidPrinterPort);
+    }
+    let targets = discovery_targets(&arguments.subnet)?;
+    let hosts = discovery::scan(
+        &targets,
+        arguments.port,
+        Duration::from_millis(arguments.timeout),
+    )
+    .await;
+    write_discovered_hosts(&mut io::stdout().lock(), &hosts, configuration)
+}
+
+/// Explicit --subnet values are scanned exactly as given; without them the
+/// sweep covers every small directly connected network.
+fn discovery_targets(subnets: &[Subnet]) -> Result<Vec<ScanTarget>, CliError> {
+    if subnets.is_empty() {
+        let targets = discovery::local_scan_targets()?;
+        if targets.is_empty() {
+            return Err(CliError::NoDiscoverableSubnets);
+        }
+        return Ok(targets);
+    }
+    Ok(subnets
+        .iter()
+        .map(|subnet| ScanTarget {
+            subnet: *subnet,
+            interface: None,
+            excluded: None,
+        })
+        .collect())
+}
+
+fn write_discovered_hosts(
+    output: &mut impl Write,
+    hosts: &[DiscoveredHost],
+    configuration: &PrinterConfiguration,
+) -> Result<(), CliError> {
+    if hosts.is_empty() {
+        writeln!(output, "No listening printers discovered.")
+            .map_err(CliError::WriteHumanOutput)?;
+        return Ok(());
+    }
+    for (offset, host) in hosts.iter().enumerate() {
+        writeln!(
+            output,
+            "[{}] {}",
+            offset + 1,
+            format_network_endpoint(&host.address.to_string(), host.port)
+        )
+        .map_err(CliError::WriteHumanOutput)?;
+        if let Some(interface) = &host.interface {
+            writeln!(output, "    interface: {interface}").map_err(CliError::WriteHumanOutput)?;
+        }
+        for name in configured_names(configuration, host) {
+            writeln!(output, "    configured as: {name}").map_err(CliError::WriteHumanOutput)?;
+        }
+    }
+    Ok(())
+}
+
+/// Names of saved network printers matching a discovered endpoint. Matching
+/// is textual on host and exact on port; saved hostnames never match.
+fn configured_names<'a>(
+    configuration: &'a PrinterConfiguration,
+    host: &DiscoveredHost,
+) -> Vec<&'a str> {
+    configuration
+        .network_printers()
+        .iter()
+        .filter(|printer| printer.port == host.port && printer.host == host.address.to_string())
+        .map(|printer| printer.name.as_str())
+        .collect()
 }
 
 fn listed_printers<'a>(
@@ -1078,10 +1172,13 @@ mod tests {
         AddPrompter, ResolvedAddConnection, ResolvedAddPrinter, UsbAddTarget, UsbInventory,
         UsbPrinter, UsbPrinterInterface, UsbSelector, execute, execute_add, filter_usb_targets,
         printer_interfaces, resolve_add, select_usb_target, usb_add_targets, usb_selector,
+        write_discovered_hosts,
     };
     use crate::cli::{AddPrinterArgs, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
+    use crate::discovery::DiscoveredHost;
     use crate::error::CliError;
+    use std::net::Ipv4Addr;
 
     #[test]
     fn interactive_network_add_prompts_for_the_port() {
@@ -2097,5 +2194,57 @@ out_endpoint = \"0x01\"
         ));
         fs::create_dir(&path).expect("the test directory should be creatable");
         path
+    }
+
+    #[test]
+    fn discovered_hosts_are_listed_with_interface_and_configured_names() {
+        let configuration = PrinterConfiguration::parse(
+            r#"
+[kitchen]
+transport = "network"
+host = "10.42.0.71"
+port = 9100
+"#,
+        )
+        .expect("the existing printer should parse");
+        let hosts = vec![
+            DiscoveredHost {
+                address: Ipv4Addr::new(10, 42, 0, 5),
+                port: 9100,
+                interface: None,
+            },
+            DiscoveredHost {
+                address: Ipv4Addr::new(10, 42, 0, 71),
+                port: 9100,
+                interface: Some("enx0".to_owned()),
+            },
+        ];
+        let mut output = Vec::new();
+
+        write_discovered_hosts(&mut output, &hosts, &configuration)
+            .expect("writing the listing should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] 10.42.0.5:9100
+[2] 10.42.0.71:9100
+    interface: enx0
+    configured as: kitchen
+"
+        );
+    }
+
+    #[test]
+    fn an_empty_discovery_is_a_successful_snapshot() {
+        let mut output = Vec::new();
+
+        write_discovered_hosts(&mut output, &[], &PrinterConfiguration::default())
+            .expect("writing the listing should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "No listening printers discovered.\n"
+        );
     }
 }

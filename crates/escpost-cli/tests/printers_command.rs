@@ -955,3 +955,80 @@ fn temporary_directory(case: &str) -> std::path::PathBuf {
     fs::create_dir(&path).expect("the test directory should be creatable");
     path
 }
+
+#[test]
+fn printers_discover_documents_its_options() {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["printers", "discover", "--help"])
+        .output()
+        .expect("the escpost command should finish");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "command failed:\n{stdout}");
+    assert!(stdout.contains("Scan directly connected networks for listening printers"));
+    assert!(stdout.contains("Usage: escpost printers discover"));
+    assert!(stdout.contains("--port <PORT>"));
+    assert!(stdout.contains("--subnet <CIDR>"));
+    assert!(stdout.contains("--timeout <MS>"));
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_discover_finds_a_listening_loopback_printer() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    let directory = temporary_directory("discover-hit");
+    let config = directory.join("printers.toml");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["--non-interactive", "printers", "--config"])
+        .arg(&config)
+        .args([
+            "discover",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ])
+        .output()
+        .expect("the escpost command should finish");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "command failed:\n{stdout}");
+    assert!(stdout.contains(&format!("[1] 127.0.0.1:{port}")));
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_discover_reports_an_empty_sweep() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    drop(listener);
+    let directory = temporary_directory("discover-miss");
+    let config = directory.join("printers.toml");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["--non-interactive", "printers", "--config"])
+        .arg(&config)
+        .args([
+            "discover",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ])
+        .output()
+        .expect("the escpost command should finish");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "command failed:\n{stdout}");
+    assert!(stdout.contains("No listening printers discovered."));
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}

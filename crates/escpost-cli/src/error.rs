@@ -130,6 +130,9 @@ pub(crate) enum CliError {
     #[error("--discover is only valid for network printers")]
     DiscoverForUsbPrinter,
 
+    #[error("--subnet, --port, and --timeout are only valid when discovering network printers")]
+    NetworkScanOptionForUsbDiscovery,
+
     #[error("no printer is listening on port {0} in the scanned networks")]
     NoDiscoveredPrinters(u16),
 

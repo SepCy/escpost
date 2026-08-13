@@ -745,21 +745,74 @@ async fn run_discover(
     arguments: DiscoverPrintersArgs,
     configuration: &PrinterConfiguration,
 ) -> Result<(), CliError> {
-    if arguments.port == 0 {
+    if arguments.transport == Some(InventoryTransport::Usb)
+        && (!arguments.subnet.is_empty() || arguments.port.is_some() || arguments.timeout.is_some())
+    {
+        return Err(CliError::NetworkScanOptionForUsbDiscovery);
+    }
+    let port = arguments.port.unwrap_or(9100);
+    if port == 0 {
         return Err(CliError::InvalidPrinterPort);
     }
-    let targets = discovery_targets(&arguments.subnet)?;
-    let hosts = discovery::scan(
-        &targets,
-        arguments.port,
-        Duration::from_millis(arguments.timeout),
-    )
-    .await;
-    write_discovered_hosts(&mut io::stdout().lock(), &hosts, configuration)?;
-    if let Some(hint) = registration_hint(&hosts, configuration, arguments.port) {
+    let hosts = if arguments.transport == Some(InventoryTransport::Usb) {
+        Vec::new()
+    } else {
+        let targets = discovery_targets(&arguments.subnet)?;
+        discovery::scan(
+            &targets,
+            port,
+            Duration::from_millis(arguments.timeout.unwrap_or(1000)),
+        )
+        .await
+    };
+    let mut inventory = NusbInventory;
+    let connected = execute_discover(
+        &mut inventory,
+        configuration,
+        &hosts,
+        arguments.transport,
+        &mut io::stdout().lock(),
+    )?;
+    if let Some(hint) = usb_registration_hint(&connected) {
+        eprintln!("{hint}");
+    }
+    if let Some(hint) = registration_hint(&hosts, configuration, port) {
         eprintln!("{hint}");
     }
     Ok(())
+}
+
+/// The pure core of `printers discover`: enumerate USB (unless
+/// `--transport network`) and format the sweep hosts (unless `--transport
+/// usb`), printing USB blocks before network blocks with continuous
+/// numbering. Returns the connected USB printers so the caller can also
+/// build the USB registration hint without enumerating USB devices twice.
+fn execute_discover(
+    inventory: &mut impl UsbInventory,
+    configuration: &PrinterConfiguration,
+    hosts: &[DiscoveredHost],
+    transport: Option<InventoryTransport>,
+    output: &mut impl Write,
+) -> Result<Vec<ConnectedUsbPrinter>, CliError> {
+    let connected = if transport == Some(InventoryTransport::Network) {
+        Vec::new()
+    } else {
+        discovered_usb_printers(inventory.list()?, configuration)
+    };
+    let hosts: &[DiscoveredHost] = if transport == Some(InventoryTransport::Usb) {
+        &[]
+    } else {
+        hosts
+    };
+
+    if connected.is_empty() && hosts.is_empty() {
+        writeln!(output, "No printers discovered.").map_err(CliError::WriteHumanOutput)?;
+        return Ok(connected);
+    }
+
+    write_discovered_usb_printers(output, &connected, configuration)?;
+    write_discovered_network_printers(output, hosts, configuration, connected.len() + 1)?;
+    Ok(connected)
 }
 
 /// Explicit --subnet values are scanned exactly as given; without them the
@@ -782,16 +835,50 @@ fn discovery_targets(subnets: &[Subnet]) -> Result<Vec<ScanTarget>, CliError> {
         .collect())
 }
 
-fn write_discovered_hosts(
+/// Write each connected USB printer's block, numbered from 1. New printers
+/// (no matching configuration) head their block with the descriptor-derived
+/// label, `status: new`, and no `model:`/`profile:` lines; configured
+/// printers head it with the saved name, `status: configured`, and both
+/// lines, falling back to `unassigned` like `printers list`.
+fn write_discovered_usb_printers(
+    output: &mut impl Write,
+    connected: &[ConnectedUsbPrinter],
+    configuration: &PrinterConfiguration,
+) -> Result<(), CliError> {
+    for (offset, connected) in connected.iter().enumerate() {
+        let configured = connected
+            .configuration_index
+            .map(|index| &configuration.usb_printers()[index]);
+        let model = usb_printer_label(&connected.printer);
+        let listing = match configured {
+            Some(configured) => UsbListing {
+                heading: &configured.name,
+                status: "configured",
+                model: Some(model.as_str()),
+                profile: Some(configured.profile.as_deref()),
+                printer: &connected.printer,
+            },
+            None => UsbListing {
+                heading: &model,
+                status: "new",
+                model: None,
+                profile: None,
+                printer: &connected.printer,
+            },
+        };
+        write_usb_listing(output, offset + 1, &listing)?;
+    }
+    Ok(())
+}
+
+/// Write each discovered network host's block, numbered starting at `start`
+/// so USB blocks (numbered 1..) can precede it in the combined listing.
+fn write_discovered_network_printers(
     output: &mut impl Write,
     hosts: &[DiscoveredHost],
     configuration: &PrinterConfiguration,
+    start: usize,
 ) -> Result<(), CliError> {
-    if hosts.is_empty() {
-        writeln!(output, "No listening printers discovered.")
-            .map_err(CliError::WriteHumanOutput)?;
-        return Ok(());
-    }
     for (offset, host) in hosts.iter().enumerate() {
         let address = host.address.to_string();
         let endpoint = format_network_endpoint(&address, host.port);
@@ -822,7 +909,7 @@ fn write_discovered_hosts(
                 also_configured: &[],
             }
         };
-        write_network_listing(output, offset + 1, &listing)?;
+        write_network_listing(output, start + offset, &listing)?;
     }
     Ok(())
 }
@@ -877,6 +964,19 @@ fn registration_hint(
     Some(format!(
         "Register a new printer with: escpost printers add <NAME> --transport network --discover{port_suffix}"
     ))
+}
+
+/// A one-line nudge toward registering a freshly discovered USB printer,
+/// mirroring `registration_hint`'s network counterpart: printed before it,
+/// on stderr, and `None` unless at least one connected USB printer does not
+/// yet match a saved identity. Count-independent for the same reason —
+/// there is exactly one non-interactive way to register a USB printer
+/// regardless of how many new ones were found.
+fn usb_registration_hint(connected: &[ConnectedUsbPrinter]) -> Option<&'static str> {
+    connected
+        .iter()
+        .any(|printer| printer.configuration_index.is_none())
+        .then_some("Register a new printer with: escpost printers add <NAME> --transport usb")
 }
 
 fn listed_printers<'a>(
@@ -938,13 +1038,11 @@ impl ListedPrinter<'_> {
     }
 }
 
-fn merge_usb_inventory(
-    mut printers: Vec<UsbPrinter>,
-    configuration: &PrinterConfiguration,
-) -> MergedUsbInventory {
-    // Assign ambiguous saved identities by stable USB location before sorting
-    // for display. This keeps one saved alias from naming several identical
-    // connected interfaces when the configuration has no serial number.
+/// Sort connected USB printers by stable location. Both `printers list`'s
+/// merge and `printers discover`'s classification rely on this order to make
+/// first-match-wins configuration assignment deterministic across runs,
+/// regardless of the order the operating system enumerates devices.
+fn sort_by_usb_location(printers: &mut [UsbPrinter]) {
     printers.sort_by(|left, right| {
         (
             &left.bus,
@@ -961,6 +1059,19 @@ fn merge_usb_inventory(
                 right.product_id,
             ))
     });
+}
+
+/// Match each connected USB printer against at most one configured identity,
+/// first-match-wins in `printers` order. This keeps one saved alias from
+/// naming several identical connected interfaces when the configuration has
+/// no serial number. `printers` must already be sorted by stable USB
+/// location (`sort_by_usb_location`) so the match is deterministic across
+/// runs. Returns the connected printers alongside which configuration
+/// indexes were claimed, so callers can also report unclaimed ones.
+fn classify_usb_printers(
+    printers: Vec<UsbPrinter>,
+    configuration: &PrinterConfiguration,
+) -> (Vec<ConnectedUsbPrinter>, Vec<bool>) {
     let mut matched_configurations = vec![false; configuration.usb_printers().len()];
     let mut connected = Vec::with_capacity(printers.len());
     for printer in printers {
@@ -985,6 +1096,15 @@ fn merge_usb_inventory(
             configuration_index: primary_configuration,
         });
     }
+    (connected, matched_configurations)
+}
+
+fn merge_usb_inventory(
+    mut printers: Vec<UsbPrinter>,
+    configuration: &PrinterConfiguration,
+) -> MergedUsbInventory {
+    sort_by_usb_location(&mut printers);
+    let (mut connected, matched_configurations) = classify_usb_printers(printers, configuration);
     connected.sort_by_cached_key(|connected| {
         let configured = connected
             .configuration_index
@@ -1018,6 +1138,21 @@ fn merge_usb_inventory(
         connected,
         unavailable_configuration_indexes,
     }
+}
+
+/// Classify connected USB printers for `printers discover`. Unlike
+/// `merge_usb_inventory`, this keeps the stable-location order instead of
+/// re-sorting by display name afterward: `list` groups by name, but
+/// `discover`'s USB block simply reports every connected printer as it is
+/// found, the same way its network sweep already reports hosts in scan
+/// order. Printers not claimed by any configuration are left `None`, ready
+/// to be reported as newly discovered.
+fn discovered_usb_printers(
+    mut printers: Vec<UsbPrinter>,
+    configuration: &PrinterConfiguration,
+) -> Vec<ConnectedUsbPrinter> {
+    sort_by_usb_location(&mut printers);
+    classify_usb_printers(printers, configuration).0
 }
 
 fn usb_add_targets(
@@ -1137,6 +1272,72 @@ fn is_printer_device(device: &nusb::DeviceInfo) -> bool {
             .any(|interface| interface.class() == USB_CLASS_PRINTER)
 }
 
+/// A USB printer entry as shown by both `printers list` and `printers
+/// discover`, mirroring `NetworkListing` below so the two commands cannot
+/// drift apart. `model` distinguishes "no model line" (an unconfigured
+/// connected printer) from "print the model line" (a configured printer).
+/// `profile` distinguishes "no profile line at all" (a freshly discovered,
+/// unconfigured printer on `discover`) from "print the line, falling back to
+/// `unassigned`" (a configured printer on either command, or an unconfigured
+/// but connected printer on `list`).
+struct UsbListing<'a> {
+    heading: &'a str,
+    status: &'a str,
+    model: Option<&'a str>,
+    profile: Option<Option<&'a str>>,
+    printer: &'a UsbPrinter,
+}
+
+fn write_usb_listing(
+    output: &mut impl Write,
+    number: usize,
+    listing: &UsbListing<'_>,
+) -> Result<(), CliError> {
+    writeln!(output, "[{number}] {}", listing.heading).map_err(CliError::WriteHumanOutput)?;
+    writeln!(output, "    status: {}", listing.status).map_err(CliError::WriteHumanOutput)?;
+    if let Some(model) = listing.model {
+        writeln!(output, "    model: {model}").map_err(CliError::WriteHumanOutput)?;
+    }
+    if let Some(profile) = listing.profile {
+        writeln!(
+            output,
+            "    profile: {}",
+            profile.unwrap_or(UNASSIGNED_PROFILE)
+        )
+        .map_err(CliError::WriteHumanOutput)?;
+    }
+    writeln!(output, "    transport: usb").map_err(CliError::WriteHumanOutput)?;
+    writeln!(
+        output,
+        "    usb: {:04x}:{:04x}; bus {} address {}; interface {}",
+        listing.printer.vendor_id,
+        listing.printer.product_id,
+        listing.printer.bus,
+        listing.printer.address,
+        listing.printer.interface_number
+    )
+    .map_err(CliError::WriteHumanOutput)?;
+    write!(
+        output,
+        "    endpoints: out {}",
+        format_endpoints(&listing.printer.out_endpoints)
+    )
+    .map_err(CliError::WriteHumanOutput)?;
+    if !listing.printer.in_endpoints.is_empty() {
+        write!(
+            output,
+            "; in {}",
+            format_endpoints(&listing.printer.in_endpoints)
+        )
+        .map_err(CliError::WriteHumanOutput)?;
+    }
+    writeln!(output).map_err(CliError::WriteHumanOutput)?;
+    if let Some(serial_number) = &listing.printer.serial_number {
+        writeln!(output, "    serial: {serial_number}").map_err(CliError::WriteHumanOutput)?;
+    }
+    Ok(())
+}
+
 fn write_printer(
     output: &mut impl Write,
     number: usize,
@@ -1144,52 +1345,17 @@ fn write_printer(
     configured: Option<&ConfiguredUsbPrinter>,
 ) -> Result<(), CliError> {
     let model = usb_printer_label(printer);
-
-    writeln!(
+    write_usb_listing(
         output,
-        "[{number}] {}",
-        configured.map_or(model.as_str(), |printer| &printer.name)
+        number,
+        &UsbListing {
+            heading: configured.map_or(model.as_str(), |printer| printer.name.as_str()),
+            status: "connected",
+            model: configured.map(|_| model.as_str()),
+            profile: Some(configured.and_then(|printer| printer.profile.as_deref())),
+            printer,
+        },
     )
-    .map_err(CliError::WriteHumanOutput)?;
-    writeln!(output, "    status: connected").map_err(CliError::WriteHumanOutput)?;
-    if let Some(configured) = configured {
-        writeln!(output, "    model: {model}").map_err(CliError::WriteHumanOutput)?;
-        writeln!(
-            output,
-            "    profile: {}",
-            configured.profile.as_deref().unwrap_or(UNASSIGNED_PROFILE)
-        )
-        .map_err(CliError::WriteHumanOutput)?;
-    } else {
-        writeln!(output, "    profile: {UNASSIGNED_PROFILE}")
-            .map_err(CliError::WriteHumanOutput)?;
-    }
-    writeln!(output, "    transport: usb").map_err(CliError::WriteHumanOutput)?;
-    writeln!(
-        output,
-        "    usb: {:04x}:{:04x}; bus {} address {}; interface {}",
-        printer.vendor_id,
-        printer.product_id,
-        printer.bus,
-        printer.address,
-        printer.interface_number
-    )
-    .map_err(CliError::WriteHumanOutput)?;
-    write!(
-        output,
-        "    endpoints: out {}",
-        format_endpoints(&printer.out_endpoints)
-    )
-    .map_err(CliError::WriteHumanOutput)?;
-    if !printer.in_endpoints.is_empty() {
-        write!(output, "; in {}", format_endpoints(&printer.in_endpoints))
-            .map_err(CliError::WriteHumanOutput)?;
-    }
-    writeln!(output).map_err(CliError::WriteHumanOutput)?;
-    if let Some(serial_number) = &printer.serial_number {
-        writeln!(output, "    serial: {serial_number}").map_err(CliError::WriteHumanOutput)?;
-    }
-    Ok(())
 }
 
 fn write_unavailable_printer(
@@ -1389,13 +1555,13 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        AddPrompter, DiscoverChoice, DiscoverPicker, ResolvedAddConnection, ResolvedAddPrinter,
-        UsbAddTarget, UsbInventory, UsbPrinter, UsbPrinterInterface, UsbSelector,
-        choose_discovered_host, execute, execute_add, filter_usb_targets, printer_interfaces,
-        registration_hint, resolve_add, select_usb_target, usb_add_targets, usb_selector,
-        write_discovered_hosts,
+        AddPrompter, ConnectedUsbPrinter, DiscoverChoice, DiscoverPicker, ResolvedAddConnection,
+        ResolvedAddPrinter, UsbAddTarget, UsbInventory, UsbPrinter, UsbPrinterInterface,
+        UsbSelector, choose_discovered_host, execute, execute_add, execute_discover,
+        filter_usb_targets, printer_interfaces, registration_hint, resolve_add, select_usb_target,
+        usb_add_targets, usb_registration_hint, usb_selector, write_discovered_network_printers,
     };
-    use crate::cli::{AddPrinterArgs, PrinterTransport};
+    use crate::cli::{AddPrinterArgs, InventoryTransport, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
     use crate::discovery::DiscoveredHost;
     use crate::error::CliError;
@@ -2493,7 +2659,7 @@ port = 9100
         ];
         let mut output = Vec::new();
 
-        write_discovered_hosts(&mut output, &hosts, &configuration)
+        write_discovered_network_printers(&mut output, &hosts, &configuration, 1)
             .expect("writing the listing should succeed");
 
         assert_eq!(
@@ -2521,19 +2687,6 @@ port = 9100
     network: 10.42.0.20:9100
     also configured as: counter-spare
 "
-        );
-    }
-
-    #[test]
-    fn an_empty_discovery_is_a_successful_snapshot() {
-        let mut output = Vec::new();
-
-        write_discovered_hosts(&mut output, &[], &PrinterConfiguration::default())
-            .expect("writing the listing should succeed");
-
-        assert_eq!(
-            String::from_utf8(output).expect("the listing should be UTF-8"),
-            "No listening printers discovered.\n"
         );
     }
 
@@ -2710,5 +2863,350 @@ port = 9100
             .expect("the prompted selection should resolve");
 
         assert_eq!(chosen, discovered([10, 42, 0, 5], 9100));
+    }
+
+    #[test]
+    fn discover_reports_a_new_usb_printer_with_no_model_or_profile_line() {
+        let mut inventory = FixedInventory {
+            printers: vec![UsbPrinter {
+                vendor_id: 0x0416,
+                product_id: 0x5011,
+                bus: "3".to_owned(),
+                address: 57,
+                manufacturer: Some("YICHIP3121".to_owned()),
+                product: Some("USB Portable Printer".to_owned()),
+                serial_number: Some("B120300001".to_owned()),
+                interface_number: 0,
+                out_endpoints: vec![0x01],
+                in_endpoints: vec![0x81],
+            }],
+        };
+        let mut output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &[],
+            None,
+            &mut output,
+        )
+        .expect("discovery should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] USB Portable Printer (YICHIP3121)
+    status: new
+    transport: usb
+    usb: 0416:5011; bus 3 address 57; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+"
+        );
+    }
+
+    #[test]
+    fn discover_reports_a_configured_usb_printer_with_model_and_profile_lines() {
+        let mut inventory = FixedInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+profile = \"NT-5890K\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+in_endpoint = \"0x81\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute_discover(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("discovery should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] netum-usb
+    status: configured
+    model: USB Portable Printer (YICHIP3121)
+    profile: NT-5890K
+    transport: usb
+    usb: 0416:5011; bus 003 address 60; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+"
+        );
+    }
+
+    #[test]
+    fn discover_configured_usb_printer_can_remain_unprofiled() {
+        let mut inventory = FixedInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[uncalibrated-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("an unprofiled USB printer should be valid");
+        let mut output = Vec::new();
+
+        execute_discover(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("discovery should succeed");
+
+        assert!(
+            String::from_utf8(output)
+                .expect("the listing should be UTF-8")
+                .contains("profile: unassigned")
+        );
+    }
+
+    #[test]
+    fn discover_one_saved_identity_names_at_most_one_connected_interface() {
+        let mut inventory = FixedInventory {
+            printers: vec![
+                UsbPrinter {
+                    vendor_id: 0x1000,
+                    product_id: 0x0001,
+                    bus: "2".to_owned(),
+                    address: 2,
+                    manufacturer: None,
+                    product: Some("Second Model".to_owned()),
+                    serial_number: None,
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: Vec::new(),
+                },
+                UsbPrinter {
+                    vendor_id: 0x1000,
+                    product_id: 0x0001,
+                    bus: "1".to_owned(),
+                    address: 1,
+                    manufacturer: None,
+                    product: Some("First Model".to_owned()),
+                    serial_number: None,
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: Vec::new(),
+                },
+            ],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[shared-identity]
+transport = \"usb\"
+profile = \"GENERIC\"
+vendor_id = \"0x1000\"
+product_id = \"0x0001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute_discover(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("discovery should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert_eq!(output.matches("] shared-identity\n").count(), 1);
+        assert_eq!(output.matches("status: configured").count(), 1);
+        assert_eq!(output.matches("status: new").count(), 1);
+    }
+
+    #[test]
+    fn discover_numbers_usb_blocks_before_network_blocks_continuously() {
+        let mut inventory = FixedInventory {
+            printers: vec![
+                UsbPrinter {
+                    vendor_id: 0x0416,
+                    product_id: 0x5011,
+                    bus: "3".to_owned(),
+                    address: 57,
+                    manufacturer: Some("YICHIP3121".to_owned()),
+                    product: Some("USB Portable Printer".to_owned()),
+                    serial_number: Some("B120300001".to_owned()),
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: vec![0x81],
+                },
+                UsbPrinter {
+                    vendor_id: 0x0416,
+                    product_id: 0x5011,
+                    bus: "3".to_owned(),
+                    address: 60,
+                    manufacturer: Some("YICHIP3121".to_owned()),
+                    product: Some("USB Portable Printer".to_owned()),
+                    serial_number: Some("B120300002".to_owned()),
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: vec![0x81],
+                },
+            ],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+profile = \"NT-5890K\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300002\"
+interface_number = 0
+out_endpoint = \"0x01\"
+in_endpoint = \"0x81\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let hosts = vec![discovered([10, 42, 0, 5], 9100)];
+        let mut output = Vec::new();
+
+        execute_discover(&mut inventory, &configuration, &hosts, None, &mut output)
+            .expect("discovery should succeed");
+
+        let headings = String::from_utf8(output)
+            .expect("the listing should be UTF-8")
+            .lines()
+            .filter(|line| line.starts_with('['))
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            headings,
+            vec![
+                "[1] USB Portable Printer (YICHIP3121)".to_owned(),
+                "[2] netum-usb".to_owned(),
+                "[3] 10.42.0.5:9100".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn discover_transport_usb_skips_the_network_section() {
+        let mut inventory = FixedInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+        };
+        let hosts = vec![discovered([10, 42, 0, 5], 9100)];
+        let mut output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &hosts,
+            Some(InventoryTransport::Usb),
+            &mut output,
+        )
+        .expect("discovery should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(output.contains("transport: usb"));
+        assert!(
+            !output.contains("transport: network"),
+            "--transport usb must not scan or report network hosts:\n{output}"
+        );
+    }
+
+    #[test]
+    fn discover_transport_network_skips_the_usb_section() {
+        let mut inventory = FixedInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+        };
+        let hosts = vec![discovered([10, 42, 0, 5], 9100)];
+        let mut output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &hosts,
+            Some(InventoryTransport::Network),
+            &mut output,
+        )
+        .expect("discovery should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(
+            !output.contains("transport: usb"),
+            "--transport network must not enumerate or report USB printers:\n{output}"
+        );
+        assert!(output.contains("transport: network"));
+    }
+
+    #[test]
+    fn discover_reports_an_empty_combined_result() {
+        let mut inventory = FixedInventory {
+            printers: Vec::new(),
+        };
+        let mut output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &[],
+            None,
+            &mut output,
+        )
+        .expect("discovery should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "No printers discovered.\n"
+        );
+    }
+
+    #[test]
+    fn usb_registration_hint_for_a_new_usb_printer() {
+        let connected = vec![ConnectedUsbPrinter {
+            printer: netum_usb_printer(vec![0x01], vec![0x81]),
+            configuration_index: None,
+        }];
+
+        let hint = usb_registration_hint(&connected);
+
+        assert_eq!(
+            hint,
+            Some("Register a new printer with: escpost printers add <NAME> --transport usb")
+        );
+    }
+
+    #[test]
+    fn usb_registration_hint_is_none_when_every_connected_usb_printer_is_configured() {
+        let connected = vec![ConnectedUsbPrinter {
+            printer: netum_usb_printer(vec![0x01], vec![0x81]),
+            configuration_index: Some(0),
+        }];
+
+        let hint = usb_registration_hint(&connected);
+
+        assert_eq!(hint, None);
+    }
+
+    #[test]
+    fn usb_registration_hint_is_none_for_no_connected_usb_printers() {
+        assert_eq!(usb_registration_hint(&[]), None);
+    }
+
+    #[test]
+    fn both_transports_can_hint_at_once() {
+        let connected = vec![ConnectedUsbPrinter {
+            printer: netum_usb_printer(vec![0x01], vec![0x81]),
+            configuration_index: None,
+        }];
+        let hosts = vec![discovered([10, 42, 0, 71], 9100)];
+
+        let usb_hint = usb_registration_hint(&connected);
+        let network_hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9100);
+
+        assert!(usb_hint.is_some(), "a new USB printer should hint");
+        assert!(network_hint.is_some(), "a new network host should hint");
     }
 }

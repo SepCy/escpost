@@ -967,6 +967,7 @@ fn printers_discover_documents_its_options() {
     assert!(output.status.success(), "command failed:\n{stdout}");
     assert!(stdout.contains("Scan directly connected networks for listening printers"));
     assert!(stdout.contains("Usage: escpost printers discover"));
+    assert!(stdout.contains("--transport <TRANSPORT>"));
     assert!(stdout.contains("--port <PORT>"));
     assert!(stdout.contains("--subnet <CIDR>"));
     assert!(stdout.contains("--timeout <MS>"));
@@ -988,6 +989,8 @@ fn printers_discover_finds_a_listening_loopback_printer() {
         .arg(&config)
         .args([
             "discover",
+            "--transport",
+            "network",
             "--subnet",
             "127.0.0.1/32",
             "--port",
@@ -1027,6 +1030,8 @@ fn printers_discover_reports_an_empty_sweep() {
         .arg(&config)
         .args([
             "discover",
+            "--transport",
+            "network",
             "--subnet",
             "127.0.0.1/32",
             "--port",
@@ -1038,10 +1043,31 @@ fn printers_discover_reports_an_empty_sweep() {
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     assert!(output.status.success(), "command failed:\n{stdout}");
-    assert!(stdout.contains("No listening printers discovered."));
+    assert!(stdout.contains("No printers discovered."));
     assert!(
         !stderr.contains("Register"),
         "an empty sweep should not hint at registering a printer:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_discover_rejects_network_scan_options_with_usb_transport() {
+    let directory = temporary_directory("discover-usb-with-network-options");
+    let config = directory.join("printers.toml");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["--non-interactive", "printers", "--config"])
+        .arg(&config)
+        .args(["discover", "--transport", "usb", "--subnet", "127.0.0.1/32"])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert_failed_without_configuration(
+        &output,
+        &config,
+        "--subnet, --port, and --timeout are only valid when discovering network printers",
     );
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }

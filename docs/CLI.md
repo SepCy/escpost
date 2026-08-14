@@ -530,11 +530,14 @@ configuration path it read on the status channel, so a developer knows where to
 register or edit printers.
 The human output identifies the transport and shows the connection fields
 needed by the corresponding print command. A configured USB printer is
-`connected` when a currently attached interface matches its saved descriptor,
-in which case the live bus, address, and model are shown alongside the saved
-name; otherwise it is `unavailable`. A configured network target is connected
-when a TCP connection to its saved host and port succeeds; refused,
-unresolved, and timed-out targets are unavailable.
+`connected` when an attached device's OS-reported identity (vendor, product,
+and serial) matches its saved descriptor; interface and endpoints on that
+block always come from the saved registration, not a live descriptor read, so
+checking presence never opens the device and cannot fail with a permission
+error. The live bus, address, and model string are shown alongside the saved
+name when connected; otherwise the printer is `unavailable`. A configured
+network target is connected when a TCP connection to its saved host and port
+succeeds; refused, unresolved, and timed-out targets are unavailable.
 
 Every result has a `profile` row regardless of transport or connection status.
 It contains the configured profile identifier or `unassigned` when no profile
@@ -550,13 +553,15 @@ scripts using a versioned schema, allowing callers to apply their own sorting.
 An empty registry — including a `--transport` filter that matches nothing —
 prints `No printers configured.` and exits successfully.
 
-Listing does not pair devices, change configuration, send ESC/POS data, or
-start a broad Bluetooth or network search. It opens and immediately closes one
-TCP connection to each configured network target, using a one-second timeout.
-These probes run concurrently and send zero bytes. Reading USB descriptors is
-also part of listing. After the listing, a stderr hint always points at
-`printers discover` for finding connected printers not yet in the listing,
-regardless of how many (if any) configured printers were shown.
+Listing does not pair devices, change configuration, send ESC/POS data, open a
+USB device, or start a broad Bluetooth or network search. It opens and
+immediately closes one TCP connection to each configured network target,
+using a one-second timeout. These probes run concurrently and send zero
+bytes. USB presence comes from the operating system's device metadata alone;
+when no USB printer is configured, USB is not even enumerated. After the
+listing, a stderr hint always points at `printers discover` for finding
+connected printers not yet in the listing, regardless of how many (if any)
+configured printers were shown.
 
 ### `printers discover`
 

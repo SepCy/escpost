@@ -429,6 +429,57 @@ fn printers_list_reports_saved_network_reachability_without_discovery() {
 
 #[cfg(unix)]
 #[test]
+fn printers_list_checks_usb_presence_without_opening_any_device() {
+    // Unlike `run_printers_list`'s helper (which passes `--transport
+    // network` specifically to avoid touching USB hardware), this test runs
+    // the default `list` against the real `NusbInventory` on purpose: USB
+    // presence must come from OS device metadata alone, so `list` must
+    // never fail with a permission error opening a real, unrelated USB
+    // device connected to the test machine, and a configured USB printer
+    // that matches nothing actually connected must cleanly report
+    // `unavailable` rather than erroring.
+    let directory = temporary_directory("usb-presence-metadata-only");
+    let config = directory.join("printers.toml");
+    fs::write(
+        &config,
+        "\
+[phantom-usb]
+transport = \"usb\"
+vendor_id = \"0x9999\"
+product_id = \"0x0001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+    )
+    .expect("a USB-only configuration should be writable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["printers", "--config"])
+        .arg(&config)
+        .arg("list")
+        .output()
+        .expect("the escpost command should finish");
+
+    assert_command_succeeded(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("] phantom-usb"),
+        "the configured USB printer should still be listed:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("status: unavailable"),
+        "no connected device matches this identity, so it must be unavailable, not an error:\n{stdout}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("permission denied") && !stderr.contains("could not open USB device"),
+        "listing must never open a USB device, including unrelated ones actually connected to this machine:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
 fn printers_list_reports_no_printers_configured_for_an_empty_registry() {
     let directory = temporary_directory("empty-registry");
     let config = directory.join("printers.toml");

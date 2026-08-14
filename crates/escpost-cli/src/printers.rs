@@ -39,6 +39,23 @@ struct UsbPrinter {
     in_endpoints: Vec<u8>,
 }
 
+/// OS-reported identity of a printer-class USB device, gathered without ever
+/// opening it (see `UsbInventory::identities`). `printers list` uses this
+/// alone to decide whether a saved USB printer is connected: interface and
+/// endpoint routing are not available at this level, so a matched entry's
+/// display block sources those from the saved configuration instead (see
+/// `connected_usb_printer`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct UsbDeviceIdentity {
+    vendor_id: u16,
+    product_id: u16,
+    bus: String,
+    address: u8,
+    manufacturer: Option<String>,
+    product: Option<String>,
+    serial_number: Option<String>,
+}
+
 /// Best-effort USB enumeration for `printers discover`: printers found so
 /// far, plus a warning line for each device that could not be opened or
 /// whose active configuration could not be inspected. A device-level
@@ -79,14 +96,25 @@ struct UsbSelector {
     serial: Option<String>,
 }
 
-struct MergedUsbInventory {
-    connected: Vec<ConnectedUsbPrinter>,
-    unavailable_configuration_indexes: Vec<usize>,
-}
-
 struct ConnectedUsbPrinter {
     printer: UsbPrinter,
     configuration_index: Option<usize>,
+}
+
+/// The result of matching `printers list`'s metadata-only USB identities
+/// against the saved configuration (see `merge_usb_identities`). Unlike
+/// `printers discover`'s `ConnectedUsbPrinter`, an identity matching no
+/// saved printer is simply dropped rather than kept with `configuration_index:
+/// None`: `list` never shows a connected-but-unconfigured USB device, so
+/// every entry here is already known to belong to one configuration index.
+struct MergedUsbIdentities {
+    connected: Vec<ConnectedUsbEntry>,
+    unavailable_configuration_indexes: Vec<usize>,
+}
+
+struct ConnectedUsbEntry {
+    printer: UsbPrinter,
+    configuration_index: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -117,7 +145,7 @@ struct ListedPrinter<'a> {
 }
 
 enum ListedPrinterKind<'a> {
-    ConnectedUsb(&'a ConnectedUsbPrinter),
+    ConnectedUsb(&'a ConnectedUsbEntry),
     UnavailableUsb(&'a ConfiguredUsbPrinter),
     Network {
         printer: &'a ConfiguredNetworkPrinter,
@@ -127,6 +155,15 @@ enum ListedPrinterKind<'a> {
 
 trait UsbInventory {
     fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError>;
+
+    /// Metadata-only USB presence check for `printers list`: the OS-reported
+    /// identity (vendor, product, serial, live bus/address, and
+    /// manufacturer/product strings) of every printer-class device, without
+    /// ever opening one. There is no per-device failure mode here — nothing
+    /// about an individual device is opened or inspected — so, unlike
+    /// `list_tolerant`, total enumeration failure is the only error this can
+    /// return.
+    fn identities(&mut self) -> Result<Vec<UsbDeviceIdentity>, CliError>;
 
     /// Best-effort enumeration for `printers discover`: a device that fails
     /// to open or whose active configuration cannot be inspected is skipped
@@ -592,11 +629,14 @@ impl fmt::Display for UsbAddTarget {
 
 /// The pure core of `printers list`: a registry-only inventory of configured
 /// USB and network printers, each cross-checked against what is actually
-/// reachable right now (`merge_usb_inventory`'s live bus/address/model for
-/// USB, `network_statuses`'s TCP probe for network). A connected USB
-/// interface that matches no saved identity is never shown here — that is
+/// reachable right now (`merge_usb_identities`'s metadata-only presence
+/// check for USB, `network_statuses`'s TCP probe for network). A connected
+/// USB device that matches no saved identity is never shown here — that is
 /// `printers discover`'s job — so the merge is used only to resolve status
-/// and live coordinates for entries that are already in `printers.toml`.
+/// for entries that are already in `printers.toml`. USB presence never opens
+/// a device: when no USB printers are configured at all, `inventory.
+/// identities()` is not even called, so `list` is structurally incapable of
+/// hitting a device-open permission error the way `discover` or `add` can.
 fn execute(
     inventory: &mut impl UsbInventory,
     configuration: &PrinterConfiguration,
@@ -604,12 +644,14 @@ fn execute(
     transport: Option<InventoryTransport>,
     output: &mut impl Write,
 ) -> Result<(), CliError> {
-    let usb_printers = if transport == Some(InventoryTransport::Network) {
+    let identities = if transport == Some(InventoryTransport::Network)
+        || configuration.usb_printers().is_empty()
+    {
         Vec::new()
     } else {
-        inventory.list()?
+        inventory.identities()?
     };
-    let listing = merge_usb_inventory(usb_printers, configuration);
+    let listing = merge_usb_identities(identities, configuration);
     let mut printers = listed_printers(
         &listing,
         configuration,
@@ -635,9 +677,7 @@ fn execute(
     for (offset, printer) in printers.into_iter().enumerate() {
         match printer.kind {
             ListedPrinterKind::ConnectedUsb(connected) => {
-                let configured = connected
-                    .configuration_index
-                    .map(|index| &configuration.usb_printers()[index]);
+                let configured = &configuration.usb_printers()[connected.configuration_index];
                 write_printer(output, offset + 1, &connected.printer, configured)?;
             }
             ListedPrinterKind::UnavailableUsb(printer) => {
@@ -1028,23 +1068,20 @@ fn usb_registration_hint(connected: &[ConnectedUsbPrinter]) -> Option<&'static s
 }
 
 fn listed_printers<'a>(
-    usb: &'a MergedUsbInventory,
+    usb: &'a MergedUsbIdentities,
     configuration: &'a PrinterConfiguration,
     network_statuses: &[bool],
     include_network: bool,
 ) -> Vec<ListedPrinter<'a>> {
     let mut printers = Vec::new();
     // `printers list` is the registry, not a discovery tool: a connected USB
-    // interface that matches no saved identity is `printers discover`'s
-    // business now, so it is skipped here rather than listed under its
-    // descriptor-derived label.
+    // device that matches no saved identity is `printers discover`'s
+    // business now, so `merge_usb_identities` has already dropped it before
+    // this function ever sees it.
     for connected in &usb.connected {
-        let Some(index) = connected.configuration_index else {
-            continue;
-        };
-        let configured = &configuration.usb_printers()[index];
+        let configured = &configuration.usb_printers()[connected.configuration_index];
         printers.push(ListedPrinter {
-            display_name: connected_display_name(&connected.printer, Some(configured)),
+            display_name: configured.name.clone(),
             kind: ListedPrinterKind::ConnectedUsb(connected),
         });
     }
@@ -1152,26 +1189,113 @@ fn classify_usb_printers(
     (connected, matched_configurations)
 }
 
-fn merge_usb_inventory(
-    mut printers: Vec<UsbPrinter>,
+/// The list-specific analogue of `configuration_matches`: whether an
+/// OS-reported device identity (no interface or endpoint data available
+/// without opening the device) satisfies a saved USB printer. Serial
+/// semantics mirror `configuration_matches` exactly: an unset saved serial
+/// matches any identity of that vendor/product, a set one requires an exact
+/// match.
+fn identity_matches_configuration(
+    identity: &UsbDeviceIdentity,
+    configured: &ConfiguredUsbPrinter,
+) -> bool {
+    configured.vendor_id == identity.vendor_id
+        && configured.product_id == identity.product_id
+        && configured
+            .serial_number
+            .as_ref()
+            .is_none_or(|serial| identity.serial_number.as_ref() == Some(serial))
+}
+
+/// Sort device identities by stable location, the identity-level analogue of
+/// `sort_by_usb_location`. `merge_usb_identities` relies on this order for
+/// the same reason `classify_usb_printers` relies on `sort_by_usb_location`:
+/// deterministic first-match-wins configuration assignment regardless of the
+/// order the operating system enumerates devices.
+fn sort_by_usb_identity_location(identities: &mut [UsbDeviceIdentity]) {
+    identities.sort_by(|left, right| {
+        (&left.bus, left.address, left.vendor_id, left.product_id).cmp(&(
+            &right.bus,
+            right.address,
+            right.vendor_id,
+            right.product_id,
+        ))
+    });
+}
+
+/// Compose the printer shown for one matched `list` entry: live location and
+/// descriptor strings come from the OS-reported identity (never opened),
+/// while interface and endpoint routing come from the saved configuration —
+/// `list` never reads endpoints from the device itself, only from
+/// `printers.toml`. The serial line prefers the identity's serial (today's
+/// live value) and falls back to the configured one so an entry matched by
+/// an unset configured serial still shows the connected device's own serial
+/// when it has one.
+fn connected_usb_printer(
+    identity: UsbDeviceIdentity,
+    configured: &ConfiguredUsbPrinter,
+) -> UsbPrinter {
+    UsbPrinter {
+        vendor_id: identity.vendor_id,
+        product_id: identity.product_id,
+        bus: identity.bus,
+        address: identity.address,
+        manufacturer: identity.manufacturer,
+        product: identity.product,
+        serial_number: identity
+            .serial_number
+            .or_else(|| configured.serial_number.clone()),
+        interface_number: configured.interface_number,
+        out_endpoints: vec![configured.out_endpoint],
+        in_endpoints: configured.in_endpoint.into_iter().collect(),
+    }
+}
+
+/// The list-specific analogue of `merge_usb_inventory`'s classification:
+/// match each metadata-only device identity against the saved USB
+/// configuration, first-match-wins by stable location exactly like
+/// `classify_usb_printers`, then sort the connected results by display
+/// name. An identity matching no saved configuration is dropped outright —
+/// unlike `printers discover`, `list` never shows a connected-but-
+/// unconfigured USB device — and a saved printer claimed by an identity that
+/// lost the first-match-wins tiebreak to a sibling configuration is neither
+/// connected nor unavailable, mirroring `classify_usb_printers`' own
+/// ambiguity handling.
+fn merge_usb_identities(
+    mut identities: Vec<UsbDeviceIdentity>,
     configuration: &PrinterConfiguration,
-) -> MergedUsbInventory {
-    sort_by_usb_location(&mut printers);
-    let (mut connected, matched_configurations) = classify_usb_printers(printers, configuration);
+) -> MergedUsbIdentities {
+    sort_by_usb_identity_location(&mut identities);
+    let mut matched_configurations = vec![false; configuration.usb_printers().len()];
+    let mut connected = Vec::new();
+    for identity in identities {
+        let matching_configurations = configuration
+            .usb_printers()
+            .iter()
+            .enumerate()
+            .filter(|(_, configured)| identity_matches_configuration(&identity, configured))
+            .collect::<Vec<_>>();
+        let primary_configuration = matching_configurations
+            .iter()
+            .filter(|(index, _)| !matched_configurations[*index])
+            .min_by(|(_, left), (_, right)| compare_display_names(&left.name, &right.name))
+            .map(|(index, _)| *index);
+        let Some(configuration_index) = primary_configuration else {
+            continue;
+        };
+        for (index, _) in matching_configurations {
+            matched_configurations[index] = true;
+        }
+        let printer =
+            connected_usb_printer(identity, &configuration.usb_printers()[configuration_index]);
+        connected.push(ConnectedUsbEntry {
+            printer,
+            configuration_index,
+        });
+    }
     connected.sort_by_cached_key(|connected| {
-        let configured = connected
-            .configuration_index
-            .map(|index| &configuration.usb_printers()[index]);
-        let display_name = connected_display_name(&connected.printer, configured);
-        (
-            display_name.to_lowercase(),
-            display_name,
-            connected.printer.bus.clone(),
-            connected.printer.address,
-            connected.printer.interface_number,
-            connected.printer.vendor_id,
-            connected.printer.product_id,
-        )
+        let name = &configuration.usb_printers()[connected.configuration_index].name;
+        (name.to_lowercase(), name.clone())
     });
     let mut unavailable_configuration_indexes = configuration
         .usb_printers()
@@ -1187,7 +1311,7 @@ fn merge_usb_inventory(
         )
     });
 
-    MergedUsbInventory {
+    MergedUsbIdentities {
         connected,
         unavailable_configuration_indexes,
     }
@@ -1303,6 +1427,28 @@ impl UsbInventory for NusbInventory {
         }
 
         Ok(UsbEnumeration { printers, warnings })
+    }
+
+    fn identities(&mut self) -> Result<Vec<UsbDeviceIdentity>, CliError> {
+        let devices = nusb::list_devices()
+            .wait()
+            .map_err(CliError::EnumerateUsb)?;
+
+        // Operating-system device metadata only: no `.open()` anywhere in
+        // this path, so `printers list` cannot fail with a permission error
+        // the way opening a device for `discover` or `add` can.
+        Ok(devices
+            .filter(is_printer_device)
+            .map(|device_info| UsbDeviceIdentity {
+                vendor_id: device_info.vendor_id(),
+                product_id: device_info.product_id(),
+                bus: device_info.bus_id().to_owned(),
+                address: device_info.device_address(),
+                manufacturer: device_info.manufacturer_string().map(str::to_owned),
+                product: device_info.product_string().map(str::to_owned),
+                serial_number: device_info.serial_number().map(str::to_owned),
+            })
+            .collect())
     }
 }
 
@@ -1443,21 +1589,30 @@ fn write_usb_listing(
     Ok(())
 }
 
+/// Write one `list` connected-USB block. Every caller already has a matched
+/// configuration (`merge_usb_identities` drops anything unmatched), so
+/// `configured` is not optional here, unlike the discover-side listing. The
+/// `model:` line is omitted rather than falling back to a generic label when
+/// the device identity itself carries no product string, matching
+/// `write_usb_listing`'s own `model: None` handling.
 fn write_printer(
     output: &mut impl Write,
     number: usize,
     printer: &UsbPrinter,
-    configured: Option<&ConfiguredUsbPrinter>,
+    configured: &ConfiguredUsbPrinter,
 ) -> Result<(), CliError> {
-    let model = usb_printer_label(printer);
+    let model = printer
+        .product
+        .as_deref()
+        .map(|_| usb_printer_label(printer));
     write_usb_listing(
         output,
         number,
         &UsbListing {
-            heading: configured.map_or(model.as_str(), |printer| printer.name.as_str()),
+            heading: &configured.name,
             status: "connected",
-            model: configured.map(|_| model.as_str()),
-            profile: Some(configured.and_then(|printer| printer.profile.as_deref())),
+            model: model.as_deref(),
+            profile: Some(configured.profile.as_deref()),
             printer,
         },
     )
@@ -1584,16 +1739,6 @@ fn configuration_matches(printer: &UsbPrinter, configured: &ConfiguredUsbPrinter
             .is_none_or(|serial| printer.serial_number.as_ref() == Some(serial))
 }
 
-fn connected_display_name(
-    printer: &UsbPrinter,
-    configured: Option<&ConfiguredUsbPrinter>,
-) -> String {
-    configured.map_or_else(
-        || usb_printer_label(printer),
-        |printer| printer.name.clone(),
-    )
-}
-
 fn compare_display_names(left: &str, right: &str) -> std::cmp::Ordering {
     left.to_lowercase()
         .cmp(&right.to_lowercase())
@@ -1661,8 +1806,8 @@ mod tests {
 
     use super::{
         AddPrompter, ConnectedUsbPrinter, DiscoverChoice, DiscoverPicker, ResolvedAddConnection,
-        ResolvedAddPrinter, UsbAddTarget, UsbEnumeration, UsbInventory, UsbPrinter,
-        UsbPrinterInterface, UsbSelector, choose_discovered_host, execute, execute_add,
+        ResolvedAddPrinter, UsbAddTarget, UsbDeviceIdentity, UsbEnumeration, UsbInventory,
+        UsbPrinter, UsbPrinterInterface, UsbSelector, choose_discovered_host, execute, execute_add,
         execute_discover, filter_usb_targets, printer_interfaces, registration_hint, resolve_add,
         select_usb_target, usb_add_targets, usb_registration_hint, usb_selector,
         write_discovered_network_printers,
@@ -2010,7 +2155,12 @@ in_endpoint = \"0x81\"
         // Discovery duty moved entirely to `printers discover`: a connected
         // USB interface that matches no saved identity must not produce a
         // block in `list`, even though it would previously have appeared
-        // under its descriptor-derived label.
+        // under its descriptor-derived label. The configuration here has no
+        // USB printers at all, so this also exercises requirement 1's
+        // enumeration skip (`identities()` is never called); see
+        // `a_connected_but_unconfigured_usb_identity_is_not_listed_alongside_a_configured_entry`
+        // below for the case where USB *is* configured but this particular
+        // device still does not match any of it.
         let mut inventory = FixedInventory {
             printers: vec![UsbPrinter {
                 vendor_id: 0x0416,
@@ -2311,9 +2461,9 @@ out_endpoint = \"0x01\"
         execute(&mut inventory, &configuration, &[], None, &mut output)
             .expect("listing should succeed");
 
-        // Both connected interfaces share one USB identity, but only one
-        // configured entry claims it (`classify_usb_printers`, first-match by
-        // stable location). The other interface is left unconfigured, and
+        // Both connected devices share one USB identity, but only one
+        // configured entry claims it (`merge_usb_identities`, first-match by
+        // stable location). The other device is left unconfigured, and
         // `list` no longer shows connected-but-unconfigured devices at all,
         // so it must produce no second block ("Second Model" never appears).
         let output = String::from_utf8(output).expect("the listing should be UTF-8");
@@ -2321,6 +2471,364 @@ out_endpoint = \"0x01\"
         assert_eq!(output.matches("status: connected").count(), 1);
         assert!(!output.contains("status: unavailable"));
         assert!(!output.contains("Second Model"));
+    }
+
+    #[test]
+    fn a_connected_but_unconfigured_usb_identity_is_not_listed_alongside_a_configured_entry() {
+        // Unlike `a_connected_but_unconfigured_usb_printer_is_not_listed`,
+        // the configuration here is not empty, so `identities()` genuinely
+        // runs; this proves the non-matching identity is dropped by
+        // `merge_usb_identities` itself rather than by requirement 1's
+        // enumeration skip.
+        let mut inventory = FixedInventory {
+            printers: vec![
+                netum_usb_printer(vec![0x01], vec![0x81]),
+                UsbPrinter {
+                    vendor_id: 0x9999,
+                    product_id: 0x0001,
+                    bus: "9".to_owned(),
+                    address: 9,
+                    manufacturer: None,
+                    product: Some("Stranger Printer".to_owned()),
+                    serial_number: None,
+                    interface_number: 0,
+                    out_endpoints: vec![0x01],
+                    in_endpoints: Vec::new(),
+                },
+            ],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(output.contains("] netum-usb\n"));
+        assert!(output.contains("status: connected"));
+        assert!(
+            !output.contains("Stranger Printer"),
+            "an identity matching no saved USB printer must never appear in `list`:\n{output}"
+        );
+    }
+
+    #[test]
+    fn list_first_match_wins_between_two_configured_entries_sharing_one_identity() {
+        // The "vice versa" half of first-match-wins: two configured entries
+        // both matching the *same* ambiguous pair of connected devices (no
+        // serial on either side) must still produce exactly one connected
+        // block. The losing configured entry is claimed by the ambiguity
+        // resolution too, so it is neither connected nor unavailable —
+        // mirroring `classify_usb_printers`' own handling of this case for
+        // `printers discover`.
+        let mut first_device = netum_usb_printer(vec![0x01], vec![0x81]);
+        first_device.serial_number = None;
+        first_device.bus = "1".to_owned();
+        let mut second_device = first_device.clone();
+        second_device.bus = "2".to_owned();
+        let mut inventory = FixedInventory {
+            printers: vec![first_device, second_device],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[first-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+interface_number = 0
+out_endpoint = \"0x01\"
+
+[second-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert_eq!(output.matches("] first-usb\n").count(), 1);
+        assert_eq!(output.matches("status: connected").count(), 1);
+        assert!(
+            !output.contains("second-usb"),
+            "the losing configured entry must not appear as connected or unavailable:\n{output}"
+        );
+    }
+
+    #[test]
+    fn list_configured_without_serial_matches_a_connected_serial_and_prefers_it() {
+        let mut inventory = FixedInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[unserialized-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("an unserialized configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(output.contains("status: connected"));
+        assert!(
+            output.contains("serial: B120300001"),
+            "the connected device's own serial should be shown even though the saved entry has none:\n{output}"
+        );
+    }
+
+    #[test]
+    fn list_configured_serial_must_equal_the_connected_serial() {
+        let mut inventory = FixedInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[mismatched-serial-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"SOME-OTHER-SERIAL\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(
+            output.contains("status: unavailable"),
+            "a differing saved serial must not match the connected device:\n{output}"
+        );
+        assert!(!output.contains("status: connected"));
+    }
+
+    #[test]
+    fn list_omits_the_serial_line_when_neither_side_has_one() {
+        let mut printer = netum_usb_printer(vec![0x01], vec![0x81]);
+        printer.serial_number = None;
+        let mut inventory = FixedInventory {
+            printers: vec![printer],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[unserialized-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("an unserialized configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(output.contains("status: connected"));
+        assert!(!output.contains("serial:"));
+    }
+
+    #[test]
+    fn list_omits_the_model_line_when_the_identity_has_no_product_string() {
+        let mut printer = netum_usb_printer(vec![0x01], vec![0x81]);
+        printer.product = None;
+        printer.manufacturer = None;
+        let mut inventory = FixedInventory {
+            printers: vec![printer],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(output.contains("status: connected"));
+        assert!(
+            !output.contains("model:"),
+            "no product string means no model line, matching `write_usb_listing`'s own `model: None` handling:\n{output}"
+        );
+    }
+
+    #[test]
+    fn list_sources_interface_and_endpoints_from_configuration_not_the_device() {
+        // `UsbDeviceIdentity` carries no interface or endpoint fields at
+        // all, so this is also a type-level guarantee; this test pins the
+        // observable behavior against a configuration whose interface and
+        // endpoints are deliberately unlike the usual fixtures.
+        let mut inventory = FixedInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 3
+out_endpoint = \"0x05\"
+in_endpoint = \"0x86\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] netum-usb
+    status: connected
+    model: USB Portable Printer (YICHIP3121)
+    profile: unassigned
+    transport: usb
+    usb: 0416:5011; bus 003 address 60; interface 3
+    endpoints: out 0x05; in 0x86
+    serial: B120300001
+"
+        );
+    }
+
+    #[test]
+    fn list_skips_usb_enumeration_entirely_when_no_usb_printers_are_configured() {
+        // Structural proof of requirement 1: a double whose `list()` and
+        // `identities()` both panic proves `execute` never touches USB at
+        // all when `configuration.usb_printers()` is empty, even though the
+        // registry is not otherwise empty (a network printer is configured).
+        struct PanicsIfUsbIsQueried;
+        impl UsbInventory for PanicsIfUsbIsQueried {
+            fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError> {
+                panic!("list() must not run when no USB printers are configured");
+            }
+
+            fn identities(&mut self) -> Result<Vec<UsbDeviceIdentity>, CliError> {
+                panic!("identities() must not run when no USB printers are configured");
+            }
+        }
+        let configuration = PrinterConfiguration::parse(
+            r#"
+[kitchen]
+transport = "network"
+host = "10.42.0.71"
+port = 9100
+"#,
+        )
+        .expect("the network-only configuration should parse");
+        let mut output = Vec::new();
+
+        execute(
+            &mut PanicsIfUsbIsQueried,
+            &configuration,
+            &[false],
+            None,
+            &mut output,
+        )
+        .expect("listing should succeed without touching USB at all");
+
+        assert!(
+            String::from_utf8(output)
+                .expect("the listing should be UTF-8")
+                .contains("] kitchen")
+        );
+    }
+
+    #[test]
+    fn list_never_opens_usb_devices_to_check_presence() {
+        // Structural proof of requirement 2: a double whose `list()` panics
+        // but whose `identities()` succeeds proves `execute` resolves USB
+        // presence purely from metadata, the same way
+        // `NusbInventory::identities` never calls `.open()`.
+        struct MetadataOnlyInventory;
+        impl UsbInventory for MetadataOnlyInventory {
+            fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError> {
+                panic!("printers list must never call the open-based list()");
+            }
+
+            fn identities(&mut self) -> Result<Vec<UsbDeviceIdentity>, CliError> {
+                Ok(vec![UsbDeviceIdentity {
+                    vendor_id: 0x0416,
+                    product_id: 0x5011,
+                    bus: "3".to_owned(),
+                    address: 57,
+                    manufacturer: Some("YICHIP3121".to_owned()),
+                    product: Some("USB Portable Printer".to_owned()),
+                    serial_number: Some("B120300001".to_owned()),
+                }])
+            }
+        }
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(
+            &mut MetadataOnlyInventory,
+            &configuration,
+            &[],
+            None,
+            &mut output,
+        )
+        .expect("listing should succeed without opening any device");
+
+        assert!(
+            String::from_utf8(output)
+                .expect("the listing should be UTF-8")
+                .contains("status: connected")
+        );
     }
 
     #[test]
@@ -2745,6 +3253,10 @@ out_endpoint = \"0x01\"
         fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError> {
             Ok(self.printers.clone())
         }
+
+        fn identities(&mut self) -> Result<Vec<UsbDeviceIdentity>, CliError> {
+            Ok(self.printers.iter().map(usb_printer_identity).collect())
+        }
     }
 
     /// A `UsbInventory` double that exercises `list_tolerant`'s partial-
@@ -2768,6 +3280,28 @@ out_endpoint = \"0x01\"
                 printers: self.printers.clone(),
                 warnings: self.warnings.clone(),
             })
+        }
+
+        fn identities(&mut self) -> Result<Vec<UsbDeviceIdentity>, CliError> {
+            Ok(self.printers.iter().map(usb_printer_identity).collect())
+        }
+    }
+
+    /// Derive a metadata-only device identity from a `UsbPrinter` test
+    /// fixture, the same fields `NusbInventory::identities` would read from
+    /// `nusb::DeviceInfo` without opening the device. Test doubles use this
+    /// so one fixture can drive both the open-based `list()`/`list_tolerant()`
+    /// paths (discover, add) and the metadata-only `identities()` path
+    /// (list) without keeping two copies of the same descriptor in sync.
+    fn usb_printer_identity(printer: &UsbPrinter) -> UsbDeviceIdentity {
+        UsbDeviceIdentity {
+            vendor_id: printer.vendor_id,
+            product_id: printer.product_id,
+            bus: printer.bus.clone(),
+            address: printer.address,
+            manufacturer: printer.manufacturer.clone(),
+            product: printer.product.clone(),
+            serial_number: printer.serial_number.clone(),
         }
     }
 

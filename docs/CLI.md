@@ -8,7 +8,7 @@ executable; there is no separate Python command family.
 
 This document defines the intended public behavior of the Rust CLI. It is both
 a user reference and a contract against which the implementation and tests can
-be reviewed. `render`, named USB and RAW-network `print`, USB and
+be reviewed. `render`, named USB and RAW-network `print`, configured-USB and
 configured-network `printers list`, USB/network registration through
 `printers add`, USB and network-printer discovery through `printers
 discover`, and `profiles` (`list`, `show`, `find`) are implemented. An
@@ -517,20 +517,24 @@ planned capability.
 
 ### `printers list`
 
-`list` is the normal read-only command. The current implementation combines
-attached USB printers with configured RAW TCP network printers. Bluetooth and
-operating-system spooler inventory remain planned.
+`list` is the normal read-only command, and it is registry-only: it shows
+exactly the printers saved in `printers.toml`, each cross-checked against
+whether it is actually reachable right now. A USB or network device that is
+connected but not yet registered never appears here — finding those is
+`printers discover`'s job. Bluetooth and operating-system spooler inventory
+remain planned.
 
 The default includes every supported transport. `--transport usb|network`
 narrows the result without changing its shape. The command also reports the
 configuration path it read on the status channel, so a developer knows where to
 register or edit printers.
 The human output identifies the transport and shows the connection fields
-needed by the corresponding print command. When a connected USB interface
-matches a saved entry, the two records merge into one connected result under
-the developer-assigned name. A configured network target is connected when a
-TCP connection to its saved host and port succeeds; refused, unresolved, and
-timed-out targets are unavailable.
+needed by the corresponding print command. A configured USB printer is
+`connected` when a currently attached interface matches its saved descriptor,
+in which case the live bus, address, and model are shown alongside the saved
+name; otherwise it is `unavailable`. A configured network target is connected
+when a TCP connection to its saved host and port succeeds; refused,
+unresolved, and timed-out targets are unavailable.
 
 Every result has a `profile` row regardless of transport or connection status.
 It contains the configured profile identifier or `unassigned` when no profile
@@ -543,12 +547,16 @@ transport-specific tie-breakers. Sorting is intentionally not configurable.
 The future `--status` filter will narrow the same ordered inventory rather than
 define an alternate sort mode. `--json` will expose the same snapshot for
 scripts using a versioned schema, allowing callers to apply their own sorting.
+An empty registry — including a `--transport` filter that matches nothing —
+prints `No printers configured.` and exits successfully.
 
 Listing does not pair devices, change configuration, send ESC/POS data, or
 start a broad Bluetooth or network search. It opens and immediately closes one
 TCP connection to each configured network target, using a one-second timeout.
 These probes run concurrently and send zero bytes. Reading USB descriptors is
-also part of listing.
+also part of listing. After the listing, a stderr hint always points at
+`printers discover` for finding connected printers not yet in the listing,
+regardless of how many (if any) configured printers were shown.
 
 ### `printers discover`
 

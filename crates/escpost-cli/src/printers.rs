@@ -915,10 +915,9 @@ async fn run_discover(
         &mut io::stdout().lock(),
         &mut io::stderr().lock(),
     )?;
-    if let Some(hint) = usb_registration_hint(&connected) {
-        eprintln!("{hint}");
-    }
-    if let Some(hint) = registration_hint(&hosts, configuration, port) {
+    let new_usb = any_new_usb_printer(&connected);
+    let new_network = any_new_network_host(&hosts, configuration);
+    if let Some(hint) = combined_registration_hint(new_usb, new_network, port) {
         eprintln!("{hint}");
     }
     Ok(())
@@ -1096,44 +1095,54 @@ fn configured_names<'a>(
         .collect()
 }
 
-/// A one-line nudge toward registering a freshly discovered printer, printed
-/// to stderr after the listing. `None` when every discovered host is already
-/// configured, including an empty sweep. The hint always points at `--discover`
-/// rather than a concrete `--host`, regardless of how many new hosts were
-/// found: `add --discover` already auto-selects a single discovered host and
-/// opens the picker for several, so one command covers both cases.
-fn registration_hint(
-    hosts: &[DiscoveredHost],
-    configuration: &PrinterConfiguration,
-    port: u16,
-) -> Option<String> {
-    let any_new_host = hosts
+/// Whether at least one discovered network host does not match a saved
+/// printer's host and port. Count-independent by design: `combined_
+/// registration_hint` only cares whether the network transport found
+/// anything new, not how much.
+fn any_new_network_host(hosts: &[DiscoveredHost], configuration: &PrinterConfiguration) -> bool {
+    hosts
         .iter()
-        .any(|host| configured_names(configuration, host).is_empty());
-    if !any_new_host {
-        return None;
-    }
-    let port_suffix = if port == 9100 {
-        String::new()
-    } else {
-        format!(" --port {port}")
-    };
-    Some(format!(
-        "Register a new printer with: escpost printers add <NAME> --transport network --discover{port_suffix}"
-    ))
+        .any(|host| configured_names(configuration, host).is_empty())
 }
 
-/// A one-line nudge toward registering a freshly discovered USB printer,
-/// mirroring `registration_hint`'s network counterpart: printed before it,
-/// on stderr, and `None` unless at least one connected USB printer does not
-/// yet match a saved identity. Count-independent for the same reason —
-/// there is exactly one non-interactive way to register a USB printer
-/// regardless of how many new ones were found.
-fn usb_registration_hint(connected: &[ConnectedUsbPrinter]) -> Option<&'static str> {
+/// Whether at least one connected USB printer does not yet match a saved
+/// identity. Count-independent for the same reason as `any_new_network_host`.
+fn any_new_usb_printer(connected: &[ConnectedUsbPrinter]) -> bool {
     connected
         .iter()
         .any(|printer| printer.configuration_index.is_none())
-        .then_some("Register a new printer with: escpost printers add <NAME> --transport usb")
+}
+
+/// The single registration hint `printers discover` prints to stderr after
+/// the listing, chosen by which transports found at least one new
+/// (unconfigured) printer — count-independent within each transport, so a
+/// caller passes `any_new_usb_printer`/`any_new_network_host`'s bool, not a
+/// count. `None` when neither transport found anything new, including an
+/// empty sweep. USB-only and network-only each point at that transport's
+/// non-interactive `add` invocation (the network form gets a `--port`
+/// suffix when `port` is not the default 9100). Finding new printers on
+/// *both* transports instead points at the bare interactive `add` wizard —
+/// it prompts for the transport itself, so one command still covers the
+/// case rather than printing two hint lines or guessing which transport the
+/// user meant.
+fn combined_registration_hint(new_usb: bool, new_network: bool, port: u16) -> Option<String> {
+    match (new_usb, new_network) {
+        (false, false) => None,
+        (true, false) => Some(
+            "Register a new printer with: escpost printers add <NAME> --transport usb".to_owned(),
+        ),
+        (false, true) => {
+            let port_suffix = if port == 9100 {
+                String::new()
+            } else {
+                format!(" --port {port}")
+            };
+            Some(format!(
+                "Register a new printer with: escpost printers add <NAME> --transport network --discover{port_suffix}"
+            ))
+        }
+        (true, true) => Some("Register a new printer with: escpost printers add <NAME>".to_owned()),
+    }
 }
 
 fn listed_printers<'a>(
@@ -1881,10 +1890,10 @@ mod tests {
     use super::{
         AddPrompter, ConnectedUsbPrinter, DiscoverChoice, DiscoverPicker, ResolvedAddConnection,
         ResolvedAddPrinter, UsbAddTarget, UsbDeviceIdentity, UsbEnumeration, UsbInventory,
-        UsbPrinter, UsbPrinterInterface, UsbSelector, choose_discovered_host, execute, execute_add,
-        execute_discover, filter_usb_targets, printer_interfaces, registration_hint, resolve_add,
-        scan_announcement, select_usb_target, usb_add_targets, usb_registration_hint, usb_selector,
-        write_discovered_network_printers,
+        UsbPrinter, UsbPrinterInterface, UsbSelector, any_new_network_host, any_new_usb_printer,
+        choose_discovered_host, combined_registration_hint, execute, execute_add, execute_discover,
+        filter_usb_targets, printer_interfaces, resolve_add, scan_announcement, select_usb_target,
+        usb_add_targets, usb_selector, write_discovered_network_printers,
     };
     use crate::cli::{AddPrinterArgs, InventoryTransport, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
@@ -3523,59 +3532,35 @@ port = 9100
     }
 
     #[test]
-    fn registration_hint_for_a_new_host_at_the_default_port() {
+    fn any_new_network_host_is_true_for_a_newly_discovered_host() {
         let hosts = vec![discovered([10, 42, 0, 71], 9100)];
 
-        let hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9100);
-
-        assert_eq!(
-            hint,
-            Some(
-                "Register a new printer with: escpost printers add <NAME> --transport network --discover"
-                    .to_owned()
-            )
-        );
+        assert!(any_new_network_host(
+            &hosts,
+            &PrinterConfiguration::default()
+        ));
     }
 
     #[test]
-    fn registration_hint_for_a_new_host_at_a_non_default_port() {
-        let hosts = vec![discovered([10, 42, 0, 71], 9200)];
-
-        let hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9200);
-
-        assert_eq!(
-            hint,
-            Some(
-                "Register a new printer with: escpost printers add <NAME> --transport network --discover --port 9200"
-                    .to_owned()
-            )
-        );
-    }
-
-    #[test]
-    fn registration_hint_does_not_depend_on_how_many_new_hosts_were_found() {
+    fn any_new_network_host_does_not_depend_on_how_many_new_hosts_were_found() {
         let one_new_host = vec![discovered([10, 42, 0, 71], 9100)];
         let several_new_hosts = vec![
             discovered([10, 42, 0, 5], 9100),
             discovered([10, 42, 0, 71], 9100),
         ];
 
-        let hint_for_one = registration_hint(&one_new_host, &PrinterConfiguration::default(), 9100);
-        let hint_for_several =
-            registration_hint(&several_new_hosts, &PrinterConfiguration::default(), 9100);
-
-        assert_eq!(hint_for_one, hint_for_several);
-        assert_eq!(
-            hint_for_one,
-            Some(
-                "Register a new printer with: escpost printers add <NAME> --transport network --discover"
-                    .to_owned()
-            )
-        );
+        assert!(any_new_network_host(
+            &one_new_host,
+            &PrinterConfiguration::default()
+        ));
+        assert!(any_new_network_host(
+            &several_new_hosts,
+            &PrinterConfiguration::default()
+        ));
     }
 
     #[test]
-    fn registration_hint_is_none_when_every_discovered_host_is_already_configured() {
+    fn any_new_network_host_is_false_when_every_discovered_host_is_already_configured() {
         let configuration = PrinterConfiguration::parse(
             r#"
 [kitchen]
@@ -3587,16 +3572,79 @@ port = 9100
         .expect("the existing printer should parse");
         let hosts = vec![discovered([10, 42, 0, 71], 9100)];
 
-        let hint = registration_hint(&hosts, &configuration, 9100);
-
-        assert_eq!(hint, None);
+        assert!(!any_new_network_host(&hosts, &configuration));
     }
 
     #[test]
-    fn registration_hint_is_none_for_an_empty_sweep() {
-        let hint = registration_hint(&[], &PrinterConfiguration::default(), 9100);
+    fn any_new_network_host_is_false_for_an_empty_sweep() {
+        assert!(!any_new_network_host(&[], &PrinterConfiguration::default()));
+    }
 
-        assert_eq!(hint, None);
+    #[test]
+    fn combined_registration_hint_is_none_when_neither_transport_found_a_new_printer() {
+        assert_eq!(combined_registration_hint(false, false, 9100), None);
+    }
+
+    #[test]
+    fn combined_registration_hint_for_a_new_usb_printer_only() {
+        let hint = combined_registration_hint(true, false, 9100);
+
+        assert_eq!(
+            hint,
+            Some(
+                "Register a new printer with: escpost printers add <NAME> --transport usb"
+                    .to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn combined_registration_hint_for_a_new_network_host_only_at_the_default_port() {
+        let hint = combined_registration_hint(false, true, 9100);
+
+        assert_eq!(
+            hint,
+            Some(
+                "Register a new printer with: escpost printers add <NAME> --transport network --discover"
+                    .to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn combined_registration_hint_for_a_new_network_host_only_at_a_non_default_port() {
+        let hint = combined_registration_hint(false, true, 9200);
+
+        assert_eq!(
+            hint,
+            Some(
+                "Register a new printer with: escpost printers add <NAME> --transport network --discover --port 9200"
+                    .to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn combined_registration_hint_for_new_printers_on_both_transports() {
+        let hint = combined_registration_hint(true, true, 9100);
+
+        assert_eq!(
+            hint,
+            Some("Register a new printer with: escpost printers add <NAME>".to_owned())
+        );
+    }
+
+    #[test]
+    fn combined_registration_hint_for_new_printers_on_both_transports_ignores_the_network_port() {
+        // The interactive wizard prompts for the transport (and, if network,
+        // the port), so the "both" hint never grows a `--port` suffix even
+        // when the scan used a non-default port.
+        let hint = combined_registration_hint(true, true, 9200);
+
+        assert_eq!(
+            hint,
+            Some("Register a new printer with: escpost printers add <NAME>".to_owned())
+        );
     }
 
     #[test]
@@ -4166,50 +4214,46 @@ in_endpoint = \"0x81\"
     }
 
     #[test]
-    fn usb_registration_hint_for_a_new_usb_printer() {
+    fn any_new_usb_printer_is_true_for_a_new_usb_printer() {
         let connected = vec![ConnectedUsbPrinter {
             printer: netum_usb_printer(vec![0x01], vec![0x81]),
             configuration_index: None,
         }];
 
-        let hint = usb_registration_hint(&connected);
-
-        assert_eq!(
-            hint,
-            Some("Register a new printer with: escpost printers add <NAME> --transport usb")
-        );
+        assert!(any_new_usb_printer(&connected));
     }
 
     #[test]
-    fn usb_registration_hint_is_none_when_every_connected_usb_printer_is_configured() {
+    fn any_new_usb_printer_is_false_when_every_connected_usb_printer_is_configured() {
         let connected = vec![ConnectedUsbPrinter {
             printer: netum_usb_printer(vec![0x01], vec![0x81]),
             configuration_index: Some(0),
         }];
 
-        let hint = usb_registration_hint(&connected);
-
-        assert_eq!(hint, None);
+        assert!(!any_new_usb_printer(&connected));
     }
 
     #[test]
-    fn usb_registration_hint_is_none_for_no_connected_usb_printers() {
-        assert_eq!(usb_registration_hint(&[]), None);
+    fn any_new_usb_printer_is_false_for_no_connected_usb_printers() {
+        assert!(!any_new_usb_printer(&[]));
     }
 
     #[test]
-    fn both_transports_can_hint_at_once() {
+    fn both_transports_finding_new_printers_yields_the_combined_hint() {
         let connected = vec![ConnectedUsbPrinter {
             printer: netum_usb_printer(vec![0x01], vec![0x81]),
             configuration_index: None,
         }];
         let hosts = vec![discovered([10, 42, 0, 71], 9100)];
 
-        let usb_hint = usb_registration_hint(&connected);
-        let network_hint = registration_hint(&hosts, &PrinterConfiguration::default(), 9100);
+        let new_usb = any_new_usb_printer(&connected);
+        let new_network = any_new_network_host(&hosts, &PrinterConfiguration::default());
+        let hint = combined_registration_hint(new_usb, new_network, 9100);
 
-        assert!(usb_hint.is_some(), "a new USB printer should hint");
-        assert!(network_hint.is_some(), "a new network host should hint");
+        assert_eq!(
+            hint,
+            Some("Register a new printer with: escpost printers add <NAME>".to_owned())
+        );
     }
 
     #[test]

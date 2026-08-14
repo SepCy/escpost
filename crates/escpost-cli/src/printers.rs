@@ -767,16 +767,41 @@ impl DiscoverPicker for InquireDiscoverPicker {
     }
 }
 
+/// The first line `scan_with_progress` prints before the sweep starts: every
+/// target's subnet in CIDR form, with its interface name in parentheses when
+/// known (auto-detected targets carry one; explicit `--subnet` targets do
+/// not), comma-separated.
+fn scan_announcement(targets: &[ScanTarget], port: u16) -> String {
+    let targets = targets
+        .iter()
+        .map(|target| match &target.interface {
+            Some(interface) => format!("{} ({interface})", target.subnet),
+            None => target.subnet.to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("Scanning {targets} on port {port}")
+}
+
 /// Run the network sweep behind a progress bar on stderr, shared by `printers
 /// discover`'s network portion and the `add --discover` path so the two
 /// don't grow diverging bar setups. Hidden automatically by indicatif when
 /// stderr is not a terminal (piped output stays byte-identical), so there is
-/// no tty check here.
+/// no tty check here. Before the bar starts, `scan_announcement` names every
+/// swept network on its own stderr line; `auto_detected` additionally prints
+/// a tip toward `--subnet` when the targets came from automatic detection
+/// rather than an explicit flag, since only then is there something to
+/// override.
 async fn scan_with_progress(
     targets: &[ScanTarget],
     port: u16,
     probe_timeout: Duration,
+    auto_detected: bool,
 ) -> Vec<DiscoveredHost> {
+    eprintln!("{}", scan_announcement(targets, port));
+    if auto_detected {
+        eprintln!("Tip: pass --subnet <CIDR> to scan a different network.");
+    }
     let bar = ProgressBar::with_draw_target(Some(0), ProgressDrawTarget::stderr());
     bar.set_style(
         ProgressStyle::with_template("{msg} [{bar:40}] {pos}/{len}")
@@ -814,6 +839,7 @@ async fn discover_host_for_add(
         &targets,
         port,
         Duration::from_millis(arguments.timeout.unwrap_or(1000)),
+        arguments.subnet.is_empty(),
     )
     .await;
     let choices = hosts
@@ -873,6 +899,7 @@ async fn run_discover(
             &targets,
             port,
             Duration::from_millis(arguments.timeout.unwrap_or(1000)),
+            arguments.subnet.is_empty(),
         )
         .await
     };
@@ -1853,12 +1880,12 @@ mod tests {
         ResolvedAddPrinter, UsbAddTarget, UsbDeviceIdentity, UsbEnumeration, UsbInventory,
         UsbPrinter, UsbPrinterInterface, UsbSelector, choose_discovered_host, execute, execute_add,
         execute_discover, filter_usb_targets, printer_interfaces, registration_hint, resolve_add,
-        select_usb_target, usb_add_targets, usb_registration_hint, usb_selector,
+        scan_announcement, select_usb_target, usb_add_targets, usb_registration_hint, usb_selector,
         write_discovered_network_printers,
     };
     use crate::cli::{AddPrinterArgs, InventoryTransport, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
-    use crate::discovery::DiscoveredHost;
+    use crate::discovery::{DiscoveredHost, ScanTarget, Subnet};
     use crate::error::CliError;
     use std::net::Ipv4Addr;
 
@@ -3567,6 +3594,65 @@ port = 9100
         let hint = registration_hint(&[], &PrinterConfiguration::default(), 9100);
 
         assert_eq!(hint, None);
+    }
+
+    #[test]
+    fn scan_announcement_names_a_single_auto_detected_target_with_its_interface() {
+        let targets = vec![ScanTarget {
+            subnet: Subnet::parse("10.42.0.0/24").expect("a valid CIDR should parse"),
+            interface: Some("enx0".to_owned()),
+            excluded: None,
+        }];
+
+        let announcement = scan_announcement(&targets, 9100);
+
+        assert_eq!(announcement, "Scanning 10.42.0.0/24 (enx0) on port 9100");
+    }
+
+    #[test]
+    fn scan_announcement_mixes_auto_detected_and_explicit_targets() {
+        let targets = vec![
+            ScanTarget {
+                subnet: Subnet::parse("10.42.0.0/24").expect("a valid CIDR should parse"),
+                interface: Some("enx0".to_owned()),
+                excluded: None,
+            },
+            ScanTarget {
+                subnet: Subnet::parse("127.0.0.1/32").expect("a valid CIDR should parse"),
+                interface: None,
+                excluded: None,
+            },
+        ];
+
+        let announcement = scan_announcement(&targets, 9200);
+
+        assert_eq!(
+            announcement,
+            "Scanning 10.42.0.0/24 (enx0), 127.0.0.1/32 on port 9200"
+        );
+    }
+
+    #[test]
+    fn scan_announcement_lists_explicit_targets_without_an_interface() {
+        let targets = vec![
+            ScanTarget {
+                subnet: Subnet::parse("10.42.0.0/24").expect("a valid CIDR should parse"),
+                interface: None,
+                excluded: None,
+            },
+            ScanTarget {
+                subnet: Subnet::parse("192.168.0.0/24").expect("a valid CIDR should parse"),
+                interface: None,
+                excluded: None,
+            },
+        ];
+
+        let announcement = scan_announcement(&targets, 9100);
+
+        assert_eq!(
+            announcement,
+            "Scanning 10.42.0.0/24, 192.168.0.0/24 on port 9100"
+        );
     }
 
     #[test]

@@ -1092,6 +1092,14 @@ fn printers_discover_finds_a_listening_loopback_printer() {
     assert!(stdout.contains(&format!("[1] 127.0.0.1:{port}")));
     assert!(stdout.contains("status: new"));
     assert!(
+        stderr.contains(&format!("Scanning 127.0.0.1/32 on port {port}")),
+        "stderr should announce the scanned network:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Tip:"),
+        "an explicit --subnet should not print the auto-detection tip:\n{stderr}"
+    );
+    assert!(
         stderr.contains(&format!(
             "Register a new printer with: escpost printers add <NAME> --transport network --discover --port {port}"
         )),

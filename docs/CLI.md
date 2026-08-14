@@ -535,7 +535,9 @@ and serial) matches its saved descriptor; interface and endpoints on that
 block always come from the saved registration, not a live descriptor read, so
 checking presence never opens the device and cannot fail with a permission
 error. The live bus, address, and model string are shown alongside the saved
-name when connected; otherwise the printer is `unavailable`. A configured
+name when connected, with the manufacturer string on its own `manufacturer:`
+line directly below `model:` whenever the device reports one; otherwise the
+printer is `unavailable`. A configured
 network target is connected when a TCP connection to its saved host and port
 succeeds; refused, unresolved, and timed-out targets are unavailable.
 
@@ -608,9 +610,12 @@ format as `printers list` so the commands cannot drift apart. A connected
 USB printer matching a saved
 identity heads its block with that name, `status: configured`, a `model:`
 line, and a `profile:` line (falling back to `unassigned`, exactly like
-`printers list`); an unmatched USB printer heads its block with its
-descriptor-derived label and `status: new`, omitting both the `model:` and
-`profile:` lines. A network result matching a saved printer's host and port
+`printers list`); an unmatched USB printer heads its block with its product
+string alone (falling back to a generic `USB printer` label when the device
+reports none) and `status: new`, omitting the `model:` and `profile:` lines.
+Either way, a `manufacturer:` line follows directly below where `model:`
+would be, whenever the device reports a manufacturer string, regardless of
+`status`. A network result matching a saved printer's host and port
 heads its block with that name, `status: configured`, and `profile:`
 (falling back to `unassigned`); an unmatched host heads its block with its
 bare `host:port` endpoint and `status: new`, and omits the `profile:` line
@@ -619,15 +624,17 @@ additionally show `interface:`, and further saved names sharing the same
 host and port appear as `also configured as:` lines:
 
 ```text
-[1] USB Portable Printer (YICHIP3121)
+[1] USB Portable Printer
     status: new
+    manufacturer: YICHIP3121
     transport: usb
     usb: 0416:5011; bus 3 address 57; interface 0
     endpoints: out 0x01; in 0x81
     serial: B120300001
 [2] netum-usb
     status: configured
-    model: USB Portable Printer (YICHIP3121)
+    model: USB Portable Printer
+    manufacturer: YICHIP3121
     profile: NT-5890K
     transport: usb
     usb: 0416:5011; bus 3 address 60; interface 0

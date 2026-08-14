@@ -924,10 +924,13 @@ fn discovery_targets(subnets: &[Subnet]) -> Result<Vec<ScanTarget>, CliError> {
 }
 
 /// Write each connected USB printer's block, numbered from 1. New printers
-/// (no matching configuration) head their block with the descriptor-derived
-/// label, `status: new`, and no `model:`/`profile:` lines; configured
-/// printers head it with the saved name, `status: configured`, and both
-/// lines, falling back to `unassigned` like `printers list`.
+/// (no matching configuration) head their block with the product string
+/// alone (falling back to a generic label, like `printers list`'s own
+/// missing-product handling), `status: new`, and no `model:`/`profile:`
+/// lines; configured printers head it with the saved name, `status:
+/// configured`, and both lines, falling back to `unassigned` like `printers
+/// list`. Either way, `write_usb_listing` adds a `manufacturer:` line
+/// whenever the device reports one, regardless of `status`.
 fn write_discovered_usb_printers(
     output: &mut impl Write,
     connected: &[ConnectedUsbPrinter],
@@ -937,17 +940,20 @@ fn write_discovered_usb_printers(
         let configured = connected
             .configuration_index
             .map(|index| &configuration.usb_printers()[index]);
-        let model = usb_printer_label(&connected.printer);
+        // `None` here drops the manufacturer suffix `usb_printer_label_parts`
+        // would otherwise append: the manufacturer is its own line now (see
+        // `write_usb_listing`), not folded into the product string.
+        let product = usb_printer_label_parts(connected.printer.product.as_deref(), None);
         let listing = match configured {
             Some(configured) => UsbListing {
                 heading: &configured.name,
                 status: "configured",
-                model: Some(model.as_str()),
+                model: Some(product.as_str()),
                 profile: Some(configured.profile.as_deref()),
                 printer: &connected.printer,
             },
             None => UsbListing {
-                heading: &model,
+                heading: &product,
                 status: "new",
                 model: None,
                 profile: None,
@@ -1525,11 +1531,15 @@ fn is_printer_device(device: &nusb::DeviceInfo) -> bool {
 /// A USB printer entry as shown by both `printers list` and `printers
 /// discover`, mirroring `NetworkListing` below so the two commands cannot
 /// drift apart. `model` distinguishes "no model line" (an unconfigured
-/// connected printer) from "print the model line" (a configured printer).
-/// `profile` distinguishes "no profile line at all" (a freshly discovered,
-/// unconfigured printer on `discover`) from "print the line, falling back to
-/// `unassigned`" (a configured printer on either command, or an unconfigured
-/// but connected printer on `list`).
+/// connected printer) from "print the model line" (a configured printer);
+/// either way it is the product string alone, never combined with the
+/// manufacturer. The `manufacturer:` line below it is driven directly by
+/// `printer.manufacturer` rather than by a field on this struct, so it
+/// appears whenever the device reports one, independent of whether `model`
+/// itself is shown. `profile` distinguishes "no profile line at all" (a
+/// freshly discovered, unconfigured printer on `discover`) from "print the
+/// line, falling back to `unassigned`" (a configured printer on either
+/// command, or an unconfigured but connected printer on `list`).
 struct UsbListing<'a> {
     heading: &'a str,
     status: &'a str,
@@ -1547,6 +1557,9 @@ fn write_usb_listing(
     writeln!(output, "    status: {}", listing.status).map_err(CliError::WriteHumanOutput)?;
     if let Some(model) = listing.model {
         writeln!(output, "    model: {model}").map_err(CliError::WriteHumanOutput)?;
+    }
+    if let Some(manufacturer) = listing.printer.manufacturer.as_deref() {
+        writeln!(output, "    manufacturer: {manufacturer}").map_err(CliError::WriteHumanOutput)?;
     }
     if let Some(profile) = listing.profile {
         writeln!(
@@ -1593,24 +1606,22 @@ fn write_usb_listing(
 /// `configured` is not optional here, unlike the discover-side listing. The
 /// `model:` line is omitted rather than falling back to a generic label when
 /// the device identity itself carries no product string, matching
-/// `write_usb_listing`'s own `model: None` handling.
+/// `write_usb_listing`'s own `model: None` handling. The `manufacturer:` line
+/// needs no equivalent handling here: `write_usb_listing` already sources it
+/// straight from `printer.manufacturer`.
 fn write_printer(
     output: &mut impl Write,
     number: usize,
     printer: &UsbPrinter,
     configured: &ConfiguredUsbPrinter,
 ) -> Result<(), CliError> {
-    let model = printer
-        .product
-        .as_deref()
-        .map(|_| usb_printer_label(printer));
     write_usb_listing(
         output,
         number,
         &UsbListing {
             heading: &configured.name,
             status: "connected",
-            model: model.as_deref(),
+            model: printer.product.as_deref(),
             profile: Some(configured.profile.as_deref()),
             printer,
         },
@@ -1744,10 +1755,11 @@ fn compare_display_names(left: &str, right: &str) -> std::cmp::Ordering {
         .then_with(|| left.cmp(right))
 }
 
-fn usb_printer_label(printer: &UsbPrinter) -> String {
-    usb_printer_label_parts(printer.product.as_deref(), printer.manufacturer.as_deref())
-}
-
+/// Combine a product string and manufacturer into the one-line label used by
+/// the `add` picker's menu row and its saved-descriptor `Display` impl, where
+/// screen density matters more than the `list`/`discover` blocks' split
+/// `model:`/`manufacturer:` lines. Falls back to a generic product label when
+/// the device reports none.
 fn usb_printer_label_parts(product: Option<&str>, manufacturer: Option<&str>) -> String {
     let product = product.unwrap_or("USB printer");
     manufacturer.map_or_else(
@@ -2139,7 +2151,8 @@ in_endpoint = \"0x81\"
             "\
 [1] netum-usb
     status: connected
-    model: USB Portable Printer (YICHIP3121)
+    model: USB Portable Printer
+    manufacturer: YICHIP3121
     profile: unassigned
     transport: usb
     usb: 0416:5011; bus 3 address 57; interface 0
@@ -2723,7 +2736,8 @@ in_endpoint = \"0x86\"
             "\
 [1] netum-usb
     status: connected
-    model: USB Portable Printer (YICHIP3121)
+    model: USB Portable Printer
+    manufacturer: YICHIP3121
     profile: unassigned
     transport: usb
     usb: 0416:5011; bus 003 address 60; interface 3
@@ -3618,17 +3632,58 @@ port = 9100
         )
         .expect("discovery should succeed");
 
+        // The heading is the product string alone (no more combined "product
+        // (manufacturer)" label), but the manufacturer still shows up as its
+        // own line in the block below, right where `model:` would be if this
+        // device were configured.
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
             "\
-[1] USB Portable Printer (YICHIP3121)
+[1] USB Portable Printer
     status: new
+    manufacturer: YICHIP3121
     transport: usb
     usb: 0416:5011; bus 3 address 57; interface 0
     endpoints: out 0x01; in 0x81
     serial: B120300001
 "
         );
+    }
+
+    #[test]
+    fn discover_falls_back_to_a_generic_heading_when_the_new_device_has_no_product_string() {
+        let mut inventory = FixedInventory {
+            printers: vec![UsbPrinter {
+                vendor_id: 0x0416,
+                product_id: 0x5011,
+                bus: "3".to_owned(),
+                address: 57,
+                manufacturer: None,
+                product: None,
+                serial_number: None,
+                interface_number: 0,
+                out_endpoints: vec![0x01],
+                in_endpoints: Vec::new(),
+            }],
+        };
+        let mut output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &[],
+            None,
+            &mut output,
+            &mut Vec::new(),
+        )
+        .expect("discovery should succeed");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(
+            output.starts_with("[1] USB printer\n"),
+            "a device with no product string at all must fall back to a generic heading:\n{output}"
+        );
+        assert!(!output.contains("manufacturer:"));
     }
 
     #[test]
@@ -3667,7 +3722,56 @@ in_endpoint = \"0x81\"
             "\
 [1] netum-usb
     status: configured
-    model: USB Portable Printer (YICHIP3121)
+    model: USB Portable Printer
+    manufacturer: YICHIP3121
+    profile: NT-5890K
+    transport: usb
+    usb: 0416:5011; bus 003 address 60; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+"
+        );
+    }
+
+    #[test]
+    fn discover_omits_the_manufacturer_line_when_the_device_reports_none() {
+        let mut printer = netum_usb_printer(vec![0x01], vec![0x81]);
+        printer.manufacturer = None;
+        let mut inventory = FixedInventory {
+            printers: vec![printer],
+        };
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+profile = \"NT-5890K\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+in_endpoint = \"0x81\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &configuration,
+            &[],
+            None,
+            &mut output,
+            &mut Vec::new(),
+        )
+        .expect("discovery should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] netum-usb
+    status: configured
+    model: USB Portable Printer
     profile: NT-5890K
     transport: usb
     usb: 0416:5011; bus 003 address 60; interface 0
@@ -3838,7 +3942,7 @@ in_endpoint = \"0x81\"
         assert_eq!(
             headings,
             vec![
-                "[1] USB Portable Printer (YICHIP3121)".to_owned(),
+                "[1] USB Portable Printer".to_owned(),
                 "[2] netum-usb".to_owned(),
                 "[3] 10.42.0.5:9100".to_owned(),
             ]
@@ -3990,7 +4094,7 @@ in_endpoint = \"0x81\"
 
         let output = String::from_utf8(output).expect("the listing should be UTF-8");
         assert!(
-            output.contains("[1] USB Portable Printer (YICHIP3121)"),
+            output.contains("[1] USB Portable Printer"),
             "the device that enumerated fine should still be listed:\n{output}"
         );
         let warnings_output =

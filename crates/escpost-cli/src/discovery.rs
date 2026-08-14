@@ -173,41 +173,48 @@ pub(crate) async fn scan(
     probe_timeout: Duration,
     mut on_progress: impl FnMut(u64, u64),
 ) -> Vec<DiscoveredHost> {
-    // Collected before spawning so `total` is known, and reported via
-    // `on_progress`, before the first probe starts.
-    let candidates: Vec<(&ScanTarget, Ipv4Addr)> = targets
+    // Counted before spawning so `total` is known, and reported via
+    // `on_progress`, before the first probe starts. Counted per target
+    // (each target's transient `hosts()` Vec is dropped before the next) so
+    // this never holds every target's candidates in memory at once — that
+    // matters for large explicit --subnet stacks.
+    let total: u64 = targets
         .iter()
-        .flat_map(|target| {
+        .map(|target| {
             target
                 .subnet
                 .hosts()
                 .into_iter()
-                .filter(move |address| target.excluded != Some(*address))
-                .map(move |address| (target, address))
+                .filter(|address| target.excluded != Some(*address))
+                .count() as u64
         })
-        .collect();
-    let total = candidates.len() as u64;
+        .sum();
     on_progress(0, total);
 
     let limiter = Arc::new(Semaphore::new(MAX_CONCURRENT_PROBES));
     let mut probes = JoinSet::new();
-    for (target, address) in candidates {
-        let interface = target.interface.clone();
-        let limiter = Arc::clone(&limiter);
-        probes.spawn(async move {
-            let _permit = limiter
-                .acquire_owned()
-                .await
-                .expect("the probe semaphore is never closed");
-            let connected = timeout(probe_timeout, TcpStream::connect((address, port)))
-                .await
-                .is_ok_and(|result| result.is_ok());
-            connected.then_some(DiscoveredHost {
-                address,
-                port,
-                interface,
-            })
-        });
+    for target in targets {
+        for address in target.subnet.hosts() {
+            if target.excluded == Some(address) {
+                continue;
+            }
+            let interface = target.interface.clone();
+            let limiter = Arc::clone(&limiter);
+            probes.spawn(async move {
+                let _permit = limiter
+                    .acquire_owned()
+                    .await
+                    .expect("the probe semaphore is never closed");
+                let connected = timeout(probe_timeout, TcpStream::connect((address, port)))
+                    .await
+                    .is_ok_and(|result| result.is_ok());
+                connected.then_some(DiscoveredHost {
+                    address,
+                    port,
+                    interface,
+                })
+            });
+        }
     }
 
     let mut done = 0u64;

@@ -784,8 +784,12 @@ async fn scan_with_progress(
             .progress_chars("=> "),
     );
     bar.set_message("Scanning for network printers");
+    let mut length_set = false;
     let hosts = discovery::scan(targets, port, probe_timeout, |done, total| {
-        bar.set_length(total);
+        if !length_set {
+            bar.set_length(total);
+            length_set = true;
+        }
         bar.set_position(done);
     })
     .await;

@@ -178,7 +178,12 @@ pub(crate) async fn run(arguments: PrintersArgs, non_interactive: bool) -> Resul
                 &network_statuses,
                 list.transport,
                 &mut io::stdout().lock(),
-            )
+            )?;
+            // Count-independent, unlike discover's hints: there is always
+            // exactly one next step worth pointing at, whether the registry
+            // was empty or full.
+            eprintln!("Discover connected printers with: escpost printers discover");
+            Ok(())
         }
         PrintersCommand::Add(mut add) => {
             if add.discover {
@@ -585,6 +590,13 @@ impl fmt::Display for UsbAddTarget {
     }
 }
 
+/// The pure core of `printers list`: a registry-only inventory of configured
+/// USB and network printers, each cross-checked against what is actually
+/// reachable right now (`merge_usb_inventory`'s live bus/address/model for
+/// USB, `network_statuses`'s TCP probe for network). A connected USB
+/// interface that matches no saved identity is never shown here — that is
+/// `printers discover`'s job — so the merge is used only to resolve status
+/// and live coordinates for entries that are already in `printers.toml`.
 fn execute(
     inventory: &mut impl UsbInventory,
     configuration: &PrinterConfiguration,
@@ -605,7 +617,7 @@ fn execute(
         transport != Some(InventoryTransport::Usb),
     );
     if printers.is_empty() {
-        writeln!(output, "No usable printers found.").map_err(CliError::WriteHumanOutput)?;
+        writeln!(output, "No printers configured.").map_err(CliError::WriteHumanOutput)?;
         return Ok(());
     }
 
@@ -1022,12 +1034,17 @@ fn listed_printers<'a>(
     include_network: bool,
 ) -> Vec<ListedPrinter<'a>> {
     let mut printers = Vec::new();
+    // `printers list` is the registry, not a discovery tool: a connected USB
+    // interface that matches no saved identity is `printers discover`'s
+    // business now, so it is skipped here rather than listed under its
+    // descriptor-derived label.
     for connected in &usb.connected {
-        let configured = connected
-            .configuration_index
-            .map(|index| &configuration.usb_printers()[index]);
+        let Some(index) = connected.configuration_index else {
+            continue;
+        };
+        let configured = &configuration.usb_printers()[index];
         printers.push(ListedPrinter {
-            display_name: connected_display_name(&connected.printer, configured),
+            display_name: connected_display_name(&connected.printer, Some(configured)),
             kind: ListedPrinterKind::ConnectedUsb(connected),
         });
     }
@@ -1952,6 +1969,62 @@ out_endpoint = "0x01"
                 in_endpoints: vec![0x81],
             }],
         };
+        // `list` only shows configured printers now, so the coordinates a
+        // connected USB interface needs for `print` must come from a
+        // CONFIGURED entry's merged block, not a bare unconfigured device.
+        let configuration = PrinterConfiguration::parse(
+            "\
+[netum-usb]
+transport = \"usb\"
+vendor_id = \"0x0416\"
+product_id = \"0x5011\"
+serial_number = \"B120300001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+in_endpoint = \"0x81\"
+",
+        )
+        .expect("the printer configuration should be valid");
+        let mut output = Vec::new();
+
+        execute(&mut inventory, &configuration, &[], None, &mut output)
+            .expect("listing should succeed");
+
+        assert_eq!(
+            String::from_utf8(output).expect("the listing should be UTF-8"),
+            "\
+[1] netum-usb
+    status: connected
+    model: USB Portable Printer (YICHIP3121)
+    profile: unassigned
+    transport: usb
+    usb: 0416:5011; bus 3 address 57; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+"
+        );
+    }
+
+    #[test]
+    fn a_connected_but_unconfigured_usb_printer_is_not_listed() {
+        // Discovery duty moved entirely to `printers discover`: a connected
+        // USB interface that matches no saved identity must not produce a
+        // block in `list`, even though it would previously have appeared
+        // under its descriptor-derived label.
+        let mut inventory = FixedInventory {
+            printers: vec![UsbPrinter {
+                vendor_id: 0x0416,
+                product_id: 0x5011,
+                bus: "3".to_owned(),
+                address: 57,
+                manufacturer: Some("YICHIP3121".to_owned()),
+                product: Some("USB Portable Printer".to_owned()),
+                serial_number: Some("B120300001".to_owned()),
+                interface_number: 0,
+                out_endpoints: vec![0x01],
+                in_endpoints: vec![0x81],
+            }],
+        };
         let mut output = Vec::new();
 
         execute(
@@ -1965,15 +2038,7 @@ out_endpoint = "0x01"
 
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
-            "\
-[1] USB Portable Printer (YICHIP3121)
-    status: connected
-    profile: unassigned
-    transport: usb
-    usb: 0416:5011; bus 3 address 57; interface 0
-    endpoints: out 0x01; in 0x81
-    serial: B120300001
-"
+            "No printers configured.\n"
         );
     }
 
@@ -1995,7 +2060,7 @@ out_endpoint = "0x01"
 
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
-            "No usable printers found.\n"
+            "No printers configured.\n"
         );
     }
 
@@ -2156,6 +2221,14 @@ serial_number = \"CONNECTED\"
 interface_number = 0
 out_endpoint = \"0x01\"
 
+[Alpha]
+transport = \"usb\"
+profile = \"CONNECTED-ALPHA\"
+vendor_id = \"0x2000\"
+product_id = \"0x0002\"
+interface_number = 0
+out_endpoint = \"0x01\"
+
 [charlie]
 transport = \"usb\"
 profile = \"OFFLINE-C\"
@@ -2187,7 +2260,7 @@ out_endpoint = \"0x01\"
             .collect::<Vec<_>>();
         assert_eq!(
             headings,
-            vec!["[1] Alpha Model", "[2] Zulu", "[3] Bravo", "[4] charlie",]
+            vec!["[1] Alpha", "[2] Zulu", "[3] Bravo", "[4] charlie",]
         );
     }
 
@@ -2238,10 +2311,16 @@ out_endpoint = \"0x01\"
         execute(&mut inventory, &configuration, &[], None, &mut output)
             .expect("listing should succeed");
 
+        // Both connected interfaces share one USB identity, but only one
+        // configured entry claims it (`classify_usb_printers`, first-match by
+        // stable location). The other interface is left unconfigured, and
+        // `list` no longer shows connected-but-unconfigured devices at all,
+        // so it must produce no second block ("Second Model" never appears).
         let output = String::from_utf8(output).expect("the listing should be UTF-8");
         assert_eq!(output.matches("] shared-identity\n").count(), 1);
-        assert_eq!(output.matches("status: connected").count(), 2);
+        assert_eq!(output.matches("status: connected").count(), 1);
         assert!(!output.contains("status: unavailable"));
+        assert!(!output.contains("Second Model"));
     }
 
     #[test]

@@ -404,6 +404,12 @@ fn printers_list_reports_saved_network_reachability_without_discovery() {
     assert!(stdout.contains("transport: network"));
     assert!(stdout.contains(&format!("network: 127.0.0.1:{port}")));
     assert!(
+        String::from_utf8_lossy(&connected.stderr)
+            .contains("Discover connected printers with: escpost printers discover"),
+        "the discover tip should print even when printers were listed:\n{}",
+        String::from_utf8_lossy(&connected.stderr)
+    );
+    assert!(
         received
             .join()
             .expect("the probe receiver should finish")
@@ -417,6 +423,34 @@ fn printers_list_reports_saved_network_reachability_without_discovery() {
         String::from_utf8_lossy(&unavailable.stdout).contains("status: unavailable"),
         "a refused connection should make the saved target unavailable:\n{}",
         String::from_utf8_lossy(&unavailable.stdout)
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_list_reports_no_printers_configured_for_an_empty_registry() {
+    let directory = temporary_directory("empty-registry");
+    let config = directory.join("printers.toml");
+    // `list` requires an explicit --config path to already exist (unlike
+    // `discover`'s `load_for_update`), so an empty-but-valid file stands in
+    // for a freshly initialized, still-empty registry.
+    fs::write(&config, "").expect("an empty configuration file should be writable");
+
+    // The network filter keeps this test from depending on USB hardware;
+    // the empty configuration file makes the registry itself empty.
+    let output = run_printers_list(&config);
+
+    assert_command_succeeded(&output);
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "No printers configured.\n"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("Discover connected printers with: escpost printers discover"),
+        "an empty registry should still hint at discovery:\n{}",
+        String::from_utf8_lossy(&output.stderr)
     );
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
@@ -965,7 +999,9 @@ fn printers_discover_documents_its_options() {
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     assert!(output.status.success(), "command failed:\n{stdout}");
-    assert!(stdout.contains("Scan directly connected networks for listening printers"));
+    assert!(stdout.contains(
+        "Find connected USB printers and network printers listening on the RAW TCP port"
+    ));
     assert!(stdout.contains("Usage: escpost printers discover"));
     assert!(stdout.contains("--transport <TRANSPORT>"));
     assert!(stdout.contains("--port <PORT>"));

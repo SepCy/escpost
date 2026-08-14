@@ -166,7 +166,7 @@ pub(crate) enum PrintersCommand {
     /// Register a printer in the local configuration.
     Add(AddPrinterArgs),
 
-    /// Scan directly connected networks for listening printers.
+    /// Find connected USB printers and network printers listening on the RAW TCP port.
     Discover(DiscoverPrintersArgs),
 }
 

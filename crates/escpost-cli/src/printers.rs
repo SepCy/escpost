@@ -1251,16 +1251,15 @@ fn connected_usb_printer(
     }
 }
 
-/// The list-specific analogue of `merge_usb_inventory`'s classification:
-/// match each metadata-only device identity against the saved USB
-/// configuration, first-match-wins by stable location exactly like
-/// `classify_usb_printers`, then sort the connected results by display
-/// name. An identity matching no saved configuration is dropped outright —
-/// unlike `printers discover`, `list` never shows a connected-but-
-/// unconfigured USB device — and a saved printer claimed by an identity that
-/// lost the first-match-wins tiebreak to a sibling configuration is neither
-/// connected nor unavailable, mirroring `classify_usb_printers`' own
-/// ambiguity handling.
+/// The list-specific analogue of `classify_usb_printers`: match each
+/// metadata-only device identity against the saved USB configuration,
+/// first-match-wins by stable location exactly like that function, then
+/// sort the connected results by display name. An identity matching no
+/// saved configuration is dropped outright — unlike `printers discover`,
+/// `list` never shows a connected-but-unconfigured USB device — and a saved
+/// printer claimed by an identity that lost the first-match-wins tiebreak
+/// to a sibling configuration is neither connected nor unavailable,
+/// mirroring `classify_usb_printers`' own ambiguity handling.
 fn merge_usb_identities(
     mut identities: Vec<UsbDeviceIdentity>,
     configuration: &PrinterConfiguration,
@@ -1318,7 +1317,7 @@ fn merge_usb_identities(
 }
 
 /// Classify connected USB printers for `printers discover`. Unlike
-/// `merge_usb_inventory`, this keeps the stable-location order instead of
+/// `merge_usb_identities`, this keeps the stable-location order instead of
 /// re-sorting by display name afterward: `list` groups by name, but
 /// `discover`'s USB block simply reports every connected printer as it is
 /// found, the same way its network sweep already reports hosts in scan

@@ -601,11 +601,13 @@ be repeated to scan several networks in one sweep.
 `--port` selects the probed port and defaults to `9100`. `--timeout <MS>`
 bounds each per-host connection attempt and defaults to `1000`. Probes run
 concurrently and send zero bytes; a reachable port is reported as-is and is
-never assumed to be a printer. Before the sweep starts, stderr announces
-every network being scanned (with its interface name for automatically
-detected ones) and, only when no `--subnet` was given, a tip pointing at
-`--subnet` to scan a different network; a progress bar then follows on
-stderr during the network sweep when stderr is attached to a terminal.
+never assumed to be a printer. Before the sweep starts, stderr prints a
+`Scanning <N> network(s) on port <port>:` header followed by one indented
+line per network being scanned (with its interface name for automatically
+detected ones) and, only when no `--subnet` was given, a trailing tip
+pointing at `--subnet` to scan a different network; a progress bar then
+follows on stderr during the network sweep when stderr is attached to a
+terminal.
 
 USB results are listed first, then network results, numbered continuously
 across both; network results are ordered by ascending IPv4 address,

@@ -1092,8 +1092,12 @@ fn printers_discover_finds_a_listening_loopback_printer() {
     assert!(stdout.contains(&format!("[1] 127.0.0.1:{port}")));
     assert!(stdout.contains("status: new"));
     assert!(
-        stderr.contains(&format!("Scanning 127.0.0.1/32 on port {port}")),
-        "stderr should announce the scanned network:\n{stderr}"
+        stderr.contains(&format!("Scanning 1 network on port {port}:")),
+        "stderr should announce the scanned network count:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("  - 127.0.0.1/32"),
+        "stderr should list the scanned network:\n{stderr}"
     );
     assert!(
         !stderr.contains("Tip:"),

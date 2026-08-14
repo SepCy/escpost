@@ -767,31 +767,34 @@ impl DiscoverPicker for InquireDiscoverPicker {
     }
 }
 
-/// The first line `scan_with_progress` prints before the sweep starts: every
-/// target's subnet in CIDR form, with its interface name in parentheses when
-/// known (auto-detected targets carry one; explicit `--subnet` targets do
-/// not), comma-separated.
+/// What `scan_with_progress` prints before the sweep starts: a
+/// `Scanning <N> network(s) on port <port>:` header (singular only for
+/// exactly one target), followed by one indented `  - <CIDR>` line per
+/// target, with the interface name in parentheses when known
+/// (auto-detected targets carry one; explicit `--subnet` targets do not).
+/// No trailing newline — `eprintln!` supplies the final one.
 fn scan_announcement(targets: &[ScanTarget], port: u16) -> String {
-    let targets = targets
-        .iter()
-        .map(|target| match &target.interface {
-            Some(interface) => format!("{} ({interface})", target.subnet),
-            None => target.subnet.to_string(),
-        })
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("Scanning {targets} on port {port}")
+    let count = targets.len();
+    let noun = if count == 1 { "network" } else { "networks" };
+    let mut announcement = format!("Scanning {count} {noun} on port {port}:");
+    for target in targets {
+        announcement.push_str("\n  - ");
+        announcement.push_str(&target.subnet.to_string());
+        if let Some(interface) = &target.interface {
+            announcement.push_str(&format!(" ({interface})"));
+        }
+    }
+    announcement
 }
 
 /// Run the network sweep behind a progress bar on stderr, shared by `printers
 /// discover`'s network portion and the `add --discover` path so the two
 /// don't grow diverging bar setups. Hidden automatically by indicatif when
 /// stderr is not a terminal (piped output stays byte-identical), so there is
-/// no tty check here. Before the bar starts, `scan_announcement` names every
-/// swept network on its own stderr line; `auto_detected` additionally prints
-/// a tip toward `--subnet` when the targets came from automatic detection
-/// rather than an explicit flag, since only then is there something to
-/// override.
+/// no tty check here. Before the bar starts, `scan_announcement` lists every
+/// swept network on stderr; `auto_detected` additionally prints a tip toward
+/// `--subnet` when the targets came from automatic detection rather than an
+/// explicit flag, since only then is there something to override.
 async fn scan_with_progress(
     targets: &[ScanTarget],
     port: u16,
@@ -3606,7 +3609,26 @@ port = 9100
 
         let announcement = scan_announcement(&targets, 9100);
 
-        assert_eq!(announcement, "Scanning 10.42.0.0/24 (enx0) on port 9100");
+        assert_eq!(
+            announcement,
+            "Scanning 1 network on port 9100:\n  - 10.42.0.0/24 (enx0)"
+        );
+    }
+
+    #[test]
+    fn scan_announcement_uses_singular_network_for_a_single_explicit_target() {
+        let targets = vec![ScanTarget {
+            subnet: Subnet::parse("127.0.0.1/32").expect("a valid CIDR should parse"),
+            interface: None,
+            excluded: None,
+        }];
+
+        let announcement = scan_announcement(&targets, 9100);
+
+        assert_eq!(
+            announcement,
+            "Scanning 1 network on port 9100:\n  - 127.0.0.1/32"
+        );
     }
 
     #[test]
@@ -3628,7 +3650,7 @@ port = 9100
 
         assert_eq!(
             announcement,
-            "Scanning 10.42.0.0/24 (enx0), 127.0.0.1/32 on port 9200"
+            "Scanning 2 networks on port 9200:\n  - 10.42.0.0/24 (enx0)\n  - 127.0.0.1/32"
         );
     }
 
@@ -3651,7 +3673,7 @@ port = 9100
 
         assert_eq!(
             announcement,
-            "Scanning 10.42.0.0/24, 192.168.0.0/24 on port 9100"
+            "Scanning 2 networks on port 9100:\n  - 10.42.0.0/24\n  - 192.168.0.0/24"
         );
     }
 

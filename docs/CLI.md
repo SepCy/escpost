@@ -892,7 +892,7 @@ the completed implementation must satisfy.
 
 | ID | Requirement |
 |---|---|
-| CLI-M01 | Make `printers list` a passive, transport-neutral inventory of currently usable or known printers. |
+| CLI-M01 | Make `printers list` a passive, transport-neutral inventory of configured printers, each showing whether it is currently usable. |
 | CLI-M02 | List all supported transports by default and permit an explicit transport filter. |
 | CLI-M03 | Identify each result's transport and expose the connection fields required for printing. |
 | CLI-M04 | Keep machine-readable listing output separate from human output and version its schema. |
@@ -901,7 +901,7 @@ the completed implementation must satisfy.
 | CLI-M07 | Never infer a scan or pairing target by display name or choose silently among several candidates. |
 | CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
 | CLI-M09 | Keep passive listing free of configuration writes while showing matched names and an explicit assigned or unassigned profile for every printer. |
-| CLI-M10 | Merge discovered and configured printers once, list connected before unavailable, and sort each status group by display name. |
+| CLI-M10 | Use one merge of connected and configured USB printers to resolve each configured printer's status, list connected before unavailable, and sort each status group by display name. |
 | CLI-M11 | Register USB or known network targets with `printers add`, selecting a USB descriptor interactively from a menu or non-interactively by explicit vendor, product, and optional serial selectors, and prompting for missing values only at an interactive terminal. |
 | CLI-M12 | Make non-interactive registration deterministic, default RAW TCP to port 9100, and keep the profile optional. |
 | CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |

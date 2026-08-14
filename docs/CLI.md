@@ -659,13 +659,15 @@ never writes to `printers.toml`. Use `printers add --discover` (or `add
 --transport usb` for a USB printer) to register a result. When the sweep
 finds at least one printer with `status: new`, stderr prints exactly one
 registration hint after the listing, chosen by which transport(s) found a
-new printer: a new USB printer only hints at `printers add <NAME>
---transport usb`; a new network host only hints at `printers add <NAME>
---transport network --discover` (its target command auto-selects a single
-new host or opens the picker for several, so it never depends on how many
-were found); finding new printers on both transports instead hints at the
-bare `printers add <NAME>`, since the interactive wizard it launches prompts
-for the transport itself.
+new printer: a new USB printer only prints "Register a new USB printer
+with" and hints at `printers add <NAME> --transport usb`; a new network
+host only prints "Register a new network printer with" and hints at
+`printers add <NAME> --transport network --discover` (its target command
+auto-selects a single new host or opens the picker for several, so it
+never depends on how many were found); finding new printers on both
+transports instead prints the transport-agnostic "Register a new printer
+with" and hints at the bare `printers add <NAME>`, since the interactive
+wizard it launches prompts for the transport itself.
 
 ### `printers scan`
 

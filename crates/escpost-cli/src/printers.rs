@@ -1129,7 +1129,8 @@ fn combined_registration_hint(new_usb: bool, new_network: bool, port: u16) -> Op
     match (new_usb, new_network) {
         (false, false) => None,
         (true, false) => Some(
-            "Register a new printer with: escpost printers add <NAME> --transport usb".to_owned(),
+            "Register a new USB printer with: escpost printers add <NAME> --transport usb"
+                .to_owned(),
         ),
         (false, true) => {
             let port_suffix = if port == 9100 {
@@ -1138,7 +1139,7 @@ fn combined_registration_hint(new_usb: bool, new_network: bool, port: u16) -> Op
                 format!(" --port {port}")
             };
             Some(format!(
-                "Register a new printer with: escpost printers add <NAME> --transport network --discover{port_suffix}"
+                "Register a new network printer with: escpost printers add <NAME> --transport network --discover{port_suffix}"
             ))
         }
         (true, true) => Some("Register a new printer with: escpost printers add <NAME>".to_owned()),
@@ -3592,7 +3593,7 @@ port = 9100
         assert_eq!(
             hint,
             Some(
-                "Register a new printer with: escpost printers add <NAME> --transport usb"
+                "Register a new USB printer with: escpost printers add <NAME> --transport usb"
                     .to_owned()
             )
         );
@@ -3605,7 +3606,7 @@ port = 9100
         assert_eq!(
             hint,
             Some(
-                "Register a new printer with: escpost printers add <NAME> --transport network --discover"
+                "Register a new network printer with: escpost printers add <NAME> --transport network --discover"
                     .to_owned()
             )
         );
@@ -3618,7 +3619,7 @@ port = 9100
         assert_eq!(
             hint,
             Some(
-                "Register a new printer with: escpost printers add <NAME> --transport network --discover --port 9200"
+                "Register a new network printer with: escpost printers add <NAME> --transport network --discover --port 9200"
                     .to_owned()
             )
         );

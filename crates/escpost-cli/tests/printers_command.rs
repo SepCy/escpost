@@ -1105,7 +1105,7 @@ fn printers_discover_finds_a_listening_loopback_printer() {
     );
     assert!(
         stderr.contains(&format!(
-            "Register a new printer with: escpost printers add <NAME> --transport network --discover --port {port}"
+            "Register a new network printer with: escpost printers add <NAME> --transport network --discover --port {port}"
         )),
         "stderr should hint at registering the new printer:\n{stderr}"
     );

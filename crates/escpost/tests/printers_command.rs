@@ -404,6 +404,12 @@ fn printers_list_reports_saved_network_reachability_without_discovery() {
     assert!(stdout.contains("transport: network"));
     assert!(stdout.contains(&format!("network: 127.0.0.1:{port}")));
     assert!(
+        String::from_utf8_lossy(&connected.stderr)
+            .contains("Discover connected printers with: escpost printers discover"),
+        "the discover tip should print even when printers were listed:\n{}",
+        String::from_utf8_lossy(&connected.stderr)
+    );
+    assert!(
         received
             .join()
             .expect("the probe receiver should finish")
@@ -417,6 +423,85 @@ fn printers_list_reports_saved_network_reachability_without_discovery() {
         String::from_utf8_lossy(&unavailable.stdout).contains("status: unavailable"),
         "a refused connection should make the saved target unavailable:\n{}",
         String::from_utf8_lossy(&unavailable.stdout)
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_list_checks_usb_presence_without_opening_any_device() {
+    // Unlike `run_printers_list`'s helper (which passes `--transport
+    // network` specifically to avoid touching USB hardware), this test runs
+    // the default `list` against the real `NusbInventory` on purpose: USB
+    // presence must come from OS device metadata alone, so `list` must
+    // never fail with a permission error opening a real, unrelated USB
+    // device connected to the test machine, and a configured USB printer
+    // that matches nothing actually connected must cleanly report
+    // `unavailable` rather than erroring.
+    let directory = temporary_directory("usb-presence-metadata-only");
+    let config = directory.join("printers.toml");
+    fs::write(
+        &config,
+        "\
+[phantom-usb]
+transport = \"usb\"
+vendor_id = \"0x9999\"
+product_id = \"0x0001\"
+interface_number = 0
+out_endpoint = \"0x01\"
+",
+    )
+    .expect("a USB-only configuration should be writable");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["printers", "--config"])
+        .arg(&config)
+        .arg("list")
+        .output()
+        .expect("the escpost command should finish");
+
+    assert_command_succeeded(&output);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("] phantom-usb"),
+        "the configured USB printer should still be listed:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("status: unavailable"),
+        "no connected device matches this identity, so it must be unavailable, not an error:\n{stdout}"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("permission denied") && !stderr.contains("could not open USB device"),
+        "listing must never open a USB device, including unrelated ones actually connected to this machine:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_list_reports_no_printers_configured_for_an_empty_registry() {
+    let directory = temporary_directory("empty-registry");
+    let config = directory.join("printers.toml");
+    // `list` requires an explicit --config path to already exist (unlike
+    // `discover`'s `load_for_update`), so an empty-but-valid file stands in
+    // for a freshly initialized, still-empty registry.
+    fs::write(&config, "").expect("an empty configuration file should be writable");
+
+    // The network filter keeps this test from depending on USB hardware;
+    // the empty configuration file makes the registry itself empty.
+    let output = run_printers_list(&config);
+
+    assert_command_succeeded(&output);
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "No printers configured.\n"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("Discover connected printers with: escpost printers discover"),
+        "an empty registry should still hint at discovery:\n{}",
+        String::from_utf8_lossy(&output.stderr)
     );
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
@@ -833,4 +918,273 @@ fn temporary_directory(case: &str) -> std::path::PathBuf {
     ));
     fs::create_dir(&path).expect("the test directory should be creatable");
     path
+}
+
+#[test]
+fn printers_discover_documents_its_options() {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["printers", "discover", "--help"])
+        .output()
+        .expect("the escpost command should finish");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    assert!(output.status.success(), "command failed:\n{stdout}");
+    assert!(stdout.contains(
+        "Find connected USB printers and network printers listening on the RAW TCP port"
+    ));
+    assert!(stdout.contains("Usage: escpost printers discover"));
+    assert!(stdout.contains("--transport <TRANSPORT>"));
+    assert!(stdout.contains("--port <PORT>"));
+    assert!(stdout.contains("--subnet <CIDR>"));
+    assert!(stdout.contains("--timeout <MS>"));
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_discover_finds_a_listening_loopback_printer() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    let directory = temporary_directory("discover-hit");
+    let config = directory.join("printers.toml");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["--non-interactive", "printers", "--config"])
+        .arg(&config)
+        .args([
+            "discover",
+            "--transport",
+            "network",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ])
+        .output()
+        .expect("the escpost command should finish");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(output.status.success(), "command failed:\n{stdout}");
+    assert!(stdout.contains(&format!("[1] 127.0.0.1:{port}")));
+    assert!(stdout.contains("status: new"));
+    assert!(
+        stderr.contains(&format!("Scanning 1 network on port {port}:")),
+        "stderr should announce the scanned network count:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("  - 127.0.0.1/32"),
+        "stderr should list the scanned network:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("Tip:"),
+        "an explicit --subnet should not print the auto-detection tip:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "Register a new network printer with: escpost printers add <NAME> --transport network --discover --port {port}"
+        )),
+        "stderr should hint at registering the new printer:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_discover_reports_an_empty_sweep() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    drop(listener);
+    let directory = temporary_directory("discover-miss");
+    let config = directory.join("printers.toml");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["--non-interactive", "printers", "--config"])
+        .arg(&config)
+        .args([
+            "discover",
+            "--transport",
+            "network",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ])
+        .output()
+        .expect("the escpost command should finish");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    assert!(output.status.success(), "command failed:\n{stdout}");
+    assert!(stdout.contains("No printers discovered."));
+    assert!(
+        !stderr.contains("Register"),
+        "an empty sweep should not hint at registering a printer:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_discover_rejects_network_scan_options_with_usb_transport() {
+    let directory = temporary_directory("discover-usb-with-network-options");
+    let config = directory.join("printers.toml");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["--non-interactive", "printers", "--config"])
+        .arg(&config)
+        .args(["discover", "--transport", "usb", "--subnet", "127.0.0.1/32"])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert_failed_without_configuration(
+        &output,
+        &config,
+        "--subnet, --port, and --timeout are only valid when discovering network printers",
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_registers_the_single_discovered_printer() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    let directory = temporary_directory("add-discover");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--transport",
+            "network",
+            "--discover",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ],
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "command failed:\n{stderr}");
+    let document =
+        fs::read_to_string(&config).expect("the printer configuration should be readable");
+    let table = toml::from_str::<toml::Table>(&document).expect("the configuration should be TOML");
+    let printer = table["kitchen"]
+        .as_table()
+        .expect("the configured printer should be a table");
+    assert_eq!(printer["transport"].as_str(), Some("network"));
+    assert_eq!(printer["host"].as_str(), Some("127.0.0.1"));
+    assert_eq!(printer["port"].as_integer(), Some(i64::from(port)));
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_fails_when_nothing_is_listening() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    drop(listener);
+    let directory = temporary_directory("add-discover-miss");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--transport",
+            "network",
+            "--discover",
+            "--subnet",
+            "127.0.0.1/32",
+            "--port",
+            &port.to_string(),
+        ],
+    );
+
+    assert_failed_without_configuration(&output, &config, "no printer is listening on port");
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_rejects_an_explicit_host() {
+    let directory = temporary_directory("add-discover-host");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--transport",
+            "network",
+            "--discover",
+            "--host",
+            "10.42.0.71",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "clap should reject --discover with --host:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_rejects_usb_selectors() {
+    let directory = temporary_directory("add-discover-usb-selectors");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(
+        &config,
+        &[
+            "kitchen",
+            "--discover",
+            "--vendor-id",
+            "0x0416",
+            "--product-id",
+            "0x5011",
+        ],
+    );
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cannot be used with"),
+        "clap should reject --discover with USB selectors:\n{stderr}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
+#[cfg(unix)]
+#[test]
+fn printers_add_discover_rejects_usb_transport() {
+    let directory = temporary_directory("add-discover-usb");
+    let config = directory.join("printers.toml");
+
+    let output = run_non_interactive_add(&config, &["counter", "--transport", "usb", "--discover"]);
+
+    assert_failed_without_configuration(
+        &output,
+        &config,
+        "--discover is only valid for network printers",
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
 }

@@ -408,6 +408,14 @@ rules are specified in `CLI.md`.
 - [x] Retire the temporary Python `printers discover` configuration writer.
       Its only unique capability, a non-interactive USB config write, is now
       `printers add --vendor-id/--product-id/--serial`.
+- [x] Add the Rust `escpost printers discover` command: a read-only sweep of
+      directly connected IPv4 /24s (or explicit, uncapped `--subnet` values)
+      that probes each host with a zero-byte connect-and-drop TCP handshake.
+      (`CLI-M16`, `CLI-M17`)
+- [x] Register a swept host through `printers add --discover`, auto-selecting
+      a single discovery result, prompting a menu for several at an
+      interactive terminal, and erroring on zero or, under
+      `--non-interactive`, several results. (`CLI-M18`)
 - [ ] Add `printers scan` only with the first concrete active Bluetooth or
       network discovery backend. (`CLI-M05`, `CLI-M07`)
 - [ ] Add `printers pair` with the first transport that needs explicit
@@ -417,8 +425,9 @@ rules are specified in `CLI.md`.
 - [x] Add a safe direct host-and-port reachability check to `printers list`.
 - [ ] Add profile-controlled status and identity probes that do not print.
 - [ ] Explain USB device permissions and container group access in `doctor`.
-- [ ] Avoid broad network scanning or vendor discovery protocols until a
-      concrete integration needs them.
+- [ ] Avoid vendor discovery protocols (SNMP, mDNS, SLP, UDP broadcast, and
+      the like) beyond the bounded TCP connect-and-drop sweep `printers
+      discover` already performs, until a concrete integration needs them.
 - [ ] Never send a printable probe to an unknown device without confirmation.
 
 ## Capture, replay, and regression tooling

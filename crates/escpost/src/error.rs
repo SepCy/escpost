@@ -119,6 +119,29 @@ pub(crate) enum CliError {
     #[error("could not enumerate USB devices: {0}")]
     EnumerateUsb(nusb::Error),
 
+    #[error("could not enumerate network interfaces: {0}")]
+    EnumerateNetworkInterfaces(std::io::Error),
+
+    #[error(
+        "no directly connected IPv4 network is small enough to scan automatically (at most /24); pass --subnet <CIDR>"
+    )]
+    NoDiscoverableSubnets,
+
+    #[error("--discover is only valid for network printers")]
+    DiscoverForUsbPrinter,
+
+    #[error("--subnet, --port, and --timeout are only valid when discovering network printers")]
+    NetworkScanOptionForUsbDiscovery,
+
+    #[error("no printer is listening on port {0} in the scanned networks")]
+    NoDiscoveredPrinters(u16),
+
+    #[error(
+        "several printers were discovered; choose one interactively or pass --host:\n{}",
+        .0.join("\n")
+    )]
+    AmbiguousDiscoveredPrinters(Vec<String>),
+
     #[error("no USB device matches vendor {vendor_id:#06x} and product {product_id:#06x}")]
     UsbDeviceNotFound { vendor_id: u16, product_id: u16 },
 

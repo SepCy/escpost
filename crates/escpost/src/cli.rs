@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+use crate::discovery::Subnet;
+
 #[derive(Debug, Parser)]
 #[command(
     name = "escpost",
@@ -163,6 +165,9 @@ pub(crate) enum PrintersCommand {
 
     /// Register a printer in the local configuration.
     Add(AddPrinterArgs),
+
+    /// Find connected USB printers and network printers listening on the RAW TCP port.
+    Discover(DiscoverPrintersArgs),
 }
 
 #[derive(Debug, Args)]
@@ -170,6 +175,26 @@ pub(crate) struct ListPrintersArgs {
     /// Show only one connection transport.
     #[arg(long, value_enum)]
     pub(crate) transport: Option<InventoryTransport>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct DiscoverPrintersArgs {
+    /// Discover only one connection transport.
+    #[arg(long, value_enum)]
+    pub(crate) transport: Option<InventoryTransport>,
+
+    /// Raw TCP port to probe. Defaults to 9100.
+    #[arg(long)]
+    pub(crate) port: Option<u16>,
+
+    /// Scan this network (CIDR notation, for example 10.42.0.0/24) instead
+    /// of the directly connected networks. May be repeated.
+    #[arg(long, value_name = "CIDR", value_parser = Subnet::parse)]
+    pub(crate) subnet: Vec<Subnet>,
+
+    /// Per-host connection timeout in milliseconds. Defaults to 1000.
+    #[arg(long, value_name = "MS")]
+    pub(crate) timeout: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
@@ -210,6 +235,23 @@ pub(crate) struct AddPrinterArgs {
     /// Optional rendering profile.
     #[arg(long)]
     pub(crate) profile: Option<String>,
+
+    /// Discover listening network printers and register the chosen one
+    /// instead of passing --host.
+    #[arg(
+        long,
+        conflicts_with_all = ["host", "vendor_id", "product_id", "serial"]
+    )]
+    pub(crate) discover: bool,
+
+    /// Scan this network (CIDR notation, for example 10.42.0.0/24) instead
+    /// of the directly connected networks. May be repeated.
+    #[arg(long, value_name = "CIDR", value_parser = Subnet::parse, requires = "discover")]
+    pub(crate) subnet: Vec<Subnet>,
+
+    /// Per-host connection timeout in milliseconds during discovery.
+    #[arg(long, value_name = "MS", requires = "discover")]
+    pub(crate) timeout: Option<u64>,
 }
 
 /// Parse a USB vendor or product identifier given in decimal or `0x`-prefixed

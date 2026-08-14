@@ -2,6 +2,7 @@
 
 mod cli;
 mod configuration;
+mod discovery;
 mod error;
 mod net;
 mod output;

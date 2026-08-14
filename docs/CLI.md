@@ -1,9 +1,11 @@
 # Command-line interface
 
 `escpost` is the command-line toolbox for rendering, previewing, capturing,
-and printing ESC/POS jobs. This document describes the commands available in
-the current release. Planned commands and options are tracked in
-[`TODO.md`](TODO.md).
+and printing ESC/POS jobs, including registry-only `printers list` and
+USB/network discovery through `printers discover`. This document describes
+the commands available in the current release. Planned commands and options
+are tracked in [`TODO.md`](TODO.md). Stable requirement identifiers for the
+implemented commands appear in the final section.
 
 ## Installation
 
@@ -170,43 +172,8 @@ invocation.
 
 ## `escpost printers`
 
-The implemented printer-management commands are `list` and `add`.
-
-Printer configuration is resolved in this order:
-
-```text
---config <FILE>
-→ $ESCPOST_CONFIG_DIR/printers.toml
-→ the platform user-configuration directory
-```
-
-On Linux, the platform path is
-`$XDG_CONFIG_HOME/escpost/printers.toml`, falling back to
-`~/.config/escpost/printers.toml`.
-
-### `printers list`
-
-List attached USB printer interfaces and configured RAW TCP network printers:
-
-```text
-escpost printers [--config <FILE>] list [--transport usb|network]
-```
-
-Examples:
-
-```bash
-escpost printers list
-escpost printers list --transport usb
-escpost printers --config ./printers.toml list --transport network
-```
-
-Listing is read-only: a missing implicit configuration file is treated as an
-empty configuration and is not created. The optional transport filter accepts
-`usb` or `network`.
-
-### `printers add`
-
-Register a USB or RAW TCP network printer:
+`printers` separates passive inventory from active discovery and connection
+setup:
 
 ```text
 escpost printers [--config <FILE>] add [<NAME>]
@@ -217,22 +184,95 @@ escpost printers [--config <FILE>] add [<NAME>]
     [--product-id <ID>]
     [--serial <SERIAL>]
     [--profile <PROFILE>]
+    [--discover [--subnet <CIDR>]... [--timeout <MS>]]
+escpost printers [--config <FILE>] list [--transport <TRANSPORT>] [--json]
+escpost printers [--config <FILE>] discover
+    [--port <PORT>]
+    [--subnet <CIDR>]...
+    [--timeout <MS>]
+escpost printers [--config <FILE>] scan [--transport <TRANSPORT>]
+escpost printers [--config <FILE>] pair <CANDIDATE>
 ```
 
-Register a network printer:
+Commands in the `printers` family resolve `printers.toml` in this order:
+
+```text
+--config <FILE>
+→ $ESCPOST_CONFIG_DIR/printers.toml
+→ platform user-configuration directory
+```
+
+The platform default comes from the operating system through Rust's
+`directories` crate. Linux uses
+`$XDG_CONFIG_HOME/escpost/printers.toml`, falling back to
+`~/.config/escpost/printers.toml`. A missing implicit file means no configured
+printers. Read-only commands do not create the directory or file.
+
+### `printers add`
+
+`add` registers a connected USB printer or a network printer whose address is
+already known:
 
 ```bash
-escpost --non-interactive printers add kitchen \
+escpost printers add
+
+escpost printers add kitchen \
   --transport network \
-  --host printer.local \
+  --host 10.42.0.71 \
   --port 9100 \
   --profile REFERENCE
 ```
 
-The network port defaults to `9100` when omitted.
+At an interactive terminal, selecting `usb` reads attached USB printer-class
+descriptors and offers every unconfigured interface with a bulk OUT endpoint.
+The developer selects a concrete route, supplies a local name, and may assign
+a profile. ESCPost stores VID/PID, an available serial number, interface, bulk
+OUT endpoint, and the bulk IN endpoint only when exactly one exists. A device
+with several OUT endpoints appears once per endpoint so the route is never
+guessed. USB bus and address appear in the menu only; they are unstable across
+reconnections and are not stored.
 
-At an interactive terminal, USB registration lets the user select an attached
-printer interface. A script can instead identify a device explicitly:
+Already configured USB identities are omitted. When otherwise identical
+connected devices expose no serial numbers, registration warns that later
+printing is ambiguous while both remain connected. This is preferable to
+persisting a temporary USB address or silently selecting the first device.
+
+For a network printer, host is required. When `--port` is omitted at an
+interactive terminal, ESCPost prompts for it with `9100` as the default;
+pressing Enter accepts that value. An explicit `--port` skips the prompt.
+Non-interactive registration silently uses `9100` when the option is omitted.
+In both transports an empty optional profile answer leaves the printer
+unprofiled. Sending an existing ESC/POS stream does not require a rendering
+profile, and no profile—including `REFERENCE`—is inferred for an unknown
+printer.
+
+`--discover` finds the host instead of requiring an already-known `--host`:
+it runs the same scan as `printers discover` and feeds the chosen result into
+this same registration flow.
+
+```bash
+escpost printers add kitchen --transport network --discover
+```
+
+`--discover` and `--host` are mutually exclusive, and `--discover` is only
+valid for the network transport; omitting `--transport` alongside
+`--discover` implies `network`. `--subnet` and `--timeout` are valid only
+together with `--discover` and behave exactly as documented under
+`printers discover` below. `--port` serves both roles at once: the port
+probed during the scan and the port saved for the registered printer. At an
+interactive terminal, one discovered host is used automatically and several
+open a selection menu. Zero discovered hosts is always an error naming the
+probed port. Under `--non-interactive`, exactly one discovered host is
+required: several is an error listing every discovered candidate so the
+developer can retry with an explicit `--host`.
+
+A USB printer can also be selected without a menu by naming its stable
+descriptor. `--vendor-id` and `--product-id` accept decimal or `0x`-prefixed
+hexadecimal and must be given together; `--serial` further narrows otherwise
+identical devices. The selectors must match exactly one unconfigured route.
+No match, several matching devices, or a device that still exposes several bulk
+OUT endpoints is an error rather than a guess, so a scripted registration is
+as deterministic as the interactive one:
 
 ```bash
 escpost --non-interactive printers add counter \
@@ -243,13 +283,226 @@ escpost --non-interactive printers add counter \
   --profile NT-5890K
 ```
 
-`--vendor-id` and `--product-id` accept decimal or `0x`-prefixed hexadecimal
-values and must be supplied together. `--serial` optionally narrows otherwise
-identical devices. Scripted registration fails rather than guessing when the
-selector does not identify exactly one usable USB route.
+`--non-interactive` disables all questions and reports the first missing
+required value. Without descriptor selectors, USB registration requires a
+terminal because choosing a device and endpoint is a deliberate act; ESCPost
+behaves the same way when no terminal is attached, so pipelines and CI jobs
+cannot wait indefinitely for input. Network registration is fully scriptable
+from host and port alone:
 
-Adding a printer records connection information; it does not send print data.
-The profile is optional because raw jobs can be sent without rendering them.
+```bash
+escpost --non-interactive printers add kitchen \
+  --transport network \
+  --host printer.local
+```
+
+The resulting entry is ordinary, developer-editable TOML:
+
+```toml
+[kitchen]
+transport = "network"
+host = "printer.local"
+port = 9100
+```
+
+Adding a printer:
+
+- creates the selected configuration directory and file when needed;
+- preserves existing comments, field order, and formatting;
+- reports an existing name and asks for another in interactive mode;
+- refuses to replace an existing name in non-interactive mode;
+- validates existing configuration before changing it;
+- writes a complete temporary file before atomically replacing the
+  destination;
+- creates a new file with mode `0600` on Unix; and
+- reports the resolved configuration path.
+
+Registration reads USB descriptors or records the supplied network endpoint,
+whether that endpoint came from `--host` or from `--discover`. It does not
+send bytes, infer a profile, or prove that paper can be printed. Manual
+editing remains supported. Active Bluetooth discovery remains a separate
+planned capability.
+
+### `printers list`
+
+`list` is the normal read-only command, and it is registry-only: it shows
+exactly the printers saved in `printers.toml`, each cross-checked against
+whether it is actually reachable right now. A USB or network device that is
+connected but not yet registered never appears here — finding those is
+`printers discover`'s job. Bluetooth and operating-system spooler inventory
+remain planned.
+
+The default includes every supported transport. `--transport usb|network`
+narrows the result without changing its shape. The command also reports the
+configuration path it read on the status channel, so a developer knows where to
+register or edit printers.
+The human output identifies the transport and shows the connection fields
+needed by the corresponding print command. A configured USB printer is
+`connected` when an attached device's OS-reported identity (vendor, product,
+and serial) matches its saved descriptor; interface and endpoints on that
+block always come from the saved registration, not a live descriptor read, so
+checking presence never opens the device and cannot fail with a permission
+error. The live bus, address, and model string are shown alongside the saved
+name when connected, with the manufacturer string on its own `manufacturer:`
+line directly below `model:` whenever the device reports one; otherwise the
+printer is `unavailable`. A configured
+network target is connected when a TCP connection to its saved host and port
+succeeds; refused, unresolved, and timed-out targets are unavailable.
+
+Every result has a `profile` row regardless of transport or connection status.
+It contains the configured profile identifier or `unassigned` when no profile
+has been selected yet. This keeps the inventory shape predictable while
+allowing unknown printers to be registered before calibration.
+
+Connected printers appear before unavailable printers. Within each status
+group, results sort case-insensitively by display name with stable
+transport-specific tie-breakers. Sorting is intentionally not configurable.
+The future `--status` filter will narrow the same ordered inventory rather than
+define an alternate sort mode. `--json` will expose the same snapshot for
+scripts using a versioned schema, allowing callers to apply their own sorting.
+An empty registry — including a `--transport` filter that matches nothing —
+prints `No printers configured.` and exits successfully.
+
+Listing does not pair devices, change configuration, send ESC/POS data, open a
+USB device, or start a broad Bluetooth or network search. It opens and
+immediately closes one TCP connection to each configured network target,
+using a one-second timeout. These probes run concurrently and send zero
+bytes. USB presence comes from the operating system's device metadata alone;
+when no USB printer is configured, USB is not even enumerated. After the
+listing, a stderr hint always points at `printers discover` for finding
+connected printers not yet in the listing, regardless of how many (if any)
+configured printers were shown.
+
+### `printers discover`
+
+`discover` is a read-only sweep for USB and network printers that are not yet
+configured. It enumerates connected USB printer-class interfaces the same way
+`printers list` does, and probes a TCP connection on one port across small
+directly connected IPv4 networks, reporting which hosts accept it. Unlike
+`list`, USB enumeration on `discover` is best-effort: a device that cannot be
+opened or inspected (for example, an operating-system permission error) is
+reported as a `Warning:` line on stderr and skipped, and the sweep still
+reports every other USB and network printer it found, exiting successfully.
+Only a failure to enumerate USB devices at all is fatal, exactly like
+`list`.
+
+```bash
+escpost printers discover
+escpost printers discover --subnet 10.42.0.0/24 --port 9100
+escpost printers discover --transport usb
+```
+
+`--transport usb|network` narrows the sweep to one connection transport;
+without it, both run. `--subnet`, `--port`, and `--timeout` configure the
+network sweep only, and are rejected together with `--transport usb` since
+there is then no network sweep for them to configure.
+
+Without `--subnet`, ESCPost enumerates the machine's directly connected IPv4
+networks and scans each one automatically, but only when it is at most a
+`/24`; a larger directly connected network is skipped rather than swept in
+full, and finding no eligible network at all is an error pointing at
+`--subnet`. Passing one or more `--subnet <CIDR>` values scans exactly those
+networks instead: it disables the automatic network enumeration and removes
+the `/24` cap, so an explicit subnet may be arbitrarily large. `--subnet` may
+be repeated to scan several networks in one sweep.
+
+`--port` selects the probed port and defaults to `9100`. `--timeout <MS>`
+bounds each per-host connection attempt and defaults to `1000`. Probes run
+concurrently and send zero bytes; a reachable port is reported as-is and is
+never assumed to be a printer. Before the sweep starts, stderr prints a
+`Scanning <N> network(s) on port <port>:` header followed by one indented
+line per network being scanned (with its interface name for automatically
+detected ones) and, only when no `--subnet` was given, a trailing tip
+pointing at `--subnet` to scan a different network; a progress bar then
+follows on stderr during the network sweep when stderr is attached to a
+terminal.
+
+USB results are listed first, then network results, numbered continuously
+across both; network results are ordered by ascending IPv4 address,
+regardless of the order `--subnet` was given. Each entry uses the same block
+format as `printers list` so the commands cannot drift apart. A connected
+USB printer matching a saved
+identity heads its block with that name, `status: configured`, a `model:`
+line, and a `profile:` line (falling back to `unassigned`, exactly like
+`printers list`); an unmatched USB printer heads its block with its product
+string alone (falling back to a generic `USB printer` label when the device
+reports none) and `status: new`, omitting the `model:` and `profile:` lines.
+Either way, a `manufacturer:` line follows directly below where `model:`
+would be, whenever the device reports a manufacturer string, regardless of
+`status`. A network result matching a saved printer's host and port
+heads its block with that name, `status: configured`, and `profile:`
+(falling back to `unassigned`); an unmatched host heads its block with its
+bare `host:port` endpoint and `status: new`, and omits the `profile:` line
+entirely. Network results reached through a directly connected network
+additionally show `interface:`, and further saved names sharing the same
+host and port appear as `also configured as:` lines:
+
+```text
+[1] USB Portable Printer
+    status: new
+    manufacturer: YICHIP3121
+    transport: usb
+    usb: 0416:5011; bus 3 address 57; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300001
+[2] netum-usb
+    status: configured
+    model: USB Portable Printer
+    manufacturer: YICHIP3121
+    profile: NT-5890K
+    transport: usb
+    usb: 0416:5011; bus 3 address 60; interface 0
+    endpoints: out 0x01; in 0x81
+    serial: B120300002
+[3] 10.42.0.5:9100
+    status: new
+    transport: network
+    network: 10.42.0.5:9100
+    interface: enx0
+```
+
+An empty combined sweep prints `No printers discovered.` and exits
+successfully; finding nothing on either transport is not an error. `discover`
+never writes to `printers.toml`. Use `printers add --discover` (or `add
+--transport usb` for a USB printer) to register a result. When the sweep
+finds at least one printer with `status: new`, stderr prints exactly one
+registration hint after the listing, chosen by which transport(s) found a
+new printer: a new USB printer only prints "Register a new USB printer
+with" and hints at `printers add <NAME> --transport usb`; a new network
+host only prints "Register a new network printer with" and hints at
+`printers add <NAME> --transport network --discover` (its target command
+auto-selects a single new host or opens the picker for several, so it
+never depends on how many were found); finding new printers on both
+transports instead prints the transport-agnostic "Register a new printer
+with" and hints at the bare `printers add <NAME>`, since the interactive
+wizard it launches prompts for the transport itself.
+
+### `printers scan`
+
+`scan` is reserved for an active search for new or unconfigured devices. It may
+take longer, request operating-system permissions, and find nearby Bluetooth
+or network candidates which are not yet usable. Results are candidates rather
+than silently saved printers. Scanning never pairs a device or sends printable
+ESC/POS probes.
+
+Transport-specific flags and timeouts must be documented when each scanning
+backend is implemented. A broad network scan must remain opt-in.
+
+### `printers pair`
+
+`pair` turns one explicit scan candidate into a connection the operating
+system or ESCPost can use. It is a state-changing operation and may delegate
+to the platform's Bluetooth UI or permission flow. It never infers a candidate
+from a printer name or silently selects one of several matches.
+
+Non-interactive pairing requires every value and authorization needed by the
+platform; otherwise it fails instead of waiting for a prompt. Some BLE
+printers do not use operating-system pairing, so support is defined by the
+transport backend rather than assumed for every Bluetooth device.
+
+The current Rust implementation lists attached USB printer-class interfaces.
+Bluetooth, network, spooler, `scan`, and `pair` support can be added without
+renaming the inventory command or changing its read-only meaning.
 
 ## `escpost profiles`
 
@@ -353,3 +606,108 @@ JSON data.
 
 Cancellation with `Ctrl+C` shuts down long-running web and virtual-printer
 processes.
+
+## Requirement catalogue
+
+Implementation status belongs only in `TODO.md`. This catalogue defines what
+the completed implementation must satisfy.
+
+### Global requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-G01 | Use one `escpost` executable with coherent top-level commands. |
+| CLI-G02 | Accept global `--non-interactive` before or after subcommands. |
+| CLI-G03 | Never prompt or assume confirmation in effective non-interactive mode. |
+| CLI-G04 | Resolve promptable values using the documented precedence. |
+| CLI-G05 | Keep binary, structured, and human output from corrupting one another. |
+| CLI-G06 | Return nonzero status for every failed operation. |
+| CLI-G07 | Shut down long-running commands cleanly on interruption. |
+
+### Input and profile requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-I01 | Accept raw binary files, hexadecimal files, and stdin. |
+| CLI-I02 | Treat `-` as stdin/stdout and `--` only as the end of options. |
+| CLI-I03 | Never infer hexadecimal format by inspecting arbitrary input contents. |
+| CLI-I04 | Accept only recognized structured directories as input sources. |
+| CLI-I05 | Preserve immutable source bytes when loading captures. |
+| CLI-I06 | Resolve and report the selected printer profile explicitly. |
+
+### Render requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-R01 | Render a known source to one or more PNG sheets. |
+| CLI-R02 | Support a single PNG file, stdout, all-sheet directory, and web destinations. |
+| CLI-R03 | Never silently discard or concatenate sheets for a single-PNG destination. |
+| CLI-R04 | Write only PNG bytes to stdout and refuse binary output to a terminal. |
+| CLI-R05 | Write the all-sheet manifest only after every referenced PNG is complete. |
+| CLI-R06 | Allow persisted PNG and web destinations in the same invocation. |
+| CLI-R07 | Reject stdout PNG output combined with a long-running web mode. |
+| CLI-R08 | Overwrite explicit and conflicting generated outputs without prompting while preserving unrelated files. |
+
+### Physical-print requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-P01 | Accept the same file, hexadecimal, stdin, and recognized-directory sources as `render`. |
+| CLI-P02 | Address physical output only through a configured printer name, never transport options on `print`. |
+| CLI-P03 | Select a configured name interactively when allowed, offer the shared add-printer workflow, and print to the selected or newly added name. |
+| CLI-P04 | Send the loaded bytes unchanged without adding ESC/POS commands. |
+| CLI-P05 | Resolve USB and RAW TCP details from configuration and fail before printing for unknown or ambiguous targets. |
+| CLI-P06 | Report the selected name, transport, resolved target, and transferred byte count without logging receipt contents. |
+| CLI-P07 | Return typed, actionable errors and nonzero status for every failed physical operation. |
+| CLI-P08 | Keep automated tests physically inert by substituting USB and using loopback-only network listeners. |
+| CLI-P09 | Bound RAW TCP connection and write operations and send no probe, framing, or other extra bytes. |
+
+### Printer-management requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-M01 | Make `printers list` a passive, transport-neutral inventory of configured printers, each showing whether it is currently usable. |
+| CLI-M02 | List all supported transports by default and permit an explicit transport filter. |
+| CLI-M03 | Identify each result's transport and expose the connection fields required for printing. |
+| CLI-M04 | Keep machine-readable listing output separate from human output and version its schema. |
+| CLI-M05 | Reserve `printers scan` for active discovery that never pairs, saves, or prints implicitly. |
+| CLI-M06 | Reserve `printers pair` for an explicit state-changing connection workflow which may delegate to the operating system. |
+| CLI-M07 | Never infer a scan or pairing target by display name or choose silently among several candidates. |
+| CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
+| CLI-M09 | Keep passive listing free of configuration writes while showing matched names and an explicit assigned or unassigned profile for every printer. |
+| CLI-M10 | Use one merge of connected and configured USB printers to resolve each configured printer's status, list connected before unavailable, and sort each status group by display name. |
+| CLI-M11 | Register USB or known network targets with `printers add`, selecting a USB descriptor interactively from a menu or non-interactively by explicit vendor, product, and optional serial selectors, and prompting for missing values only at an interactive terminal. |
+| CLI-M12 | Make non-interactive registration deterministic, default RAW TCP to port 9100, and keep the profile optional. |
+| CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |
+| CLI-M14 | List configured network targets as connected or unavailable using concurrent, bounded TCP handshakes that send zero bytes. |
+| CLI-M15 | Exclude configured USB identities, never persist temporary bus/address values, and require explicit selection when endpoint or device identity is ambiguous, whether that selection is an interactive menu choice or a unique non-interactive descriptor match. |
+| CLI-M16 | Reserve `printers discover` for a read-only sweep that enumerates USB printer interfaces and probes network hosts with a bare connect-and-drop TCP handshake that never sends a byte; neither ever writes to `printers.toml`. |
+| CLI-M17 | Without `--subnet`, scan only directly connected IPv4 networks at most a `/24` automatically, skipping larger ones; an explicit `--subnet` scans exactly the given networks instead and removes the `/24` cap. |
+| CLI-M18 | Resolve `printers add --discover` from the sweep: zero discovered hosts is always an error naming the probed port, exactly one is selected automatically, and several open an interactive selection menu or, under `--non-interactive`, are an error listing every candidate. |
+
+### Web requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-W01 | Make `--web` start the shared local web interface without opening a browser. |
+| CLI-W02 | Make `--browser` imply `--web` and open the selected URL. |
+| CLI-W03 | Search loopback ports 9000–9099 when no HTTP address was specified. |
+| CLI-W04 | Bind and retain candidate sockets atomically rather than probing first. |
+| CLI-W05 | Treat an explicit nonzero address as strict and support explicit port zero. |
+| CLI-W06 | Never select a non-loopback listener implicitly. |
+| CLI-W07 | Show ordered sheets at one printer dot per screen pixel by default. |
+| CLI-W08 | Support filesystem watch mode without speculative partial results. |
+| CLI-W09 | Keep receipt data in memory unless persistence was explicitly requested. |
+| CLI-W10 | Reuse one web implementation for `render --web` and `serve`. |
+
+### Automation and verification requirements
+
+| ID | Requirement |
+|---|---|
+| CLI-T01 | Test command parsing in interactive and non-interactive policies. |
+| CLI-T02 | Test binary stdout byte-for-byte without human-output contamination. |
+| CLI-T03 | Test zero, one, and several rendered sheets for every destination type. |
+| CLI-T04 | Test occupied automatic ports, exhausted ranges, strict ports, and port zero. |
+| CLI-T05 | Test loopback defaults and rejection or warning of unintended exposure. |
+| CLI-T06 | Test HTTP routes, ordered sheets, missing files, and path traversal. |
+| CLI-T07 | Verify the Rust web workflow before removing the Python preview service. |

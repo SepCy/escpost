@@ -26,14 +26,14 @@ without duplicating completion state in the contract.
 
 ## Rust CLI location
 
-`crates/escpost-cli/` is the Rust binary crate. Its executable remains named
+`crates/escpost/` is the Rust binary crate. Its executable remains named
 `escpost`.
 
 The crate should initially contain command parsing and the modules used only by
 the developer executable:
 
 ```text
-crates/escpost-cli/
+crates/escpost/
 └── src/
     ├── main.rs
     ├── commands/
@@ -59,13 +59,13 @@ up front. Add each module with the feature that needs it.
 
 Do not create a separate server or protocol crate merely in anticipation of
 reuse. Extract one when another executable or embedding API genuinely needs
-the same behavior. The `escpost` rendering crate must remain independent of
+the same behavior. The `escpost-render` rendering crate must remain independent of
 CLI, networking, storage, and web concerns.
 
 The Python package is now only the render binding; the Click CLI has been
 removed. The root `./escpost` container wrapper invokes the Rust executable for
 every command. Physical calibration reuses `render` and `print` against
-`calibration/input.hex` rather than a dedicated command group.
+`crates/escpost-profiles/calibration-job.hex` rather than a dedicated command group.
 
 ## Rust CLI foundation and render migration
 
@@ -76,7 +76,7 @@ input.
 
 ### Command foundation
 
-- [x] Create `crates/escpost-cli` with an `escpost` binary and `clap` derive
+- [x] Create `crates/escpost` with an `escpost` binary and `clap` derive
       command model. (`CLI-G01`)
 - [x] Add the global `--non-interactive` option and effective terminal-policy
       detection. (`CLI-G02`, `CLI-G03`)
@@ -383,7 +383,7 @@ rules are specified in `CLI.md`.
       (`CLI-M09`)
 - [x] Merge connected and configured records, retain unavailable printers, and
       apply the stable status-first display-name order. (`CLI-M10`)
-- [x] Isolate Docker checkout configuration at `local/config/printers.toml`
+- [x] Isolate Docker checkout configuration at `.config/printers.toml`
       instead of mounting a host installation's potentially different data.
 - [x] Add safe manual RAW network registration through `printers add`, with
       terminal prompts, strict non-interactive behavior, and atomic TOML
@@ -560,7 +560,7 @@ would target.
 - [ ] Add transparent proxy mode with response forwarding.
 - [x] Retire the Click CLI. Its commands were either superseded by the Rust
       `render`/`print`/`printers` commands or reduced to `render`/`print`
-      invocations against `calibration/input.hex`. The richer guided
+      invocations against `crates/escpost-profiles/calibration-job.hex`. The richer guided
       calibration workflow remains future Phase-5 work.
 
 ### Phase 5: realistic emulation and integration testing

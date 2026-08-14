@@ -2,7 +2,7 @@
 
 ## Purpose
 
-`escpost` interprets one complete ESC/POS byte stream as an isolated print
+`escpost-render` interprets one complete ESC/POS byte stream as an isolated print
 job and returns one or more PNG receipt sheets.
 
 The renderer works in printer dots. HTML, CSS, SVG text, host fonts, and browser
@@ -27,9 +27,9 @@ The Rust workspace contains four crates:
 
 - `escpost-profiles` imports, enriches, validates, and loads printer
   profiles.
-- `escpost` parses ESC/POS, applies printer state, rasterizes content, and
+- `escpost-render` parses ESC/POS, applies printer state, rasterizes content, and
   encodes PNG.
-- `escpost-cli` provides the native `escpost` executable, PNG destinations,
+- `escpost` provides the native `escpost` executable, PNG destinations,
   embedded local web viewer, named USB and RAW TCP output, passive printer
   inventory, and platform-native machine configuration.
 - `escpost-python` exposes coarse-grained rendering functions through PyO3.
@@ -45,11 +45,11 @@ interpreter lock while Rust renders.
 
 The Python package is only the render binding; it contains no CLI. The root
 development wrapper routes every command to the Rust executable. Hardware
-inventory and printing live in `escpost-cli`, not the Rust rendering library.
+inventory and printing live in `escpost`, not the Rust rendering library.
 
 ## Rust named-printer output
 
-`escpost-cli` loads a `print` source through the same immutable source loader
+`escpost` loads a `print` source through the same immutable source loader
 as `render`, resolves one configured printer name, then hands those decoded
 bytes directly to its USB or RAW TCP transport. It does not invoke the renderer
 or require a printer profile.
@@ -108,14 +108,14 @@ reconnection. A serial number is stored when available; without one,
 simultaneously connected devices with equal VID/PID cannot be distinguished
 reliably and are reported as ambiguous.
 
-The Docker wrapper creates and mounts `local/config` at the container user's
+The Docker wrapper creates and mounts `.config` at the container user's
 normal ESCPost configuration path. This isolates configuration used by a
 checkout from an independently installed binary while keeping Docker-specific
 paths out of the Rust implementation.
 
 ## Rust render command
 
-`escpost-cli` is an application boundary around the renderer. It embeds the
+`escpost` is an application boundary around the renderer. It embeds the
 canonical profile pack and resolves a profile from an explicit argument,
 recognized source metadata, or an interactive selection. Non-interactive
 operation fails instead of silently choosing a physical printer.
@@ -128,7 +128,7 @@ conformance-case directories. Output adapters consume one completed
 Known ESC/POS source
         │
         ▼
-Profile resolution → escpost::render
+Profile resolution → escpost_render::render
                            │
              ┌─────────────┼─────────────┐
              ▼             ▼             ▼
@@ -182,7 +182,7 @@ V1 does not return a speculative partial preview after a parser error.
 
 ### Renderer modules
 
-Each rendering domain owns one module in `crates/escpost/src/`:
+Each rendering domain owns one module in `crates/escpost-render/src/`:
 
 ```text
 lib.rs            public API types and the render entry point
@@ -195,7 +195,7 @@ barcode.rs        one-dimensional barcode encoders
 databar.rs        GS1 DataBar encoding
 qr.rs             QR matrix adapter
 international.rs  ESC R character substitutions
-surface.rs        bit-packed dot surface and PNG encoding
+surface/          rendering contract, monochrome raster, and tracing decorator
 error.rs          renderer error types
 ```
 
@@ -203,6 +203,12 @@ error.rs          renderer error types
 symbols modules extend it with their own `impl` blocks so each painting
 domain stays readable on its own. The public API is re-exported from the
 crate root, so module boundaries are not visible to embedders.
+
+The private `RenderSurface` contract keeps command interpretation independent
+from raster storage. `MonoSurface` is the ordinary bitmap implementation; the
+experimental tracing decorator retains command provenance without duplicating
+the interpreter. See [`TRACING.md`](TRACING.md) for the current vertical slice
+and intended trace semantics.
 
 ## Printer state
 
@@ -259,8 +265,8 @@ restrictions. Its 203 DPI, 576-dot paper and cutter geometry are concrete
 virtual rendering parameters, not universal ESC/POS mechanism dimensions.
 
 Profile authoring and calibration assets are collocated in visible
-`profiles/<profile-id>/` directories. A physical profile also contains the
-expected rendering and physical verification of `calibration/input.hex`.
+`crates/escpost-profiles/profiles/<profile-id>/` directories. A physical profile also contains the
+expected rendering and physical verification of `crates/escpost-profiles/calibration-job.hex`.
 Virtual profiles use focused automated golden cases instead of claiming
 physical evidence. Hidden `.escpos-printer-db/` and `.generated/` directories
 contain infrastructure, not profiles.
@@ -278,9 +284,8 @@ then applies only its profile-selected explicit feed behavior.
 
 Each canonical profile carries:
 
-- a typed source — `Reference`, hash-pinned `Upstream`, or synthesized
-  `UpstreamDefault` — including the resolved profile SHA-256 for upstream
-  sources; and
+- a typed source — `Reference`, curated `Upstream`, or synthesized
+  `UpstreamDefault`; and
 - a canonical-profile SHA-256 covering every runtime field.
 
 The canonical hash is the profile's rendering identity. Manually maintained
@@ -303,17 +308,23 @@ render receipt content.
 
 ## Dot surfaces and sheets
 
-`MonoSurface` stores one printed/not-printed value per printer dot, packed
-eight dots per byte in PNG's one-bit row layout so encoding a sheet is a
-per-byte polarity inversion. All current commands compose into this
-monochrome representation.
+Surface code is divided into the private rendering contract, the canonical
+`MonoSurface`, and an experimental tracing decorator. Ordinary rendering
+selects `MonoSurface` statically and carries no trace records; traced rendering
+wraps the same raster implementation and is opt-in.
+
+`MonoSurface` stores one byte of ink coverage per scaled subpixel. Faithful
+rendering thresholds glyph coverage to hard dots and encodes a one-bit
+grayscale PNG. Optional antialiased preview rendering retains soft glyph
+coverage and encodes an eight-bit grayscale PNG. Dot-space graphics remain
+hard-edged in both modes.
 
 A cut finalizes the active surface. Later output starts another sheet. Without
 a cut, final sheet height follows painted content and paper-feed position.
 
-Each `RenderedSheet` contains the logical surface and its one-bit grayscale PNG.
-Tests inspect surfaces for exact command behavior and decode PNGs for
-end-to-end fixtures.
+Each `RenderedSheet` contains the logical surface and its encoded PNG. Tests
+inspect faithful surfaces for exact command behavior and decode their one-bit
+PNGs for end-to-end fixtures.
 
 Additional color or tone models will be designed when an implemented command
 requires them. V1 carries no unused color-plane abstraction.

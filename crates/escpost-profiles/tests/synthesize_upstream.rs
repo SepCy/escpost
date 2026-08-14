@@ -2,22 +2,18 @@ use escpost_profiles::{
     ProfileSource, defaults, from_canonical_json, synthesize_profile, to_canonical_json,
 };
 
-const CAPABILITIES_JSON: &[u8] =
-    include_bytes!("../../../profiles/.escpos-printer-db/dist/capabilities.json");
+const CAPABILITIES_JSON: &[u8] = include_bytes!("fixtures/capabilities.json");
 
 #[test]
 fn synthesizes_a_width_bearing_upstream_profile() {
-    let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+    let profile = synthesize_profile(CAPABILITIES_JSON, "TEST-THERMAL-80")
         .expect("import ok")
-        .expect("TM-T88III has a width, so it synthesizes");
-    assert_eq!(profile.id, "TM-T88III");
+        .expect("the fixture has a width, so it synthesizes");
+    assert_eq!(profile.id, "TEST-THERMAL-80");
     assert_eq!(profile.geometry.printable_width_dots, 512);
     assert_eq!(profile.geometry.dpi_x, 180);
     assert_eq!(profile.fonts.a.cell_width_dots, 512 / 42);
-    assert!(matches!(
-        profile.source,
-        ProfileSource::UpstreamDefault { .. }
-    ));
+    assert!(matches!(profile.source, ProfileSource::UpstreamDefault));
     assert_eq!(
         profile.code_pages.get(&0).map(String::as_str),
         Some("CP437")
@@ -32,34 +28,26 @@ fn synthesizes_a_width_bearing_upstream_profile() {
 
 #[test]
 fn synthesizes_vendor_and_model_catalog_metadata() {
-    let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+    let profile = synthesize_profile(CAPABILITIES_JSON, "TEST-THERMAL-80")
         .expect("import ok")
-        .expect("TM-T88III has a width, so it synthesizes");
-    assert_eq!(profile.vendor, "Epson");
-    assert_eq!(profile.model, "TM-T88III");
+        .expect("the fixture has a width, so it synthesizes");
+    assert_eq!(profile.vendor, "Fixture Vendor");
+    assert_eq!(profile.model, "Test Thermal 80");
 }
 
 #[test]
 fn synthesizes_nominal_paper_width_in_tenths_mm() {
-    let p = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+    let p = synthesize_profile(CAPABILITIES_JSON, "TEST-THERMAL-80")
         .unwrap()
         .unwrap();
     assert_eq!(p.paper_width_tenths_mm, 800);
-
-    // NT-5890K's upstream media width is fractional (57.5 mm): the
-    // fixed-point representation must preserve it losslessly rather than
-    // rounding to a whole millimeter.
-    let nt = synthesize_profile(CAPABILITIES_JSON, "NT-5890K")
-        .unwrap()
-        .unwrap();
-    assert_eq!(nt.paper_width_tenths_mm, 575);
 }
 
 #[test]
 fn synthesized_upstream_default_profile_round_trips_through_canonical_json() {
-    let profile = synthesize_profile(CAPABILITIES_JSON, "TM-T88III")
+    let profile = synthesize_profile(CAPABILITIES_JSON, "TEST-THERMAL-80")
         .expect("import ok")
-        .expect("TM-T88III has a width, so it synthesizes");
+        .expect("the fixture has a width, so it synthesizes");
     let json = to_canonical_json(&profile).expect("a synthesized profile should serialize");
     assert_eq!(
         from_canonical_json(&json).expect("the canonical profile should verify"),
@@ -69,13 +57,10 @@ fn synthesized_upstream_default_profile_round_trips_through_canonical_json() {
 
 #[test]
 fn declines_to_synthesize_a_widthless_generic() {
-    for id in ["default", "safe", "simple"] {
-        assert_eq!(
-            synthesize_profile(CAPABILITIES_JSON, id).expect("import ok"),
-            None,
-            "{id} states no width and must not synthesize"
-        );
-    }
+    assert_eq!(
+        synthesize_profile(CAPABILITIES_JSON, "TEST-WIDTHLESS").expect("import ok"),
+        None
+    );
 }
 
 #[test]

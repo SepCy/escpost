@@ -1,0 +1,3581 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "AF-240": {
+      "schema_version": 1,
+      "id": "AF-240",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 100,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 5,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": false,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "OXHOO-EUROPEAN"
+      },
+      "vendor": "Oxhoo",
+      "model": "AF-240 Customer Display",
+      "paper_width_tenths_mm": 1200,
+      "canonical_profile_sha256": "a86ecabed0a3e76f097a6826cc1d7a09428889cf97e74b211ed61b5e9872fa07"
+    },
+    "CT-S651": {
+      "schema_version": 1,
+      "id": "CT-S651",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 640,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP852",
+        "7": "CP866",
+        "8": "CP857",
+        "9": "CP1252",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "40": "CP864",
+        "255": "Unknown"
+      },
+      "vendor": "Citizen",
+      "model": "CT-S651",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "3c7671840936b83ba747f34d513256b1e13a4f3760af680d3ed1a96ee03a2bf6"
+    },
+    "ITPP047": {
+      "schema_version": 1,
+      "id": "ITPP047",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP1252",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "Unknown",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown"
+      },
+      "vendor": "Munbyn",
+      "model": "ITPP047",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "a258866c2f32b85e909c25cf82c81870600062a1a7e807eecc0e3f7ccf8f8399"
+    },
+    "KR-306": {
+      "schema_version": 1,
+      "id": "KR-306",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "11": "CP1252",
+        "12": "CP866",
+        "13": "CP852",
+        "14": "CP858",
+        "15": "Unknown",
+        "16": "Unknown",
+        "17": "Unknown",
+        "18": "Unknown",
+        "19": "CP747",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "Unknown",
+        "23": "CP864",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "27": "CP1255",
+        "28": "CP437",
+        "29": "KATAKANA",
+        "30": "CP437",
+        "31": "CP858",
+        "32": "CP852",
+        "33": "CP860",
+        "34": "CP861",
+        "35": "CP863",
+        "36": "CP865",
+        "37": "CP866",
+        "38": "CP855",
+        "39": "CP857",
+        "40": "CP862",
+        "41": "CP864",
+        "42": "CP737",
+        "43": "CP851",
+        "44": "CP869",
+        "45": "CP928",
+        "46": "CP772",
+        "47": "CP774",
+        "48": "CP874",
+        "49": "CP1252",
+        "50": "CP1250",
+        "51": "CP1251",
+        "52": "CP3840",
+        "53": "CP3841",
+        "54": "CP3843",
+        "55": "CP3844",
+        "56": "CP3845",
+        "57": "CP3846",
+        "58": "CP3847",
+        "59": "CP3848",
+        "60": "CP1001",
+        "61": "CP2001",
+        "62": "CP3001",
+        "63": "CP3002",
+        "64": "CP3011",
+        "65": "CP3012",
+        "66": "CP3021",
+        "67": "CP3041",
+        "68": "CP852",
+        "69": "Unknown",
+        "70": "CP1256"
+      },
+      "vendor": "Kefar",
+      "model": "KR-306",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "aba3988b64edf96e8c705ac4795d8291a38d373779f7189fd481cfbe20554243"
+    },
+    "NT-5890K": {
+      "schema_version": 1,
+      "id": "NT-5890K",
+      "source": {
+        "type": "upstream"
+      },
+      "geometry": {
+        "printable_width_dots": 384,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 1
+      },
+      "commands": {
+        "esc_backslash_negative": "ignored",
+        "esc_dollar_after_printable_data": "ignored",
+        "esc_j": "ignored",
+        "gs_v_0_following_lf": "ignored",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "ignored"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "CP747",
+        "25": "CP1257",
+        "27": "CP1258",
+        "28": "CP864",
+        "31": "Unknown",
+        "32": "CP1255",
+        "50": "CP437",
+        "52": "CP437",
+        "53": "CP858",
+        "54": "CP852",
+        "55": "CP860",
+        "56": "CP861",
+        "57": "CP863",
+        "58": "CP865",
+        "59": "CP866",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "63": "CP864",
+        "64": "CP737",
+        "65": "CP851",
+        "66": "CP869",
+        "68": "CP772",
+        "69": "CP774",
+        "71": "CP1252",
+        "72": "CP1250",
+        "73": "CP1251",
+        "74": "CP3840",
+        "76": "CP3843",
+        "77": "CP3844",
+        "78": "CP3845",
+        "79": "CP3846",
+        "80": "CP3847",
+        "81": "CP3848",
+        "83": "CP2001",
+        "84": "CP3001",
+        "85": "CP3002",
+        "86": "CP3011",
+        "87": "CP3012",
+        "88": "CP3021",
+        "89": "CP3041",
+        "90": "CP1253",
+        "91": "CP1254",
+        "92": "CP1256",
+        "93": "CP720",
+        "94": "CP1258",
+        "95": "CP775",
+        "96": "Unknown",
+        "255": "Unknown"
+      },
+      "vendor": "Netum",
+      "model": "NT-5890K",
+      "paper_width_tenths_mm": 575,
+      "canonical_profile_sha256": "8fcd8173f86c67008729797e19072eb4df9dc00f363b795475f3e8adf5727662"
+    },
+    "NT-80-V-UL": {
+      "schema_version": 1,
+      "id": "NT-80-V-UL",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 48,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 64,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "Unknown",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "ISO_8859-6",
+        "23": "Unknown",
+        "24": "CP747",
+        "25": "CP1257",
+        "27": "Unknown",
+        "28": "CP864",
+        "31": "Unknown",
+        "32": "CP1255",
+        "50": "CP437",
+        "52": "CP437",
+        "53": "CP858",
+        "54": "CP852",
+        "55": "CP860",
+        "56": "CP861",
+        "57": "CP863",
+        "58": "CP865",
+        "59": "CP866",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "63": "CP864",
+        "64": "CP737",
+        "65": "CP851",
+        "66": "CP869",
+        "68": "CP772",
+        "69": "CP774",
+        "71": "CP1252",
+        "72": "CP1250",
+        "73": "CP1251",
+        "74": "CP3840",
+        "76": "CP3843",
+        "77": "CP3844",
+        "78": "CP3845",
+        "79": "CP3846",
+        "80": "CP3847",
+        "81": "CP3848",
+        "83": "CP2001",
+        "84": "CP3001",
+        "85": "CP3002",
+        "86": "CP3011",
+        "87": "CP3012",
+        "88": "CP3021",
+        "89": "CP3041",
+        "90": "CP1253",
+        "91": "CP1254",
+        "92": "CP1256",
+        "93": "CP720",
+        "94": "CP1258",
+        "95": "CP775",
+        "96": "Unknown",
+        "255": "Unknown"
+      },
+      "vendor": "Netum",
+      "model": "80-V-UL",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "ef3cf1089fdc6944c5b990ff9fd1f883caf5d5cb382b925a56fe5c791f260f60"
+    },
+    "OCD-100": {
+      "schema_version": 1,
+      "id": "OCD-100",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 100,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 5,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": false,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "CP852",
+        "10": "CP862",
+        "11": "CP866",
+        "12": "CP1251",
+        "13": "CP1254",
+        "14": "CP1255",
+        "15": "CP1257",
+        "16": "CP1252",
+        "17": "CP1253",
+        "19": "CP858"
+      },
+      "vendor": "Aures",
+      "model": "OCD-100 Customer Display",
+      "paper_width_tenths_mm": 1800,
+      "canonical_profile_sha256": "16c011f59eba4d1c84d5f6f5356f5f69b773a4a41375ec30b66e32dca0ca98f4"
+    },
+    "OCD-300": {
+      "schema_version": 1,
+      "id": "OCD-300",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 240,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": false,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "CP852",
+        "10": "CP862",
+        "11": "CP866",
+        "12": "CP1251",
+        "13": "CP1254",
+        "14": "CP1255",
+        "15": "CP1257",
+        "16": "CP1252",
+        "17": "CP1253",
+        "18": "CP1250",
+        "19": "CP858",
+        "20": "Unknown"
+      },
+      "vendor": "Aures",
+      "model": "OCD-300 Customer Display",
+      "paper_width_tenths_mm": 1302,
+      "canonical_profile_sha256": "e53128b10bd70241513b565dface9379dcba33c864b982bc3b15fa8d5983a915"
+    },
+    "P822D": {
+      "schema_version": 1,
+      "id": "P822D",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "CP747",
+        "25": "CP1257",
+        "27": "Unknown",
+        "28": "CP864",
+        "29": "CP1001",
+        "30": "Unknown",
+        "31": "Unknown",
+        "32": "CP1255",
+        "33": "CP720",
+        "34": "CP1256",
+        "35": "CP1257",
+        "50": "CP437",
+        "51": "Unknown",
+        "52": "CP437",
+        "53": "CP858",
+        "54": "CP852",
+        "55": "CP860",
+        "56": "CP861",
+        "57": "CP863",
+        "58": "CP865",
+        "59": "CP866",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "63": "CP864",
+        "64": "CP737",
+        "65": "CP851",
+        "66": "CP869",
+        "67": "CP928",
+        "68": "CP772",
+        "69": "CP774",
+        "70": "CP874",
+        "71": "CP1252",
+        "72": "CP1250",
+        "73": "CP1251",
+        "74": "CP3840",
+        "75": "CP3841",
+        "76": "CP3843",
+        "77": "CP3844",
+        "78": "CP3845",
+        "79": "CP3846",
+        "80": "CP3847",
+        "81": "CP3848",
+        "82": "CP1001",
+        "83": "CP2001",
+        "84": "CP3001",
+        "85": "CP3002",
+        "86": "CP3011",
+        "87": "CP3012",
+        "88": "CP3021",
+        "89": "CP3041",
+        "255": "Unknown"
+      },
+      "vendor": "PBM",
+      "model": "P822D",
+      "paper_width_tenths_mm": 795,
+      "canonical_profile_sha256": "eb569cbac8c9c9c61528f6f437eccd0390f49a834d8c9c540c0239e925b193fb"
+    },
+    "POS-5890": {
+      "schema_version": 1,
+      "id": "POS-5890",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 384,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "9": "Unknown",
+        "10": "Unknown",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "CP747",
+        "25": "CP1257",
+        "27": "CP1258",
+        "28": "CP864",
+        "31": "Unknown",
+        "32": "CP1255",
+        "50": "CP437",
+        "52": "CP437",
+        "53": "CP858",
+        "54": "CP852",
+        "55": "CP860",
+        "56": "CP861",
+        "57": "CP863",
+        "58": "CP865",
+        "59": "CP866",
+        "60": "CP855",
+        "61": "CP857",
+        "62": "CP862",
+        "63": "CP864",
+        "64": "CP737",
+        "65": "CP851",
+        "66": "CP869",
+        "68": "CP772",
+        "69": "CP774",
+        "71": "CP1252",
+        "72": "CP1250",
+        "73": "CP1251",
+        "74": "CP3840",
+        "76": "CP3843",
+        "77": "CP3844",
+        "78": "CP3845",
+        "79": "CP3846",
+        "80": "CP3847",
+        "81": "CP3848",
+        "83": "CP2001",
+        "84": "CP3001",
+        "85": "CP3002",
+        "86": "CP3011",
+        "87": "CP3012",
+        "88": "CP3021",
+        "89": "CP3041",
+        "90": "CP1253",
+        "91": "CP1254",
+        "92": "CP1256",
+        "93": "CP720",
+        "94": "CP1258",
+        "95": "CP775",
+        "96": "Unknown",
+        "255": "Unknown"
+      },
+      "vendor": "Zjiang",
+      "model": "POS5890 Series",
+      "paper_width_tenths_mm": 575,
+      "canonical_profile_sha256": "4d4caeeb992b5ee5d8bf3e151b0ee754e6401ea4d67099ee26739c74eea0fad5"
+    },
+    "REFERENCE": {
+      "schema_version": 1,
+      "id": "REFERENCE",
+      "source": {
+        "type": "reference"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": {
+        "print_head_to_cutter_dots": 80
+      },
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128",
+            "gs1_128",
+            "gs1_databar_omnidirectional",
+            "gs1_databar_truncated",
+            "gs1_databar_limited",
+            "gs1_databar_expanded",
+            "code_128_auto"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": true,
+        "paperPartCut": true,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP720",
+        "2": "CP737",
+        "3": "CP775",
+        "4": "CP850",
+        "5": "CP852",
+        "6": "CP855",
+        "7": "CP857",
+        "8": "CP858",
+        "9": "CP860",
+        "10": "CP861",
+        "11": "CP862",
+        "12": "CP863",
+        "13": "CP864",
+        "14": "CP865",
+        "15": "CP866",
+        "16": "CP869",
+        "17": "CP874",
+        "18": "CP1250",
+        "19": "CP1251",
+        "20": "CP1252",
+        "21": "CP1253",
+        "22": "CP1254",
+        "23": "CP1255",
+        "24": "CP1256",
+        "25": "CP1257",
+        "26": "CP1258"
+      },
+      "vendor": "ESCPost",
+      "model": "Reference",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "d5af34b2409705ebc02b9ac9091cf96614bd2a105c815bb88d2b8b5a23460464"
+    },
+    "RP-F10-58mm": {
+      "schema_version": 1,
+      "id": "RP-F10-58mm",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 432,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 8,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "13": "CP857",
+        "14": "CP737",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "34": "CP855",
+        "37": "CP864",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "255": "Unknown"
+      },
+      "vendor": "Seiko",
+      "model": "RP-F10",
+      "paper_width_tenths_mm": 540,
+      "canonical_profile_sha256": "78e2018ee3bd85b05f597ffabc2c749ca27e75550f600700f1813962f9f18abc"
+    },
+    "RP-F10-80mm": {
+      "schema_version": 1,
+      "id": "RP-F10-80mm",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 8,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "13": "CP857",
+        "14": "CP737",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "34": "CP855",
+        "37": "CP864",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "255": "Unknown"
+      },
+      "vendor": "Seiko",
+      "model": "RP-F10",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "ac7c0ad6677d0963233da3a09257ec08bc01c4bf592e01ad5796409de57d8a4e"
+    },
+    "SRP-S300": {
+      "schema_version": 1,
+      "id": "SRP-S300",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 640,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "47": "CP1253",
+        "49": "CP1255",
+        "50": "CP1256",
+        "255": "Unknown"
+      },
+      "vendor": "Bixolon",
+      "model": "SRP-S300",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "3c3af013bcfec5fac25f763d35f80f8415fdacbcca7f4bd768e4a6487d8fca9c"
+    },
+    "Sunmi-V2": {
+      "schema_version": 1,
+      "id": "Sunmi-V2",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 384,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": false,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "21": "CP874",
+        "33": "CP775",
+        "34": "CP855",
+        "36": "CP862",
+        "37": "CP864",
+        "254": "CP855"
+      },
+      "vendor": "Sunmi",
+      "model": "Sunmi V2",
+      "paper_width_tenths_mm": 575,
+      "canonical_profile_sha256": "4b3e3271b1942be7ad0b1e5ef14ffa5d57470bc0205ab223a10d147a10100efd"
+    },
+    "T-1": {
+      "schema_version": 1,
+      "id": "T-1",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 504,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "KATAKANA",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "19": "CP858",
+        "255": "Unknown"
+      },
+      "vendor": "Metapace",
+      "model": "T-1",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "43ecc174e60034e0f7e84b7545297cd9819f1fb60b410aa85dbb8082a29d8358"
+    },
+    "TH230": {
+      "schema_version": 1,
+      "id": "TH230",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP850",
+        "2": "CP852",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP858",
+        "7": "CP866",
+        "8": "CP1252",
+        "9": "CP862",
+        "10": "CP737",
+        "11": "CP874",
+        "12": "CP857",
+        "16": "CP1254",
+        "17": "CP1250",
+        "18": "Unknown",
+        "19": "Unknown",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "CP864",
+        "23": "CP720",
+        "24": "CP1256",
+        "25": "Unknown",
+        "26": "KATAKANA",
+        "27": "CP775",
+        "28": "CP1257",
+        "29": "Unknown"
+      },
+      "vendor": "Wincor Nixdorf",
+      "model": "TH230",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "fc4928232bda1d1b803cb059e86e833fc0e2518b90345162b42211a0c1a053e0"
+    },
+    "TH230Plus": {
+      "schema_version": 1,
+      "id": "TH230Plus",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP850",
+        "2": "CP852",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP858",
+        "7": "CP866",
+        "8": "CP1252",
+        "9": "CP862",
+        "10": "CP737",
+        "11": "CP874",
+        "12": "CP857",
+        "16": "CP1254",
+        "17": "CP1250",
+        "18": "Unknown",
+        "19": "Unknown",
+        "20": "Unknown",
+        "21": "Unknown",
+        "22": "CP864",
+        "23": "CP720",
+        "24": "CP1256",
+        "25": "Unknown",
+        "26": "KATAKANA",
+        "27": "CP775",
+        "28": "CP1257",
+        "29": "Unknown"
+      },
+      "vendor": "Wincor Nixdorf",
+      "model": "TH230+",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "5490d123cdab436094d04028d1f1e8ec51374e85878c44a153dd6b0d547f7fbd"
+    },
+    "TM-L90": {
+      "schema_version": 1,
+      "id": "TM-L90",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-L90",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "21febd8a25e7ab6da592166c1fca88b21b95dfdb4edee48debb6465cc2dab75a"
+    },
+    "TM-P80": {
+      "schema_version": 1,
+      "id": "TM-P80",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "66": "Unknown",
+        "67": "Unknown",
+        "68": "Unknown",
+        "69": "Unknown",
+        "70": "Unknown",
+        "71": "Unknown",
+        "72": "Unknown",
+        "73": "Unknown",
+        "74": "Unknown",
+        "75": "Unknown",
+        "82": "Unknown",
+        "254": "Unknown",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-P80",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "ccbe2b8a8d525a7712b9a9291f928248d06ffa9a9cd2391f7dddfbf87000ab7b"
+    },
+    "TM-P80-42col": {
+      "schema_version": 1,
+      "id": "TM-P80-42col",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 546,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "66": "Unknown",
+        "67": "Unknown",
+        "68": "Unknown",
+        "69": "Unknown",
+        "70": "Unknown",
+        "71": "Unknown",
+        "72": "Unknown",
+        "73": "Unknown",
+        "74": "Unknown",
+        "75": "Unknown",
+        "82": "Unknown",
+        "254": "Unknown",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-P80 (42 column mode)",
+      "paper_width_tenths_mm": 636,
+      "canonical_profile_sha256": "552b8b2105bc005ba0a8b5769bc49fbbfb79f59f9821d7ad33143206a9c7b87a"
+    },
+    "TM-T20II": {
+      "schema_version": 1,
+      "id": "TM-T20II",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-T20II",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "f301829e27e518ee4646be7f8d9767ab4865ada7fc8819338ccd06e27b49b55d"
+    },
+    "TM-T20II-42col": {
+      "schema_version": 1,
+      "id": "TM-T20II-42col",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 546,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-T20II (42 column mode)",
+      "paper_width_tenths_mm": 683,
+      "canonical_profile_sha256": "ed33ee8d0a83efc30110934117555f76ce5174ecd77df3601b5291262266077f"
+    },
+    "TM-T88II": {
+      "schema_version": 1,
+      "id": "TM-T88II",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "Unknown",
+        "7": "Unknown",
+        "8": "Unknown",
+        "11": "Unknown",
+        "12": "Unknown",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "Unknown",
+        "20": "Unknown",
+        "21": "CP874",
+        "22": "Unknown",
+        "23": "Unknown",
+        "24": "Unknown",
+        "25": "Unknown",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "Unknown",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "Unknown",
+        "42": "CP774",
+        "43": "CP772",
+        "44": "CP1125",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "66": "Unknown",
+        "67": "Unknown",
+        "68": "Unknown",
+        "69": "Unknown",
+        "70": "Unknown",
+        "71": "Unknown",
+        "72": "Unknown",
+        "73": "Unknown",
+        "74": "Unknown",
+        "75": "Unknown",
+        "82": "Unknown",
+        "254": "Unknown",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-T88II",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "63cd3d27613630ef16d4a462453334dd13d9e685a660f00c694fdbd8536c80c5"
+    },
+    "TM-T88III": {
+      "schema_version": 1,
+      "id": "TM-T88III",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "6": "CP1251",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP862",
+        "19": "CP858",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-T88III",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "c05f5fd8b7d8dd8a2a749cdf4cc1317ef0d6598e1df0208e4474482ead7aba59"
+    },
+    "TM-T88IV": {
+      "schema_version": 1,
+      "id": "TM-T88IV",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-T88IV",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "e639cea028fa4dbc117a5d095eeae70ee727ea0e2442164f4e07885ed9d3cdaf"
+    },
+    "TM-T88IV-SA": {
+      "schema_version": 1,
+      "id": "TM-T88IV-SA",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "20": "Unknown",
+        "21": "CP874",
+        "26": "Unknown",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2"
+      },
+      "vendor": "Epson",
+      "model": "TM-T88IV South Asia",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "e53efb1ef8a4216173463b1eba06077dde2c9ea38a99600d3d23632cec0673cd"
+    },
+    "TM-T88V": {
+      "schema_version": 1,
+      "id": "TM-T88V",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 512,
+        "dpi_x": 180,
+        "dpi_y": 180
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 180,
+        "vertical_units_per_inch": 180
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "11": "CP851",
+        "12": "CP853",
+        "13": "CP857",
+        "14": "CP737",
+        "15": "ISO_8859-7",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852",
+        "19": "CP858",
+        "30": "TCVN-3-1",
+        "31": "TCVN-3-2",
+        "32": "CP720",
+        "33": "CP775",
+        "34": "CP855",
+        "35": "CP861",
+        "36": "CP862",
+        "37": "CP864",
+        "38": "CP869",
+        "39": "ISO_8859-2",
+        "40": "ISO_8859-15",
+        "41": "CP1098",
+        "45": "CP1250",
+        "46": "CP1251",
+        "47": "CP1253",
+        "48": "CP1254",
+        "49": "CP1255",
+        "50": "CP1256",
+        "51": "CP1257",
+        "52": "CP1258",
+        "53": "RK1048",
+        "255": "Unknown"
+      },
+      "vendor": "Epson",
+      "model": "TM-T88V",
+      "paper_width_tenths_mm": 800,
+      "canonical_profile_sha256": "d6c8366292db650e9cf9fd1fc4b55fcd15ec5e634e01351c717630cc4bd5c1eb"
+    },
+    "TM-U220": {
+      "schema_version": 1,
+      "id": "TM-U220",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 400,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 7,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437"
+      },
+      "vendor": "Epson",
+      "model": "TM-U220",
+      "paper_width_tenths_mm": 634,
+      "canonical_profile_sha256": "67417c9d0d0294d2320f51e74589acbc9413ff15a30e793c8ba50b1417bbdaed"
+    },
+    "TM-U220B": {
+      "schema_version": 1,
+      "id": "TM-U220B",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 400,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 7,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": false,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437"
+      },
+      "vendor": "Epson",
+      "model": "TM-U220B",
+      "paper_width_tenths_mm": 634,
+      "canonical_profile_sha256": "eedc225453e234c1997104707c78527d2cc05217afae648aeb0265360e672e35"
+    },
+    "TSP600": {
+      "schema_version": 1,
+      "id": "TSP600",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 576,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 13,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 10,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar"
+          ],
+          "function_b": [
+            "upc_a",
+            "upc_e",
+            "ean_13",
+            "ean_8",
+            "code_39",
+            "itf",
+            "codabar",
+            "code_93",
+            "code_128"
+          ]
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": true,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": true
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP437",
+        "2": "CP932",
+        "3": "CP437",
+        "4": "CP858",
+        "5": "CP852",
+        "6": "CP860",
+        "7": "CP861",
+        "8": "CP863",
+        "9": "CP865",
+        "10": "CP866",
+        "11": "CP855",
+        "12": "CP857",
+        "13": "CP862",
+        "14": "CP864",
+        "15": "CP737",
+        "16": "CP851",
+        "17": "CP869",
+        "18": "CP928",
+        "19": "CP772",
+        "20": "CP774",
+        "21": "CP874",
+        "32": "CP1252",
+        "33": "CP1250",
+        "34": "CP1251",
+        "64": "CP3840",
+        "65": "CP3841",
+        "66": "CP3843",
+        "67": "CP3844",
+        "68": "CP3845",
+        "69": "CP3846",
+        "70": "CP3847",
+        "71": "CP3848",
+        "72": "CP1001",
+        "73": "CP2001",
+        "74": "CP3001",
+        "75": "CP3002",
+        "76": "CP3011",
+        "77": "CP3012",
+        "78": "CP3021",
+        "79": "CP3041",
+        "96": "Unknown",
+        "97": "Unknown",
+        "98": "Unknown",
+        "99": "Unknown",
+        "100": "Unknown",
+        "101": "Unknown",
+        "102": "Unknown",
+        "255": "Unknown"
+      },
+      "vendor": "Star Micronics",
+      "model": "TSP600 Series",
+      "paper_width_tenths_mm": 720,
+      "canonical_profile_sha256": "04c5a36967ee054a1ad05860f271f954ea67298f1a7029c395874f09eb24a74b"
+    },
+    "ZJ-5870": {
+      "schema_version": 1,
+      "id": "ZJ-5870",
+      "source": {
+        "type": "upstream_default"
+      },
+      "geometry": {
+        "printable_width_dots": 384,
+        "dpi_x": 203,
+        "dpi_y": 203
+      },
+      "cutter": null,
+      "motion": {
+        "horizontal_units_per_inch": 203,
+        "vertical_units_per_inch": 203
+      },
+      "column_bit_image": {
+        "eight_dot_vertical_pitch_dots": 3
+      },
+      "commands": {
+        "esc_backslash_negative": "apply",
+        "esc_dollar_after_printable_data": "apply",
+        "esc_j": "feed",
+        "gs_v_0_following_lf": "feed",
+        "gs_v_function_b_full": "feed",
+        "gs_v_function_b_partial": "feed"
+      },
+      "defaults": {
+        "line_spacing_dots": 30,
+        "code_page": 0,
+        "international_character_set": 0,
+        "carriage_return": "ignored"
+      },
+      "fonts": {
+        "a": {
+          "cell_width_dots": 12,
+          "cell_height_dots": 24,
+          "baseline_dots": 20
+        },
+        "b": {
+          "cell_width_dots": 9,
+          "cell_height_dots": 17,
+          "baseline_dots": 14
+        }
+      },
+      "features": {
+        "barcodes": {
+          "function_a": [],
+          "function_b": []
+        },
+        "bitImageColumn": true,
+        "bitImageRaster": true,
+        "graphics": false,
+        "paperFullCut": false,
+        "paperPartCut": false,
+        "pulseStandard": true,
+        "qrCode": false
+      },
+      "code_pages": {
+        "0": "CP437",
+        "1": "CP932",
+        "2": "CP850",
+        "3": "CP860",
+        "4": "CP863",
+        "5": "CP865",
+        "16": "CP1252",
+        "17": "CP866",
+        "18": "CP852"
+      },
+      "vendor": "ZiJiang",
+      "model": "ZJ-5870 Thermal Receipt Printer",
+      "paper_width_tenths_mm": 480,
+      "canonical_profile_sha256": "baa7bdbf9ab1ad582c62e2ba10d3d19dd61ab55e9397de8a91ae9f5c3ec7df97"
+    }
+  }
+}

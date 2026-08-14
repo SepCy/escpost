@@ -1,186 +1,45 @@
-//! Dot-accurate ESC/POS rendering.
+//! Native ESCPost developer command-line interface.
 
-mod barcode;
-mod command;
-mod databar;
+mod cli;
+mod configuration;
+mod discovery;
 mod error;
-mod font;
-mod graphics;
-mod international;
-mod qr;
-mod state;
-mod surface;
-mod symbols;
-mod text;
+mod net;
+mod output;
+mod print;
+mod printers;
+mod profiles;
+pub mod profiles_cmd;
+mod render;
+mod serve;
+mod source;
+mod watch;
+mod web;
 
-pub use error::{LimitKind, RenderError, RenderWarning};
-pub use surface::MonoSurface;
+use std::process::ExitCode;
 
-use command::{execute_esc_command, execute_gs_command};
-use escpost_profiles::PrinterProfile;
-use state::PrinterState;
-use surface::encode_png;
+use clap::Parser;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RenderOptions {
-    pub limits: RenderLimits,
-    /// Subpixels per dot. `1` is dot resolution; `N > 1` renders at `N ×`
-    /// density. Independent of `antialias`.
-    pub scale: u32,
-    /// When `false`, glyph coverage is thresholded to hard dots and the sheet
-    /// encodes as a faithful 1-bit PNG (the printer's real output, used by
-    /// golden tests). When `true`, glyph edges keep their coverage and the sheet
-    /// encodes as an 8-bit grayscale preview — cosmetic only, never what prints.
-    pub antialias: bool,
-}
+use crate::cli::{Cli, Command};
+use crate::error::CliError;
 
-impl Default for RenderOptions {
-    fn default() -> Self {
-        Self {
-            limits: RenderLimits::default(),
-            scale: 1,
-            antialias: false,
+pub async fn main() -> ExitCode {
+    let cli = Cli::parse();
+    match run(cli).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::FAILURE
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RenderLimits {
-    pub max_input_bytes: usize,
-    pub max_command_payload_bytes: usize,
-    pub max_sheet_width_dots: u32,
-    pub max_sheet_height_dots: u32,
-    pub max_sheets: usize,
-    pub max_total_dots: u64,
-}
-
-impl Default for RenderLimits {
-    fn default() -> Self {
-        Self {
-            max_input_bytes: 16 * 1024 * 1024,
-            max_command_payload_bytes: 8 * 1024 * 1024,
-            max_sheet_width_dots: 4096,
-            max_sheet_height_dots: 1_000_000,
-            max_sheets: 32,
-            max_total_dots: 200_000_000,
-        }
+async fn run(cli: Cli) -> Result<(), CliError> {
+    match cli.command {
+        Command::Render(arguments) => render::run(arguments, cli.non_interactive).await,
+        Command::Print(arguments) => print::run(arguments, cli.non_interactive).await,
+        Command::Serve(arguments) => serve::run(arguments, cli.non_interactive).await,
+        Command::Printers(arguments) => printers::run(arguments, cli.non_interactive).await,
+        Command::Profiles(arguments) => profiles_cmd::run(arguments, cli.non_interactive),
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RenderResult {
-    pub sheets: Vec<RenderedSheet>,
-    pub device_events: Vec<DeviceEvent>,
-    /// Non-fatal diagnostics from an otherwise successful render, such as a cut
-    /// requested on a profile whose printer has no cutter.
-    pub warnings: Vec<RenderWarning>,
-    pub metadata: RenderMetadata,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DeviceEvent {
-    CashDrawerPulse {
-        connector: u8,
-        on_time_units: u8,
-        off_time_units: u8,
-    },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RenderMetadata {
-    pub renderer_version: &'static str,
-    pub profile_id: String,
-    pub canonical_profile_sha256: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RenderedSheet {
-    pub surface: MonoSurface,
-    pub png: Vec<u8>,
-}
-
-pub fn render(data: &[u8], profile: &PrinterProfile) -> Result<RenderResult, RenderError> {
-    render_with_options(data, profile, &RenderOptions::default())
-}
-
-pub fn render_with_options(
-    data: &[u8],
-    profile: &PrinterProfile,
-    options: &RenderOptions,
-) -> Result<RenderResult, RenderError> {
-    validate_initial_limits(data, profile, &options.limits)?;
-    let mut state = PrinterState::new(profile, options.limits, options.scale, options.antialias);
-    let mut offset = 0;
-
-    while offset < data.len() {
-        let byte = data[offset];
-        if byte != 0x0a {
-            state.clear_pending_gs_v_0_lf();
-        }
-
-        offset += match byte {
-            0x09 => {
-                state.horizontal_tab()?;
-                1
-            }
-            0x0a => {
-                state.line_feed()?;
-                1
-            }
-            0x0d => {
-                state.carriage_return()?;
-                1
-            }
-            0x1b => execute_esc_command(&data[offset..], offset, &mut state)?,
-            0x1d => execute_gs_command(&data[offset..], offset, &mut state)?,
-            // ESC/POS code pages retain ASCII in 20h–7Eh and assign printable
-            // characters to 80h–FFh. Control bytes remain parser input.
-            byte @ (0x20..=0x7e | 0x80..=0xff) => {
-                state.print_byte(byte, offset)?;
-                1
-            }
-            byte => return Err(RenderError::UnsupportedDataByte { byte, offset }),
-        };
-    }
-
-    let device_events = std::mem::take(&mut state.device_events);
-    let warnings = std::mem::take(&mut state.warnings);
-    let mut sheets = Vec::new();
-    for surface in state.into_surfaces()? {
-        let png = encode_png(&surface)?;
-        sheets.push(RenderedSheet { surface, png });
-    }
-
-    Ok(RenderResult {
-        sheets,
-        device_events,
-        warnings,
-        metadata: RenderMetadata {
-            renderer_version: env!("CARGO_PKG_VERSION"),
-            profile_id: profile.id.clone(),
-            canonical_profile_sha256: profile.canonical_profile_sha256.clone(),
-        },
-    })
-}
-
-fn validate_initial_limits(
-    data: &[u8],
-    profile: &PrinterProfile,
-    limits: &RenderLimits,
-) -> Result<(), RenderError> {
-    if data.len() > limits.max_input_bytes {
-        return Err(RenderError::LimitExceeded {
-            kind: LimitKind::InputBytes,
-            value: data.len() as u64,
-            limit: limits.max_input_bytes as u64,
-        });
-    }
-    if profile.geometry.printable_width_dots > limits.max_sheet_width_dots {
-        return Err(RenderError::LimitExceeded {
-            kind: LimitKind::SheetWidthDots,
-            value: u64::from(profile.geometry.printable_width_dots),
-            limit: u64::from(limits.max_sheet_width_dots),
-        });
-    }
-    Ok(())
 }

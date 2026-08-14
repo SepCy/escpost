@@ -18,7 +18,7 @@ backend is already implemented. Current implementation status remains visible
 in [`README.md`](../README.md) and `TODO.md`.
 
 Printer-model behavior does not belong here. Store firmware quirks and physical
-evidence under `profiles/<profile-id>/`. Store ESC/POS command coverage in
+evidence under `crates/escpost-profiles/profiles/<profile-id>/`. Store ESC/POS command coverage in
 `COMMAND_COVERAGE.md`.
 
 ## Status terms
@@ -109,7 +109,7 @@ precedence. Read-only commands accept a missing implicit file without creating
 anything.
 
 Docker development does not mount the host's installed ESCPost configuration.
-The wrapper creates `<checkout>/local/config` as the host user and Compose
+The wrapper creates `<checkout>/.config` as the host user and Compose
 mounts it at `/home/developer/.config/escpost`. A developer can deliberately
 share another host directory by setting `ESCPOST_CONFIG_HOST_DIR`; the
 container still sees its conventional user path. So that commands report a

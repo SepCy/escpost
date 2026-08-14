@@ -417,26 +417,11 @@ dependencies = [
 name = "escpost"
 version = "0.1.0"
 dependencies = [
- "encoding_rs",
- "escpost-profiles",
- "fontdue",
- "oem_cp",
- "png",
- "qrcode",
- "serde",
- "thiserror",
- "toml",
-]
-
-[[package]]
-name = "escpost-cli"
-version = "0.1.0"
-dependencies = [
  "axum",
  "clap",
  "directories",
- "escpost",
  "escpost-profiles",
+ "escpost-render",
  "if-addrs",
  "indicatif",
  "inquire",
@@ -464,9 +449,24 @@ dependencies = [
 name = "escpost-python"
 version = "0.1.0"
 dependencies = [
- "escpost",
  "escpost-profiles",
+ "escpost-render",
  "pyo3",
+]
+
+[[package]]
+name = "escpost-render"
+version = "0.1.0"
+dependencies = [
+ "encoding_rs",
+ "escpost-profiles",
+ "fontdue",
+ "oem_cp",
+ "png",
+ "qrcode",
+ "serde",
+ "thiserror",
+ "toml",
 ]
 
 [[package]]

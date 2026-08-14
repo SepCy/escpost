@@ -1,8 +1,8 @@
 //! Python bindings for ESCPost.
 
-use escpost::{DeviceEvent, RenderResult, RenderWarning, render as render_escpos};
 use escpost_profiles::PrinterProfile;
 use escpost_profiles::resolver::{self, ResolveError};
+use escpost_render::{DeviceEvent, RenderResult, RenderWarning, render as render_escpos};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};

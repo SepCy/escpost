@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+test_directory=$(mktemp -d)
+trap 'rm -rf "$test_directory"' EXIT HUP INT TERM
+
+mkdir "$test_directory/bin"
+cp "$repository/escpost" "$test_directory/escpost"
+
+printf '%s\n' \
+  '#!/bin/sh' \
+  'printf "docker: %s\n" "$*"' \
+  >"$test_directory/bin/docker"
+chmod +x "$test_directory/bin/docker"
+
+output=$(
+  cd "$test_directory"
+  PATH="$test_directory/bin:/usr/bin:/bin" \
+    ESCPOST_CONFIG_HOST_DIR= \
+    ./escpost printers list
+)
+
+test -d "$test_directory/.config"
+test "$output" = 'docker: compose run --rm cli printers list'

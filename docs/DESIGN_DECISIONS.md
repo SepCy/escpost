@@ -361,27 +361,28 @@ however, describe all geometry and behavior required by an emulator.
 
 ### Decision
 
-Pin the upstream database as a source repository and import it at build time.
+Track the upstream database as a source repository and import it at build time.
 Maintain ESCPost enrichment files that state exact descriptors and the
 behavioral deviations a printer confirms (DD-031). Resolve and validate both
 sources into a canonical profile pack embedded in the Rust library.
 
-Do not fetch profile data at installation or render time. The Git submodule
-pins the upstream repository, and the canonical content hash identifies the
-runtime profile.
+Do not fetch profile data at installation or render time. The selected Git
+submodule revision supplies the build input, and the canonical content hash
+identifies the resulting runtime profile. Per-profile input hashes do not
+duplicate Git and code review as change-approval mechanisms.
 
 ### Consequences
 
 - python-escpos generators and ESCPost previews can share profile names.
 - Receiptful custom profiles can feed both systems.
-- Upstream updates are deliberate, reviewable dependency changes.
+- Upstream updates are ordinary reviewable dependency changes.
 - The renderer is insulated from upstream schema changes by its importer and
   canonical internal schema.
 - A large catalog does not imply high-fidelity support: a profile without
   enrichment rests on default base values and is marked as synthesized rather
   than calibrated (DD-031, DD-032).
 
-## DD-022 — Use typed, hash-guarded profile enrichments
+## DD-022 — Use typed profile enrichments
 
 **Status:** Accepted
 
@@ -392,28 +393,27 @@ database. A mature per-field evidence and patch protocol would provide strong
 audit detail but would impose substantial authoring and implementation cost
 before the first profile is calibrated.
 
-Pinning only the complete upstream repository is reproducible, but it does not
-distinguish an unrelated profile change from a change to the selected printer
-or one of its inherited ancestors.
+Git and pull-request review already record and review changes to both upstream
+inputs and local enrichments. A second per-profile approval mechanism would
+duplicate that workflow and complicate the source model.
 
 ### Decision
-
-Use the Git submodule itself as the global repository and commit pin. For each
-enriched printer, store the SHA-256 of its fully resolved, deterministically
-normalized upstream profile.
 
 Express enrichments as typed TOML with simple source references, and generate
 deterministic canonical JSON with a canonical profile hash.
 
-Reject unknown enrichment fields and stale upstream-profile hashes. Defer a
-generic patch language, operation declarations, separate evidence records,
-per-field provenance wrappers, and numeric confidence values until real
-maintenance needs require them.
+Reject unknown enrichment fields and invalid resolved values. Do not store or
+check per-profile hashes of upstream inputs; upstream changes flow into the next
+generated runtime pack and are reviewed as ordinary Git changes. Defer a generic
+patch language, operation declarations, separate evidence records, per-field
+provenance wrappers, and numeric confidence values until real maintenance needs
+require them.
 
 ### Consequences
 
-- Upstream drift affecting an enriched printer cannot pass silently.
-- Unrelated upstream profile changes do not force every enrichment to change.
+- Profile compilation validates correctness without acting as a change-approval
+  system.
+- Upstream and enrichment changes remain visible and reversible in Git.
 - Profile authors edit ordinary typed values rather than patch operations.
 - The canonical renderer input is independent of the upstream YAML schema.
 - Git history records evidence and review without copying authoring provenance
@@ -590,7 +590,7 @@ available.
 
 ### Context
 
-The `escpost` crate is embedded by the CLI and the Python binding today, and
+The `escpost-render` crate is embedded by the CLI and the Python binding today, and
 the roadmap adds more consumers: replay, proxying, linting, and integration
 into other projects. Some future hosts may not be developer-machine processes
 at all; rendering inside a browser through WebAssembly is a realistic option
@@ -600,7 +600,7 @@ surface that must be audited and tested.
 
 ### Decision
 
-The `escpost` crate performs pure computation: ESC/POS bytes and a profile
+The `escpost-render` crate performs pure computation: ESC/POS bytes and a profile
 in, dot surfaces and PNG bytes out. It must not depend on networking,
 hardware transports, filesystem access, system clocks, or any other
 operating-system interface. Its dependency tree stays pure-Rust computation
@@ -609,7 +609,7 @@ keeps the crate portable to any target Rust compiles to, including
 WebAssembly.
 
 Applications own I/O. USB and RAW TCP printing, the web server, and file
-handling live in `escpost-cli`. When a second consumer needs physical
+handling live in `escpost`. When a second consumer needs physical
 output, extract the transports into a sibling crate such as `escpost-print`
 instead of moving them into the renderer.
 
@@ -885,14 +885,14 @@ real-named printer: an upstream entry that states no width — the generic
 human-authored profile may still omit width and accept the 58 mm default, because
 a person then owns that choice.
 
-A synthesized profile carries a distinct source marker, separate from a
-hash-pinned enrichment (DD-022), so an assumed profile never presents as a
-physically reviewed one; that marker is the runtime signal that a profile rests
-on base defaults rather than calibration.
+A synthesized profile carries a distinct source marker, separate from a curated
+enrichment, so an assumed profile never presents as a physically reviewed one;
+that marker is the runtime signal that a profile rests on base defaults rather
+than calibration.
 
-All profiles resolve at build time into the single canonical pack (DD-018). An
-equality check between the committed pack and a fresh compile guards against
-silent upstream or default drift.
+All profiles resolve at build time into the single canonical pack (DD-018).
+Git records changes to the source inputs and generated output; compilation does
+not add a separate approval gate.
 
 ### Consequences
 
@@ -907,6 +907,75 @@ silent upstream or default drift.
   open to revision as calibrated evidence accumulates.
 - Runtime resolution stays a pack lookup; the larger pack must be regenerated on
   upstream or default changes, enforced by the drift check.
+
+## DD-033 — Keep conceptual trace sheets and buffered output distinct from rendered sheets
+
+**Status:** Accepted
+
+### Context
+
+In Standard mode, some ESC/POS input writes image data into the current print
+buffer without printing it immediately. Printable characters and `ESC *` column
+images are examples. A later print operation such as `LF` prints that buffered
+line; if the job ends first, the printer still has buffered data but no
+corresponding marks exist on paper.
+
+The renderer already reflects this distinction internally. `PrinterState`
+creates an active roll and line buffer at initialization, but returns a
+`RenderedSheet` only after committed output gives the roll a height or a cut
+finalizes it. Deriving trace sheets solely from returned render surfaces would
+therefore discard successfully parsed commands whenever all of their paint
+remains buffered. Automatically flushing at end of input would instead invent
+printer behavior and falsely show unprinted data in the PNG.
+
+A whole sheet also cannot simply be called uncommitted: one receipt may contain
+many committed lines followed by one final buffered line.
+
+### Decision
+
+Tracing has a **conceptual active sheet** independently of whether that sheet
+has a rendered PNG. Sheet zero exists internally from renderer initialization;
+it is emitted into the trace once the job records a command. A cut closes the
+current conceptual sheet and establishes the next one. Rendered sheets remain
+authoritative paper output and are never fabricated merely to host trace data.
+
+Each successfully parsed command retains its command record. Paint-producing
+commands additionally distinguish the disposition of their output:
+
+- **Buffered** — logical output exists only in the current print buffer and is
+  not visible on a rendered sheet.
+- **Committed** — output reached the roll and may carry final sheet-space paint
+  bounds.
+- Commands with no paint output have no paint disposition; state, motion, device
+  action, and as-yet-unmodeled effects remain distinct concepts.
+
+A print operation transitions the affected earlier commands from Buffered to
+Committed. The trace may retain the committing command as the cause of that
+transition, so a consumer can explain that `LF`, `CR`, `ESC J`, `ESC d`, or
+another modeled print operation caused buffered content to reach paper.
+Commands that print immediately enter the Committed state directly.
+
+At end of input, remaining buffered commands stay Buffered. They appear in the
+command stream with an explicit “not printed” status, receive no overlay on the
+authoritative PNG, and do not cause an implicit line feed. A trace sheet may
+therefore exist without a corresponding rendered sheet, or may contain both
+committed and buffered commands while referencing one rendered sheet.
+
+### Consequences
+
+- Every successfully parsed command remains inspectable even when the job
+  produces no PNG.
+- The web workbench can explain missing output instead of silently omitting a
+  command or pretending buffered pixels were printed.
+- Commitment is tracked per paint-producing command, not as one coarse sheet
+  flag.
+- Trace-sheet and rendered-sheet counts are no longer required to match. Their
+  ordered indexes correspond when rendered output exists; a final zero-height
+  conceptual sheet may have no rendered entry.
+- Final sheet-space bounds exist only for committed paint. A future buffered
+  preview may expose line-local logical bounds, but it must remain visually and
+  semantically separate from printed output.
+- Ordinary non-traced rendering keeps its current end-of-input behavior.
 
 ## Open questions
 

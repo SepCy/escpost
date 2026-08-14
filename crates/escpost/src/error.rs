@@ -1,192 +1,314 @@
-//! Renderer error types.
+use std::path::PathBuf;
 
 use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LimitKind {
-    InputBytes,
-    CommandPayloadBytes,
-    SheetWidthDots,
-    SheetHeightDots,
-    Sheets,
-    TotalDots,
-}
-
 #[derive(Debug, Error)]
-pub enum RenderError {
-    #[error("truncated {command} command at byte offset {offset}")]
-    TruncatedCommand {
-        command: &'static str,
-        offset: usize,
-    },
+pub(crate) enum CliError {
+    #[error("could not load the embedded printer profiles: {0}")]
+    LoadProfiles(String),
 
-    #[error("unsupported ESC/POS command ESC {command:#04x} at byte offset {offset}")]
-    UnsupportedEscCommand { command: u8, offset: usize },
+    #[error("printer profile is required; pass --profile REFERENCE for generic rendering")]
+    MissingProfile,
 
-    #[error("unsupported ESC/POS command GS {command:#04x} at byte offset {offset}")]
-    UnsupportedGsCommand { command: u8, offset: usize },
+    #[error("unknown printer profile {0:?}")]
+    UnknownProfile(String),
 
-    #[error("unsupported ESC * bit-image mode {mode} at byte offset {offset}")]
-    UnsupportedBitImageMode { mode: u8, offset: usize },
-
-    #[error("unsupported character font {font} at byte offset {offset}")]
-    UnsupportedCharacterFont { font: u8, offset: usize },
-
-    #[error("unsupported underline mode {mode} at byte offset {offset}")]
-    UnsupportedUnderlineMode { mode: u8, offset: usize },
-
-    #[error("unsupported justification {justification} at byte offset {offset}")]
-    UnsupportedJustification { justification: u8, offset: usize },
-
-    #[error("unsupported code page {code_page} ({encoding}) at byte offset {offset}")]
-    UnsupportedCodePage {
-        code_page: u8,
-        encoding: String,
-        offset: usize,
-    },
-
-    #[error("unsupported international character set {character_set} at byte offset {offset}")]
-    UnsupportedInternationalCharacterSet { character_set: u8, offset: usize },
+    #[error("could not select a printer profile: {0}")]
+    ProfilePrompt(String),
 
     #[error(
-        "byte {byte:#04x} is undefined in code page {code_page} ({encoding}) at byte offset {offset}"
+        "interactive selection is unavailable; run `escpost profiles list --search <text>` instead"
     )]
-    UndefinedCodePageByte {
-        byte: u8,
-        code_page: u8,
-        encoding: String,
-        offset: usize,
+    InteractiveFindUnavailable,
+
+    #[error(
+        "an output destination is required; pass --output <PNG>, --output-dir <DIRECTORY>, or --web"
+    )]
+    MissingOutput,
+
+    #[error("could not read ESC/POS input {path}: {source}")]
+    ReadInput {
+        path: PathBuf,
+        source: std::io::Error,
     },
 
-    #[error("bundled font has no glyph for {character:?} at byte offset {offset}")]
-    MissingGlyph { character: char, offset: usize },
+    #[error("could not read ESC/POS input from stdin: {0}")]
+    ReadStdin(std::io::Error),
 
-    #[error("unsupported GS v 0 raster bit-image mode {mode} at byte offset {offset}")]
-    UnsupportedRasterBitImageMode { mode: u8, offset: usize },
+    #[error("directory is not a recognized ESCPost case: {0}")]
+    UnrecognizedDirectory(PathBuf),
 
-    #[error("unsupported graphics function {function} at byte offset {offset}")]
-    UnsupportedGraphicsFunction { function: u8, offset: usize },
+    #[error("invalid case manifest {path}: {message}")]
+    InvalidCaseManifest { path: PathBuf, message: String },
 
-    #[error("invalid {system} barcode data at byte offset {offset}: {reason}")]
-    InvalidBarcodeData {
-        system: &'static str,
-        offset: usize,
-        reason: &'static str,
+    #[error("unsupported case schema version {0}")]
+    UnsupportedCaseSchema(u32),
+
+    #[error("case field {0} must not be empty")]
+    EmptyCaseField(&'static str),
+
+    #[error("hexadecimal input is not UTF-8: {0}")]
+    InvalidHexEncoding(#[from] std::str::Utf8Error),
+
+    #[error("invalid hexadecimal byte {token:?} at token {position}")]
+    InvalidHexByte { token: String, position: usize },
+
+    #[error("could not render ESC/POS input: {0}")]
+    Render(String),
+
+    #[error("single-PNG output requires exactly one sheet, but rendering produced {0}")]
+    MultipleSheets(usize),
+
+    #[error("sheet {requested} does not exist; rendering produced {available} sheet(s)")]
+    SheetOutOfRange { requested: usize, available: usize },
+
+    #[error("could not write PNG output {path}: {source}")]
+    WriteOutput {
+        path: PathBuf,
+        source: std::io::Error,
     },
 
-    #[error("invalid barcode parameter {parameter}={value} at byte offset {offset}")]
-    InvalidBarcodeParameter {
-        parameter: &'static str,
-        value: u8,
-        offset: usize,
+    #[error("could not create output directory {path}: {source}")]
+    CreateOutputDirectory {
+        path: PathBuf,
+        source: std::io::Error,
     },
 
-    #[error("unsupported QR function {function} at byte offset {offset}")]
-    UnsupportedQrFunction { function: u8, offset: usize },
+    #[error("could not serialize the output manifest: {0}")]
+    SerializeManifest(#[from] serde_json::Error),
 
-    #[error("unsupported QR model {model} at byte offset {offset}")]
-    UnsupportedQrModel { model: u8, offset: usize },
+    #[error("could not write PNG output to stdout: {0}")]
+    WriteStdout(std::io::Error),
 
-    #[error("invalid QR parameter {parameter}={value} at byte offset {offset}")]
-    InvalidQrParameter {
-        parameter: &'static str,
-        value: u8,
-        offset: usize,
+    #[error("refusing to write binary PNG data to an interactive terminal")]
+    BinaryOutputToTerminal,
+
+    #[error("PNG stdout cannot be combined with a long-running web viewer")]
+    StdoutWithWeb,
+
+    #[error("could not bind web viewer to {address}: {source}")]
+    BindWeb {
+        address: std::net::SocketAddr,
+        source: std::io::Error,
     },
 
-    #[error("invalid QR data at byte offset {offset}: {reason}")]
-    InvalidQrData { offset: usize, reason: &'static str },
+    #[error("no loopback web port from 9000 through 9099 is available")]
+    NoAutomaticWebPort,
 
-    #[error("QR data storage is empty at byte offset {offset}")]
-    QrDataEmpty { offset: usize },
+    #[error("web viewer failed: {0}")]
+    ServeWeb(std::io::Error),
 
-    #[error("invalid graphics parameter {parameter}={value} at byte offset {offset}")]
-    InvalidGraphicsParameter {
-        parameter: &'static str,
-        value: u64,
-        offset: usize,
+    #[error("could not bind RAW printer to {address}: {source}")]
+    BindRawPrinter {
+        address: std::net::SocketAddr,
+        source: std::io::Error,
+    },
+
+    #[error("no loopback RAW printer port from 9100 through 9109 is available")]
+    NoAutomaticRawPort,
+
+    #[error("RAW printer failed: {0}")]
+    ServeRawPrinter(std::io::Error),
+
+    #[error("idle timeout must be a positive number of seconds")]
+    InvalidIdleTimeout,
+
+    #[error("watch mode requires a filesystem source, not stdin")]
+    WatchStdin,
+
+    #[error("could not enumerate USB devices: {0}")]
+    EnumerateUsb(nusb::Error),
+
+    #[error("could not enumerate network interfaces: {0}")]
+    EnumerateNetworkInterfaces(std::io::Error),
+
+    #[error(
+        "no directly connected IPv4 network is small enough to scan automatically (at most /24); pass --subnet <CIDR>"
+    )]
+    NoDiscoverableSubnets,
+
+    #[error("--discover is only valid for network printers")]
+    DiscoverForUsbPrinter,
+
+    #[error("--subnet, --port, and --timeout are only valid when discovering network printers")]
+    NetworkScanOptionForUsbDiscovery,
+
+    #[error("no printer is listening on port {0} in the scanned networks")]
+    NoDiscoveredPrinters(u16),
+
+    #[error(
+        "several printers were discovered; choose one interactively or pass --host:\n{}",
+        .0.join("\n")
+    )]
+    AmbiguousDiscoveredPrinters(Vec<String>),
+
+    #[error("no USB device matches vendor {vendor_id:#06x} and product {product_id:#06x}")]
+    UsbDeviceNotFound { vendor_id: u16, product_id: u16 },
+
+    #[error(
+        "{count} USB devices match vendor {vendor_id:#06x} and product {product_id:#06x}; refusing to choose one implicitly"
+    )]
+    AmbiguousUsbDevices {
+        vendor_id: u16,
+        product_id: u16,
+        count: usize,
+    },
+
+    #[error("USB OUT endpoint must be between 0x01 and 0x0f, got {0:#04x}")]
+    InvalidUsbOutEndpoint(u8),
+
+    #[error("could not open USB device {vendor_id:#06x}:{product_id:#06x}: {source}")]
+    OpenUsbDevice {
+        vendor_id: u16,
+        product_id: u16,
+        source: nusb::Error,
     },
 
     #[error(
-        "invalid graphics dimensions {width_dots} dot(s) by {height_dots} dot(s) \
-         at byte offset {offset}"
+        "could not inspect the active configuration of USB device {vendor_id:#06x}:{product_id:#06x}: {source}"
     )]
-    InvalidGraphicsDimensions {
-        width_dots: usize,
-        height_dots: usize,
-        offset: usize,
+    InspectUsbConfiguration {
+        vendor_id: u16,
+        product_id: u16,
+        source: nusb::ActiveConfigurationError,
     },
 
-    #[error("graphics payload has {actual} byte(s), expected {expected}, at byte offset {offset}")]
-    InvalidGraphicsPayloadLength {
-        expected: usize,
-        actual: usize,
-        offset: usize,
-    },
-
-    #[error("graphics print buffer is empty at byte offset {offset}")]
-    GraphicsBufferEmpty { offset: usize },
-
-    #[error("{command} requires the beginning of a line at byte offset {offset}")]
-    CommandRequiresBeginningOfLine {
-        command: &'static str,
-        offset: usize,
-    },
-
-    #[error("unsupported GS V cut mode {mode} at byte offset {offset}")]
-    UnsupportedCutMode { mode: u8, offset: usize },
-
-    #[error("unsupported ESC p drawer connector {connector} at byte offset {offset}")]
-    UnsupportedDrawerConnector { connector: u8, offset: usize },
-
-    #[error("{command} is not supported by printer profile {profile:?} at byte offset {offset}")]
-    CommandUnsupportedByProfile {
-        command: &'static str,
-        profile: String,
-        offset: usize,
-    },
+    #[error("could not detach and claim USB interface {interface}: {source}")]
+    ClaimUsbInterface { interface: u8, source: nusb::Error },
 
     #[error(
-        "invalid GS v 0 raster dimensions {width_bytes} byte(s) by {height_dots} dot(s) \
-         at byte offset {offset}"
+        "could not open bulk OUT endpoint {endpoint:#04x} on USB interface {interface}: {source}"
     )]
-    InvalidRasterBitImageDimensions {
-        width_bytes: usize,
-        height_dots: usize,
-        offset: usize,
+    OpenUsbOutEndpoint {
+        interface: u8,
+        endpoint: u8,
+        source: nusb::Error,
     },
 
-    #[error("unsupported data byte {byte:#04x} at byte offset {offset}")]
-    UnsupportedDataByte { byte: u8, offset: usize },
-
-    #[error("render limit {kind:?} exceeded: value {value}, limit {limit}")]
-    LimitExceeded {
-        kind: LimitKind,
-        value: u64,
-        limit: u64,
+    #[error("could not write ESC/POS bytes to USB endpoint {endpoint:#04x}: {source}")]
+    WriteUsb {
+        endpoint: u8,
+        source: std::io::Error,
     },
 
-    #[error("could not encode the rendered sheet as PNG")]
-    EncodePng(#[from] png::EncodingError),
-}
+    #[error("could not finish the USB write on endpoint {endpoint:#04x}: {source}")]
+    FlushUsb {
+        endpoint: u8,
+        source: std::io::Error,
+    },
 
-/// A non-fatal diagnostic recorded during an otherwise successful render. The
-/// sheet is still produced; a warning reports where the preview diverges from
-/// what the printer physically does, so callers can surface it without failing.
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
-pub enum RenderWarning {
-    /// A cut command reached a profile whose printer has no matching cutter. The
-    /// preview still splits into separate sheets at the boundary — a cut marks a
-    /// receipt boundary a POS relies on — but the paper is not physically cut;
-    /// the printer feeds one continuous roll.
+    #[error("printer is required; pass --printer <NAME>")]
+    MissingPrintPrinter,
+
+    #[error("printer {0:?} is not configured; use `escpost printers list` to see available names")]
+    UnknownConfiguredPrinter(String),
+
+    #[error("timed out while connecting to network printer {0}")]
+    ConnectNetworkPrinterTimeout(String),
+
+    #[error("could not connect to network printer {target}: {source}")]
+    ConnectNetworkPrinter {
+        target: String,
+        source: std::io::Error,
+    },
+
+    #[error("timed out while writing to network printer {0}")]
+    WriteNetworkPrinterTimeout(String),
+
+    #[error("could not write to network printer {target}: {source}")]
+    WriteNetworkPrinter {
+        target: String,
+        source: std::io::Error,
+    },
+
+    #[error("could not write command output: {0}")]
+    WriteHumanOutput(std::io::Error),
+
+    #[error("could not read printer configuration {}: {source}", crate::configuration::display_path(.path.as_path()))]
+    ReadPrinterConfiguration {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("invalid printer configuration {}: {message}", crate::configuration::display_path(.path.as_path()))]
+    InvalidPrinterConfiguration { path: PathBuf, message: String },
+
+    #[error("printer name is required")]
+    MissingPrinterName,
+
+    #[error("printer name must not be blank")]
+    BlankPrinterName,
+
+    #[error("printer transport is required")]
+    MissingPrinterTransport,
+
     #[error(
-        "{command} is not physically performed by printer profile {profile:?} \
-         (no cutter): the preview splits here but the paper is not cut, \
-         at byte offset {offset}"
+        "USB printer registration requires an interactive terminal or explicit --vendor-id and --product-id selectors"
     )]
-    UncuttableCut {
-        command: &'static str,
-        profile: String,
-        offset: usize,
+    UsbRegistrationRequiresInteractive,
+
+    #[error("--vendor-id and --product-id must be given together to select a USB printer")]
+    IncompleteUsbSelector,
+
+    #[error("--vendor-id, --product-id, and --serial are only valid for USB printers")]
+    UsbSelectorForNetworkPrinter,
+
+    #[error("no connected USB printer matched the given selectors")]
+    NoMatchingUsbPrinter,
+
+    #[error(
+        "several connected USB printers matched the given selectors; narrow the selection with --serial or register interactively"
+    )]
+    AmbiguousUsbPrinter,
+
+    #[error("--host is only valid for network printers")]
+    NetworkHostForUsbPrinter,
+
+    #[error("--port is only valid for network printers")]
+    NetworkPortForUsbPrinter,
+
+    #[error("no unconfigured connected USB printers were found")]
+    NoUnconfiguredUsbPrinters,
+
+    #[error("network printer host is required")]
+    MissingPrinterHost,
+
+    #[error("network printer host must not be blank")]
+    BlankPrinterHost,
+
+    #[error("could not read printer information: {0}")]
+    PrinterPrompt(String),
+
+    #[error("printer port must be between 1 and 65535")]
+    InvalidPrinterPort,
+
+    #[error("printer profile must not be blank")]
+    BlankPrinterProfile,
+
+    #[error("printer {0:?} is already configured")]
+    PrinterAlreadyConfigured(String),
+
+    #[error("could not create printer configuration directory {}: {source}", crate::configuration::display_path(.path.as_path()))]
+    CreatePrinterConfigurationDirectory {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("could not serialize printer configuration: {0}")]
+    SerializePrinterConfiguration(String),
+
+    #[error("could not write printer configuration {}: {source}", crate::configuration::display_path(.path.as_path()))]
+    WritePrinterConfiguration {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+
+    #[error("the operating system did not provide a user configuration directory")]
+    NoUserConfigDirectory,
+
+    #[error("could not inspect watched source {path}: {source}")]
+    InspectWatchedSource {
+        path: PathBuf,
+        source: std::io::Error,
     },
 }

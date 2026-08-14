@@ -3,7 +3,14 @@ name = "escpost-profiles"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Printer profiles and profile tooling for ESC/POS rendering"
+readme = "README.md"
+keywords = ["escpos", "printer", "receipt", "profile"]
+categories = ["config", "data-structures"]
+exclude = ["profiles/.escpos-printer-db/**"]
 
 [dependencies]
 serde.workspace = true

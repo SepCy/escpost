@@ -18,8 +18,8 @@ data or parses enrichment TOML while rendering.
 ## Repository layout
 
 ```text
-profiles/
-├── .escpos-printer-db/      # pinned upstream Git submodule
+crates/escpost-profiles/profiles/
+├── .escpos-printer-db/      # upstream Git submodule
 ├── .generated/
 │   └── profiles.json        # canonical runtime pack
 └── <profile-id>/
@@ -42,11 +42,10 @@ undocumented — it is synthesized at compile time (DD-032). See
 
 ```text
 Curated:
-  pinned upstream profile ── SHA-256 review guard ─┐
-  typed TOML enrichment ───────────────────────────┤
+  upstream profile + typed TOML enrichment ────────┐
                                                    ▼
 Synthesized:                              validated canonical profile
-  pinned upstream profile ── derivable width ──────┤
+  upstream profile ── derivable width ─────────────┤
                                                     │
 Virtual:                                           │
   self-contained typed TOML ───────────────────────┘
@@ -56,34 +55,19 @@ Curated (`compile_profile`) and synthesized (`synthesize_profile`) profiles
 share the same layered fill; a synthesized profile simply has no enrichment
 to draw its explicit layer from.
 
-## Upstream pinning and drift detection
+## Upstream source
 
 The upstream database is a Git submodule:
 
 ```text
-profiles/.escpos-printer-db
+crates/escpost-profiles/profiles/.escpos-printer-db
 ```
 
-The repository gitlink pins its exact commit. `.gitmodules` records the
-repository URL. A second lock file would duplicate those values, so v1 does not
-have one.
-
-Each upstream source — curated or synthesized — stores the SHA-256 of its
-fully resolved upstream profile. This hash differs by printer and includes
-inherited values.
-
-For `NT-5890K`, the importer hashes the resolved JSON object from the upstream
-`capabilities.json`. `serde_json` stores object keys deterministically in this
-project configuration, and the resulting compact UTF-8 JSON bytes are hashed
-with SHA-256.
-
-When an upstream update affects only another printer, a curated enrichment
-remains valid and a synthesized profile simply resolves to new values on the
-next compile. When it changes a curated printer or an inherited ancestor,
-compilation stops until the new effective profile is reviewed and its hash is
-accepted; a synthesized profile carries no pin to break, since nothing has
-been reviewed against it (see [The `source`
-marker](#the-source-marker)).
+The repository gitlink selects its exact commit and `.gitmodules` records the
+repository URL. Profile compilation consumes the selected data directly;
+profiles do not repeat or approve it through per-profile input hashes.
+An upstream update therefore flows into curated and synthesized profiles the
+next time the runtime pack is generated.
 
 ## Descriptors and deviations (DD-031)
 
@@ -201,12 +185,11 @@ an invented width. `REFERENCE` remains the choice when no specific printer
 is known.
 
 All curated and synthesized profiles resolve at build time into the single
-canonical pack. An equality check between the committed pack and a fresh
-compile guards against silent upstream or default drift.
+canonical pack.
 
 ## Enrichment format
 
-Each `profiles/<profile-id>/profile.toml` is a typed TOML document:
+Each `crates/escpost-profiles/profiles/<profile-id>/profile.toml` is a typed TOML document:
 
 ```toml
 schema_version = 1
@@ -214,12 +197,11 @@ profile = "NT-5890K"
 
 sources = [
     "upstream:escpos-printer-db/NT-5890K",
-    "case:tests/cases/text/ascii-fonts-and-styles",
+    "case:crates/escpost-render/tests/cases/text/ascii-fonts-and-styles",
 ]
 
 [source]
 type = "upstream"
-profile_sha256 = "<resolved-profile-sha256>"
 
 [geometry]
 printable_width_dots = 384
@@ -299,7 +281,7 @@ version 1.
 also the upstream profile identifier.
 
 `source.type = "upstream"` imports capabilities and code pages from
-escpos-printer-db. Its `profile_sha256` is the review guard described above.
+escpos-printer-db.
 `source.type = "upstream_default"` is not an authorable enrichment value — it
 identifies a synthesized profile and appears only in the compiled canonical
 JSON.
@@ -348,13 +330,9 @@ require explicit enrichment evidence.
 The compiled profile's `source` field is one of three tagged variants:
 
 - **`Reference`** — the self-contained virtual baseline; nothing is imported.
-- **`Upstream`** — a curated, hash-pinned enrichment. Its `profile_sha256` is
-  compared against the enrichment's stated pin, and a mismatch stops
-  compilation until the change is reviewed.
+- **`Upstream`** — a curated enrichment layered onto an upstream entry.
 - **`UpstreamDefault`** — a profile synthesized from an upstream entry with no
-  enrichment (DD-032). It also stores `profile_sha256`, but purely for drift
-  visibility; unlike `Upstream`, nothing pins it, so an upstream change never
-  blocks compilation.
+  enrichment (DD-032).
 
 `source` is the profile-level signal for calibrated-versus-synthesized: an
 `Upstream` profile has been reviewed and its stated deviations confirmed; an
@@ -372,7 +350,6 @@ Compilation rejects:
 - an enrichment whose `source.type` is `upstream_default` (that source is
   produced only by synthesis, never authored);
 - an unknown upstream profile;
-- a stale resolved-profile hash on a curated (`Upstream`) source;
 - an incomplete self-contained reference profile;
 - local code-page replacements on an upstream source;
 - zero geometry, motion, or font dimensions;
@@ -396,7 +373,7 @@ Compilation produces deterministic JSON containing:
 ```text
 schema version
 profile id
-typed source, including the resolved upstream SHA-256 when applicable
+typed source
 runtime geometry, cutter, motion, column-image, commands, defaults, and fonts
 implemented capabilities
 code-page mappings
@@ -409,22 +386,23 @@ The canonical hash covers every field except the hash field itself, including
 rendering — kept simple, with no special exclusion. It is the exact profile
 identity used in render metadata and cache keys.
 
-The generated pack is committed because Python wheels embed it directly. Tests
-regenerate every reviewed and synthesizable profile and require the result to
-equal the committed pack.
+The generated pack is committed because runtime consumers embed it directly.
+Regeneration is an explicit release and development step; Git records changes
+to both its inputs and output.
 
 Regenerate it with:
 
 ```bash
 docker compose run --rm test cargo run --quiet \
   -p escpost-profiles --bin compile-profile-pack -- \
-  profiles/.escpos-printer-db/dist/capabilities.json \
-  profiles profiles/.generated/profiles.json
+  crates/escpost-profiles/profiles/.escpos-printer-db/dist/capabilities.json \
+  crates/escpost-profiles/profiles \
+  crates/escpost-profiles/profiles/.generated/profiles.json
 ```
 
 ## REFERENCE profile
 
-`profiles/REFERENCE/profile.toml` is a virtual standards baseline for previews,
+`crates/escpost-profiles/profiles/REFERENCE/profile.toml` is a virtual standards baseline for previews,
 automated tests, and integrations that must not inherit a physical printer's
 missing features. It enables every capability represented by the current
 canonical schema and turns on no deviations — the zero-deviation baseline
@@ -444,14 +422,9 @@ new capability.
 
 1. Update the upstream submodule deliberately.
 2. Run profile compilation.
-3. For a curated profile, if the resolved-profile hash changed, inspect the
-   effective upstream profile and inherited ancestors; a synthesized
-   (`UpstreamDefault`) profile has no pin and simply resolves to the new
-   upstream values.
-4. Update corrections or capabilities when the reviewed behavior changed.
-5. Replace `source.profile_sha256` with the accepted resolved hash.
-6. Regenerate the canonical pack.
-7. Review its canonical hash and run the full test suite.
+3. Update corrections or capabilities when needed.
+4. Regenerate the canonical pack.
+5. Review the generated diff and run the full test suite.
 
 There is no manual profile revision, enrichment hash, automatic
 added/confirmed/corrected report, or duplicate upstream lock in v1.

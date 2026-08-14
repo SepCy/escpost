@@ -1,8 +1,0 @@
-#!/bin/sh
-
-set -eu
-
-# The developer CLI is entirely Rust. Build the current sources and run the
-# resulting executable for every command.
-cargo build --quiet --locked --package escpost-cli
-exec "$CARGO_TARGET_DIR/debug/escpost" "$@"

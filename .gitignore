@@ -14,8 +14,9 @@ __pycache__/
 # Distribution artifacts
 /dist/
 
-# Machine-local printer configuration and captures
-/local/
+# Checkout-local printer configuration and generated test output
+/.config/
+/.test-output/
 
 # Editors and operating systems
 .DS_Store

@@ -11,7 +11,7 @@ use std::sync::OnceLock;
 
 use crate::{PrinterProfile, ProfilePack, from_canonical_profile_pack_json};
 
-const PROFILE_PACK_JSON: &[u8] = include_bytes!("../../../profiles/.generated/profiles.json");
+const PROFILE_PACK_JSON: &[u8] = include_bytes!("../profiles/.generated/profiles.json");
 static PACK: OnceLock<ProfilePack> = OnceLock::new();
 
 /// Errors from resolving a profile id against the embedded pack.

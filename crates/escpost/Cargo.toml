@@ -3,21 +3,34 @@ name = "escpost"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish = false
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "The most complete ESC/POS developer toolbox for receipt and label printers."
+readme = "README.md"
+keywords = ["escpos", "printer", "receipt", "cli", "pos"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "escpost"
+path = "src/main.rs"
 
 [dependencies]
-encoding_rs.workspace = true
-escpost-profiles = { path = "../escpost-profiles" }
-fontdue.workspace = true
-oem_cp.workspace = true
-png.workspace = true
-qrcode.workspace = true
-thiserror.workspace = true
-
-[dev-dependencies]
-escpost-profiles = { path = "../escpost-profiles" }
+axum.workspace = true
+clap.workspace = true
+directories.workspace = true
+escpost-render = { version = "0.1.0", path = "../escpost-render" }
+escpost-profiles = { version = "0.1.0", path = "../escpost-profiles" }
+if-addrs.workspace = true
+indicatif.workspace = true
+inquire.workspace = true
+nusb.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
 toml.workspace = true
+webbrowser.workspace = true
 
 [lints]
 workspace = true

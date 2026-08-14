@@ -1,0 +1,3 @@
+schema_version = 1
+name = "CLI single-sheet fixture"
+profile = "REFERENCE"

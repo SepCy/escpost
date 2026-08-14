@@ -1,369 +1,174 @@
 # Command-line interface
 
-## Purpose
+`escpost` is the command-line toolbox for rendering, previewing, capturing,
+and printing ESC/POS jobs, including registry-only `printers list` and
+USB/network discovery through `printers discover`. This document describes
+the commands available in the current release. Planned commands and options
+are tracked in [`TODO.md`](TODO.md). Stable requirement identifiers for the
+implemented commands appear in the final section.
 
-The `escpost` command is the developer-facing ESC/POS workbench. It should be
-useful both at a terminal and in unattended scripts. It is a single Rust
-executable; there is no separate Python command family.
+## Installation
 
-This document defines the intended public behavior of the Rust CLI. It is both
-a user reference and a contract against which the implementation and tests can
-be reviewed. `render`, named USB and RAW-network `print`, configured-USB and
-configured-network `printers list`, USB/network registration through
-`printers add`, USB and network-printer discovery through `printers
-discover`, and `profiles` (`list`, `show`, `find`) are implemented. An
-initial `serve` captures RAW TCP jobs framed by connection close and previews
-the most recent one; its job history, `FF`/cut boundary handling, and limits
-remain planned, as do the other top-level commands. The
-[project README](../README.md) describes what works today, while `TODO.md` is
-the single implementation checklist.
+Install the CLI from crates.io with Rust 1.87 or newer:
 
-Stable requirement identifiers appear in the final section. Keep an identifier
-when wording is clarified so tests, issues, and roadmap items can continue to
-refer to the same behavior.
-
-## Command model
-
-```text
-escpost render       Render a known byte stream
-escpost print        Send a known byte stream unchanged to a physical printer
-escpost inspect      Decode and explain a byte stream
-escpost serve        Run a virtual printer and its web interface
-escpost proxy        Capture while forwarding to a physical printer
-escpost replay       Resend a captured job
-escpost diff         Compare jobs or renderings
-escpost lint         Find portability and profile problems
-escpost printers     List available printers and manage discovery or pairing
-escpost profiles     Discover supported printer profiles (list, show, find)
-escpost calibrate    Compare rendering with physical hardware
-escpost doctor       Diagnose the local ESCPost environment
+```bash
+cargo install escpost
 ```
 
-`render` and `serve` share rendering and web-interface code, but they represent
-different lifecycles:
+Run `escpost --help` or `escpost <COMMAND> --help` for the concise built-in
+reference.
+
+## Commands
 
 ```text
-render → process input already known to the developer
-serve  → wait for future jobs sent to a virtual printer
+escpost render       Render a known ESC/POS byte stream
+escpost print        Send a known byte stream to a configured printer
+escpost serve        Capture RAW TCP print jobs and preview them in a browser
+escpost printers     List and register printers
+escpost profiles     Browse the embedded printer-profile catalog
 ```
 
-There is no separate `preview` command. Browser presentation is an output mode
-of `render`.
+## Global option
 
-## Global behavior
-
-### Non-interactive operation
-
-`--non-interactive` is a global option and may appear before or after a
-subcommand:
+`--non-interactive` prevents ESCPost from prompting for missing values. It may
+appear before or after a subcommand:
 
 ```bash
 escpost --non-interactive render receipt.bin --profile REFERENCE -o receipt.png
 escpost render receipt.bin --profile REFERENCE -o receipt.png --non-interactive
 ```
 
-Non-interactive mode:
-
-- never displays a prompt;
-- never treats a missing confirmation as approval;
-- continues to use explicit arguments, configuration, source metadata, and
-  documented defaults; and
-- returns a clear nonzero error when a required value remains unresolved.
-
-ESCPost also behaves non-interactively when stdin is not a terminal, when stdin
-contains receipt data, or when a machine-readable output mode is active. This
-prevents a CI job or pipeline from waiting indefinitely for input.
-
-`--non-interactive` is not an alias for `--yes` or `--force`. Operations that
-need explicit consent use an operation-specific option such as
-`--allow-printing-probe`.
-
-### Resolving omitted values
-
-A value which supports interactive selection is resolved in this order:
-
-```text
-explicit command-line value
-→ source metadata or local configuration
-→ documented command default
-→ interactive prompt
-→ missing-value error
-```
-
-Prompts are appropriate when they reduce genuine ambiguity, for example
-selecting one discovered printer or choosing a printer profile. Commands
-should not prompt merely to repeat an obvious default.
-
-Promptable values remain optional during command-line parsing and become
-required during resolution. This lets the same command provide a guided
-terminal workflow and a strict automation workflow.
-
-### Standard streams
-
-A single hyphen (`-`) represents stdin when used as an input source and stdout
-when used as an output destination.
-
-Two hyphens (`--`) end option parsing. They do not select stdout:
-
-```bash
-# Read ESC/POS from stdin and write one PNG to stdout.
-generate-receipt |
-  escpost render - --format binary --profile REFERENCE -o - > receipt.png
-
-# Read a file whose name starts with a hyphen.
-escpost render --profile REFERENCE -o receipt.png -- -receipt.bin
-```
-
-When binary data is written to stdout:
-
-- stdout contains only those bytes;
-- progress, diagnostics, and the selected web URL use stderr;
-- prompting is disabled; and
-- ESCPost refuses to write binary data directly to an interactive terminal.
-
-Machine-readable output must never be mixed with human status messages.
+When a required value cannot be resolved without prompting, the command exits
+with an error. ESCPost also avoids prompting when standard input is not a
+terminal or is being used as receipt input.
 
 ## Input sources
 
-Commands which consume ESC/POS use a positional `SOURCE`.
+The `render` and `print` commands accept a positional `SOURCE`:
 
-### Files
+- a raw ESC/POS file;
+- a readable hexadecimal file;
+- `-` for standard input; or
+- an ESCPost conformance-case directory containing `case.toml` and
+  `input.hex`.
 
-A regular file may contain:
-
-- raw ESC/POS bytes; or
-- readable hexadecimal text.
-
-`--format auto|binary|hex` controls decoding. Automatic mode may use a
-recognized filename extension such as `.hex`; it must not inspect arbitrary
-file contents and guess that text-looking binary data is hexadecimal.
-
-### Standard input
-
-`SOURCE` equal to `-` reads the complete byte stream from stdin. The format
-defaults to binary unless explicitly selected.
-
-### Structured directories
-
-A directory is accepted only when it is a recognized ESCPost bundle, such as:
-
-- a conformance case containing `case.toml` and `input.hex`; or
-- a captured job containing the documented capture metadata and immutable
-  input bytes.
-
-An arbitrary directory of PNGs is not an ESC/POS source. The temporary
-`local/preview/manifest.json` workflow is not part of the Rust CLI contract.
-
-### Captures
-
-Commands may eventually accept a capture identifier together with its local
-capture store. A capture always supplies immutable original bytes; changing
-profiles rerenders those bytes rather than rewriting the capture.
-
-## Profile selection
-
-Rendering behavior depends on a printer profile. The profile is resolved from:
-
-1. an explicit `--profile`;
-2. recognized case or capture metadata; or
-3. interactive selection.
-
-If none is available in non-interactive operation, the command fails and
-suggests `--profile REFERENCE` for a generic virtual printer. ESCPost does not
-silently claim hardware fidelity by choosing a physical profile.
-
-Commands must show the selected profile in human and structured results.
-File and directory rendering report it on stderr. Binary stdout remains
-byte-clean, and the web API includes it in its JSON result.
+Use `--format auto|binary|hex` to select the representation. In `auto` mode,
+files with a `.hex` extension and recognized case directories are hexadecimal;
+other files and standard input are binary.
 
 ## `escpost render`
 
-`render` turns one known ESC/POS source into one or more one-bit PNG sheets.
+Render one ESC/POS source into one or more PNG sheets:
 
 ```text
-escpost render <SOURCE>
-    [--format auto|binary|hex]
-    [--profile <PROFILE>]
-    [-o <PNG> | --output-dir <DIRECTORY>]
-    [--sheet <NUMBER>]
-    [--web]
-    [--browser]
-    [--web-listen <ADDRESS>]
-    [--watch]
+escpost render [OPTIONS] <SOURCE>
+
+Options:
+    --format auto|binary|hex
+    --profile <PROFILE>
+    -o, --output <OUTPUT>
+    --output-dir <DIRECTORY>
+    --sheet <NUMBER>
+    --web
+    --browser
+    --web-listen <ADDRESS>
+    --watch
+    --scale <N>
+    --antialias[=true|false]
 ```
 
-At least one destination is required:
+At least one output is required. In an interactive terminal, ESCPost can
+prompt for one; with `--non-interactive`, it reports an error when none is
+given.
 
-- `-o` or `--output` writes one PNG;
-- `--output-dir` writes every sheet and a manifest;
-- `--web` hosts the result in the local web interface; or
-- `--browser` hosts the result and opens the default browser.
+### One PNG
 
-File output and web output may be requested together. In an interactive
-terminal, ESCPost may ask the developer to choose a destination when none was
-provided. In non-interactive operation, omitting every destination is an
-error.
-
-### Single-file and stdout output
-
-`-o receipt.png` and `-o -` each represent exactly one PNG. They succeed when:
-
-- the job renders exactly one sheet; or
-- `--sheet <NUMBER>` selects one sheet from a multi-sheet result.
-
-If several sheets exist and no sheet was selected, ESCPost fails and recommends
-`--output-dir`. It never discards later sheets or concatenates PNG files.
-`--sheet` is valid only together with `--output`.
-
-An explicit file destination is overwritten without prompting when rendering
-succeeds. This is normal transformation-command behavior and keeps automation
-predictable; `--force` is not required. ESCPost must finish rendering before
-it replaces an existing output, so a render failure leaves the previous file
-untouched.
-
-`-o -` cannot be combined with `--web`, `--browser`, or `--watch`. A web
-process remains alive, so a downstream pipeline would not receive a timely
-end-of-file.
-
-### Directory output
-
-`--output-dir` writes every sheet with deterministic ordered names and writes
-the manifest only after all PNG files are complete. Consumers can therefore
-treat a visible manifest as the ordered list of completed output.
-
-Sheet names are `sheet-001.png`, `sheet-002.png`, and so on. `manifest.json`
-contains those names in print order.
-
-The command creates the directory when necessary and overwrites generated
-files with the same names. It does not delete unrelated files or stale sheets
-left by an earlier render. The manifest is the authoritative list for the
-current result, so consumers ignore any unlisted PNGs.
-
-### Web output
-
-`--web` renders the job in memory, starts the local web viewer, prints its URL,
-and remains active until interrupted.
-
-`--browser` implies `--web` and additionally opens the selected URL with the
-operating system's default browser. Browser launch is never implied by
-`--web`, which keeps Docker, SSH, and headless use predictable.
-
-The development Docker wrapper cannot launch the host browser. Use `--web`
-with the wrapper and open its printed URL; `--browser` is intended for the
-host-native executable.
-
-If `--web-listen` is omitted, ESCPost:
-
-1. binds only to `127.0.0.1`;
-2. attempts ports `9000` through `9099` in order;
-3. retains the first successfully bound socket; and
-4. reports an error when the range is exhausted.
-
-The implementation must bind each candidate directly instead of probing and
-releasing it, which would introduce a race with another process.
-
-An explicit nonzero `--web-listen` address is strict: ESCPost either binds that
-exact address or fails. Port zero asks the operating system to select an
-available port:
+`-o receipt.png` writes one PNG file. `-o -` writes only PNG bytes to standard
+output:
 
 ```bash
 escpost render receipt.bin \
   --profile REFERENCE \
-  --web \
-  --web-listen 127.0.0.1:0
+  --output receipt.png \
+  --non-interactive
+
+generate-receipt | \
+  escpost render - --format binary --profile REFERENCE -o - >receipt.png
 ```
 
-Selecting a non-loopback address is an explicit request to expose potentially
-sensitive receipt data. ESCPost must display that fact clearly and must never
-choose a non-loopback address by default.
+If a job produces several sheets, use `--sheet <NUMBER>` to select a one-based
+sheet. Without a selection, single-file output fails rather than discarding
+later sheets. `--sheet` requires `--output` and cannot be combined with
+`--output-dir`.
 
-`--web-listen` implies `--web`. `--watch` also implies `--web` and rerenders a
-filesystem source after it changes. Watch mode is unavailable for stdin and
-immutable captures.
+### All sheets
 
-When file output and watch mode are combined, every successful rerender also
-updates the selected file destination. Parse or render failures keep the
-previous complete files and web result available and expose the error in the
-web page.
+`--output-dir <DIRECTORY>` writes every sheet and a `manifest.json` file:
 
-The initial web interface must:
+```bash
+escpost render receipt.hex \
+  --profile REFERENCE \
+  --output-dir renderings \
+  --non-interactive
+```
 
-- show sheets in print order;
-- label each sheet with its name, order, and printer-dot dimensions;
-- use one printer dot per screen pixel at the default zoom;
-- offer integer zoom without smoothing; and
-- update after a watched input is rendered successfully.
+Sheets use ordered names such as `sheet-001.png` and `sheet-002.png`. The
+manifest is the authoritative list for the current render. Unrelated files in
+the directory are preserved.
 
-A render or parse error must remain visible without replacing the last
-successful result with a partial speculative rendering.
+### Browser preview and watching
 
-### Cases and later comparisons
+`--web` starts the local viewer and prints its URL. `--browser` also opens that
+URL in the default browser. `--watch` rerenders a filesystem source after it
+changes and implies web mode.
 
-When `SOURCE` is a conformance-case directory, `render --web` can additionally
-show its expected PNGs, current actual PNGs, notes, and eventually a pixel
-difference.
+```bash
+escpost render receipt.hex --profile REFERENCE --web --watch
+```
 
-A later version may accept repeated profiles and show the same immutable input
-rendered for each profile. This must remain one input job with several
-interpretations, not several rewritten inputs.
+Use `--web-listen <IP:PORT>` to request an exact address. Omitting it selects
+the first available loopback port from 9000 through 9099. Port `0` asks the
+operating system to choose a free port. Binding to a non-loopback address
+exposes the receipt preview to the corresponding network.
+
+The Docker wrapper cannot open a browser on the host. Use `--web` through the
+wrapper and open the printed URL manually.
+
+### Preview quality
+
+`--scale <N>` renders each printer dot at `N × N` preview pixels. The default
+is `1` for `render`. `--antialias` enables grayscale glyph edges for display;
+it does not represent additional dots produced by a physical printer.
 
 ## `escpost print`
 
-`print` sends one known ESC/POS source unchanged to a named configured printer:
+Send the source bytes unchanged to a configured printer:
 
 ```text
-escpost print <SOURCE>
-    [--format auto|binary|hex]
-    [--printer <NAME>]
-    [--config <FILE>]
+escpost print [OPTIONS] <SOURCE>
+
+Options:
+    --format auto|binary|hex
+    --printer <NAME>
+    --config <FILE>
 ```
 
-The source rules are the same as for `render`. A conformance-case directory
-supplies its immutable `input.hex`, but its profile metadata does not select or
-alter the physical target. `print` does not require a renderer profile.
+Example:
 
-`--printer` is the only target option. The selected name resolves through the
-same `printers.toml` precedence used by printer management. USB coordinates,
-network hosts, and ports cannot be supplied to `print`; one-off targets must be
-registered first. The profile associated with the name is deliberately not
-used because `print` forwards an already encoded stream.
+```bash
+escpost print receipt.hex --printer kitchen --non-interactive
+```
 
-At an interactive terminal, omitting `--printer` opens a selection containing
-every configured name, its transport and profile state, followed by
-“Add a printer…”. Selecting an existing name prints to it. Selecting the add
-action runs the shared `printers add` workflow, reloads configuration, and
-prints to the newly created name in the same invocation. Cancelling the prompt
-does not print. Effective non-interactive mode never prompts and requires
-`--printer <NAME>`.
+`--printer` refers to a name registered in `printers.toml`. If it is omitted
+at an interactive terminal, ESCPost offers the available configured printers.
+In non-interactive operation, an unresolved printer is an error.
 
-The selected name and the interactive selection itself authorize the physical
-write; there is no second confirmation. An unknown name fails before a
-connection is attempted.
+For a hexadecimal source, ESCPost decodes the text and sends the resulting
+bytes. It does not insert initialization, feed, cut, or other ESC/POS commands.
+USB and RAW TCP connection details come from the selected printer entry.
 
-The transport sends exactly the bytes loaded from `SOURCE`. It must not prepend
-initialization, append feeds or cuts, render content, normalize line endings,
-or call high-level printer helpers.
-
-For USB, the configured VID/PID and optional serial identify the device; the
-configured interface and bulk OUT endpoint determine the write. A serial
-number disambiguates otherwise identical devices. Without one, zero or several
-matches fail before claiming an interface. On Linux, claiming may temporarily
-detach the kernel printer driver until the interface is released.
-
-For network printers, `print` opens one RAW TCP connection to the configured
-host and port, writes the complete stream, then closes the write side. It does
-not perform a separate reachability probe or send framing bytes. Connection
-and write operations have bounded timeouts. A successful socket write cannot
-prove that paper was physically produced.
-
-Success reports the printer name, transport, resolved target, and byte count
-on stderr without logging receipt contents. Failures return nonzero and
-distinguish configuration, selection, connection, USB, and transfer errors.
-
-Automated USB tests substitute only at the physical boundary. Network tests
-use loopback listeners. Ordinary test commands must never address configured
-physical printers; hardware output happens only through an explicit
-`escpost print` invocation.
+`--config <FILE>` selects an exact printer configuration file for this
+invocation.
 
 ## `escpost printers`
 
@@ -375,6 +180,9 @@ escpost printers [--config <FILE>] add [<NAME>]
     [--transport usb|network]
     [--host <HOST>]
     [--port <PORT>]
+    [--vendor-id <ID>]
+    [--product-id <ID>]
+    [--serial <SERIAL>]
     [--profile <PROFILE>]
     [--discover [--subnet <CIDR>]... [--timeout <MS>]]
 escpost printers [--config <FILE>] list [--transport <TRANSPORT>] [--json]
@@ -698,88 +506,70 @@ renaming the inventory command or changing its read-only meaning.
 
 ## `escpost profiles`
 
-`profiles` browses the embedded catalog of supported printer profiles — the
-same identifiers accepted by `--profile` elsewhere. It is read-only and does
-not touch `printers.toml` or any physical device.
-
-```text
-escpost profiles list [--vendor <NAME>] [--source <SOURCE>] [--search <TEXT>] [--json]
-escpost profiles show <ID> [--json]
-escpost profiles find
-```
+Browse the embedded catalog of printer profiles. These commands do not access
+physical printers or modify `printers.toml`.
 
 ### `profiles list`
 
-`list` prints one row per embedded profile, sorted by id:
-
 ```text
-PROFILE      VENDOR   MODEL       CAL  PAPER  PRINT  DOTS  DPI  CUT  BC   QR
-NT-5890K     Netum    NT-5890K    ✓    57.5   48.0   384   203  –    A·B  ✓
-TM-T88III    Epson    TM-T88III   ~    80.0   72.2   512   180  ✓    A·B  ✓
-REFERENCE    ESCPost  Reference   ○    80.0   72.1   576   203  ✓    A·B  ✓
+escpost profiles list
+    [--vendor <NAME>]
+    [--source calibrated|synthesized|virtual]
+    [--search <TEXT>]
+    [--json]
 ```
-
-Columns: `PROFILE` is the id passed to `--profile`; `PAPER` is the paper's
-nominal width and `PRINT` the printable width, both in millimeters to one
-decimal (e.g. `57.5`); `DOTS`
-is the printable width in dots; `DPI` is the horizontal resolution; `CUT`,
-`BC` (barcode: `A·B`, `A`, `B`, or `–`), and `QR` are compact capability
-flags.
-
-`CAL` is the calibration marker, ESCPost's honesty signal about how a
-profile's physical fidelity was obtained:
-
-- `✓` **calibrated** — hash-pinned upstream data, enrichment measured against
-  real hardware.
-- `~` **synthesized** — real capabilities and width from upstream, but
-  physical metrics (font cells, baselines, and similar) default rather than
-  being measured.
-- `○` **virtual** — an idealized profile such as `REFERENCE`; not a real
-  printer.
 
 Filters compose with AND:
 
-- `--vendor <NAME>` narrows by a case-insensitive substring of the vendor.
-- `--source calibrated|synthesized|virtual` narrows by the calibration marker
-  above.
-- `--search <TEXT>` narrows by a case-insensitive substring of id, vendor, or
-  model.
+- `--vendor` matches a case-insensitive vendor substring;
+- `--source` selects calibration provenance; and
+- `--search` matches a case-insensitive substring of the profile id, vendor,
+  or model.
 
-A filter combination that matches nothing is not an error: `list` exits `0`
-and prints a note to stderr instead of a table. `--json` prints the same
-filtered set as a JSON array instead of a table, one full profile object per
-entry (see `profiles show` for the shape).
+Without `--json`, the command prints a compact table. `--json` prints the full
+filtered catalog as a JSON array.
 
-### `profiles show <id>`
+### `profiles show`
 
-`show` prints every field ESCPost tracks for one profile: identity (id,
-vendor, model), provenance (the calibration label and marker, plus the
-canonical profile's content hash), geometry (paper and printable width in
-millimeters, printable width in dots, horizontal and vertical DPI), Font A and
-B cell size and baseline, the code page count, and features (graphics, full
-and partial cut, QR, drawer pulse, and the Function A/Function B barcode
-systems). `--json` prints the same data as one JSON object. An unknown id is
-an error with a nonzero exit.
+Show the complete details of one profile:
+
+```bash
+escpost profiles show NT-5890K
+escpost profiles show REFERENCE --json
+```
+
+An unknown profile id is an error. `--json` prints one JSON object instead of
+the human-readable detail view.
 
 ### `profiles find`
 
-`find` is an interactive substring picker over the same catalog: type to
-filter by id, vendor, or model, and press Enter to select. Unlike `list` and
-`show`, it prints nothing but the chosen id to stdout, so it composes into a
-shell command:
+Interactively search the catalog and print the selected profile id:
 
 ```bash
-escpost render receipt.bin --profile "$(escpost profiles find)" -o receipt.png
+escpost profiles find
 ```
 
-`find` requires an interactive terminal. It errors under the global
-`--non-interactive` flag or when stdin is not a terminal, pointing at
-`profiles list --search <text>` as the scriptable equivalent.
+The command requires an interactive terminal and is unavailable with
+`--non-interactive`. For scripts, use `profiles list --search <TEXT>`.
 
 ## `escpost serve`
 
-`serve` listens for future RAW print jobs and displays captured jobs in the
-same web interface used by `render --web`.
+Run a virtual RAW TCP printer and preview captured jobs in the web viewer:
+
+```text
+escpost serve [OPTIONS]
+
+Options:
+    --profile <PROFILE>
+    --listen <ADDRESS>
+    --web-listen <ADDRESS>
+    --idle-timeout <SECONDS>
+    --scale <N>
+    --antialias[=true|false]
+    --no-open
+```
+
+Example:
 
 ```bash
 escpost serve \
@@ -788,73 +578,34 @@ escpost serve \
   --web-listen 127.0.0.1:9000
 ```
 
-Unlike `render --web`, `serve`:
+The profile defaults to `REFERENCE`. Without explicit addresses, the RAW TCP
+listener selects the first free loopback port from 9100 through 9109 and the
+web viewer selects one from 9000 through 9099.
 
-- accepts multiple jobs over time;
-- treats network and ESC/POS boundaries according to the virtual-printer
-  contract;
-- keeps an ordered job history subject to retention limits; and
-- may later emulate bidirectional printer status.
+A job completes when its client connection closes or after the configured
+idle period. `--idle-timeout` defaults to 20 seconds; `0` disables idle
+completion. The current viewer displays the most recently completed job.
 
-Running `serve` already provides previews of its captured jobs. A second
-`render --web` process is not needed for those jobs.
+The viewer opens automatically when the environment permits it. `--no-open`
+(also accepted as `--no-browser`) disables that behavior. Auto-opening is also
+skipped with `--non-interactive`, without a terminal, under CI, or when
+`BROWSER=none`.
 
-On startup, `serve` opens the web viewer in your default browser. Pass
-`--no-open` (alias `--no-browser`) to disable this; auto-open is also skipped
-when stderr is not a terminal, under `--non-interactive`, or when the
-`BROWSER=none` or `CI` environment variable is set. The viewer URL is printed
-to the terminal regardless.
+`--scale` defaults to `3` for the browser preview. Antialiasing is enabled by
+default; pass `--antialias=false` for faithful one-bit printer dots.
 
-RAW TCP and HTTP listeners bind to loopback by default. Exposing either
-listener beyond the host must be explicit because RAW port 9100 has no
-authentication or encryption and receipt contents may be sensitive.
+RAW TCP port 9100 has no authentication or encryption. Binding either listener
+to a non-loopback address can expose receipt data and should be deliberate.
 
-The initial implementation is narrower than the contract above. `--profile`
-defaults to `REFERENCE`, and both listeners auto-select a free loopback port
-when no address is given. A job ends when the connection closes or, so a
-held-open connection still finishes, after `--idle-timeout` seconds of silence
-(default 20; `0` waits only for close). Idle-completed jobs are flagged in the
-viewer because they may be incomplete. It previews only the most recent job —
-replacing the previous one rather than keeping a history. A job's `GS V` cuts
-appear as its ordered sheets. The web server answers `GET /health` with
-`200 ok` for container and test probes. Before the first job the viewer shows
-where to send data. Standard-mode `FF` job boundaries, multiple explicit jobs
-per connection, retention limits, and raw-input download are planned.
+## Errors and output
 
-## Other commands
+Invalid invocations, missing required values, decoding failures, rendering
+failures, connection errors, and transfer errors return a nonzero exit status.
+Human diagnostics go to standard error when standard output carries PNG or
+JSON data.
 
-The remaining commands should follow the same source, profile, interaction,
-output, and error conventions where they apply.
-
-- `inspect` explains parsed commands, byte offsets, state changes, output
-  bounds, device events, and diagnostics.
-- `proxy` forwards exact bytes while capturing and rendering them.
-- `replay` sends an immutable capture to a selected transport.
-- `diff` compares surfaces, PNGs, traces, or result metadata.
-- `lint` reports portability and profile-specific problems without conflating
-  them with invalid input.
-- `printers` lists usable printers and owns explicit scanning and pairing.
-- `profiles` browses, inspects, and interactively picks supported printer
-  profiles.
-- `calibrate` renders and physically prints the same version-controlled input.
-- `doctor` reports platform, configuration, transport, and permission
-  problems.
-
-Their detailed syntax should be added here when implementation work begins,
-before it is treated as stable.
-
-## Errors and process behavior
-
-- Invalid invocation, missing values, parse failures, rendering failures,
-  connection errors, and unsafe requests return nonzero exit statuses.
-- A failure message identifies the operation and actionable cause without
-  dumping full receipt contents by default.
-- Cancellation with `Ctrl+C` shuts down listeners and releases resources
-  cleanly.
-- Exact numeric exit-code categories must be documented before the first
-  stable CLI release.
-- Human output remains concise. Structured output is versioned before external
-  automation is encouraged to depend on it.
+Cancellation with `Ctrl+C` shuts down long-running web and virtual-printer
+processes.
 
 ## Requirement catalogue
 

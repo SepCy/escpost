@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Emulate a POS terminal: send a receipt to a virtual RAW printer
-# (`escpost serve`) over TCP, then close the connection so the job completes.
+# Send a receipt to a RAW printer (`escpost serve`) over TCP, then close the
+# connection so the job completes.
 #
 # Usage:
 #   scripts/send-receipt [PORT] [HOST] [HOLD_SECONDS]
 #
-# With no piped input it sends a short demo receipt. Otherwise it streams stdin
-# to the printer verbatim, so raw ESC/POS bytes survive unchanged:
+# With no piped input it sends example-jobs/cafe-order-voucher.hex. Otherwise it
+# streams stdin to the printer verbatim, so raw ESC/POS bytes survive unchanged:
 #
 #   scripts/send-receipt 9100 < receipt.bin
 #   printf 'Total: 5.00\n\x1dV\x00' | scripts/send-receipt 9100
@@ -24,6 +24,12 @@ set -uo pipefail
 port="${1:-9100}"
 host="${2:-127.0.0.1}"
 hold="${3:-0}"
+script_path="${BASH_SOURCE[0]}"
+script_directory="${script_path%/*}"
+if [ "$script_directory" = "$script_path" ]; then
+    script_directory="."
+fi
+sample_receipt="${script_directory}/../example-jobs/cafe-order-voucher.hex"
 
 # Open the TCP connection on fd 3 so it can be held open after sending.
 if ! exec 3<>"/dev/tcp/${host}/${port}" 2>/dev/null; then
@@ -32,11 +38,12 @@ if ! exec 3<>"/dev/tcp/${host}/${port}" 2>/dev/null; then
 fi
 
 if [ -t 0 ]; then
-    # No piped input: ESC @ initialize, some text, then a full cut (GS V 0).
-    # printf %b decodes \n and \xNN into real bytes.
-    printf '%b' \
-        '\x1b@ESCPost virtual printer\n\nHello from a fake POS terminal.\n================================\nWidget ................   4.20\nGizmo  ................   1.30\n--------------------------------\nTOTAL  ................   5.50\n\n\n\n\x1dV\x00' \
-        >&3
+    # Decode the whitespace-separated hexadecimal fixture using Bash itself.
+    while read -r -a bytes; do
+        for byte in "${bytes[@]}"; do
+            printf '%b' "\\x${byte}" >&3
+        done
+    done < "$sample_receipt"
 else
     # Stream stdin straight to the socket so raw bytes (including NUL) are sent
     # unchanged — a variable/command-substitution would drop NUL bytes.

@@ -23,31 +23,32 @@ docker compose build
 docker compose run --rm test cargo test --workspace
 
 # A single crate
-docker compose run --rm test cargo test -p escpost
+docker compose run --rm test cargo test -p escpost-render
 
 # Formatting and lints (must pass before committing)
 docker compose run --rm test cargo fmt --check
 docker compose run --rm test cargo clippy --workspace --all-targets -- -D warnings
 
 # Golden conformance layer, with rendered-vs-expected detail
-docker compose run --rm test cargo test -p escpost --test golden_cases -- --nocapture
+docker compose run --rm test cargo test -p escpost-render --test golden_cases -- --nocapture
 ```
 
 ### Running the CLI
 
-The `cli` service wraps the compiled binary (see `scripts/cli-entrypoint`) and
-maps USB devices plus a checkout-local config directory:
+The `cli` service builds and runs the compiled binary, and maps USB devices plus
+a checkout-local config directory:
 
 ```bash
-docker compose run --rm cli render examples/hello.escpos --output-dir local/out
+docker compose run --rm cli render example-jobs/cafe-order-voucher.hex --output-dir .test-output/out
 ```
 
 ## Golden images
 
 Renderer tests compare decoded pixels against version-controlled
-`expected-NNN.png` fixtures under `tests/cases/<case>/` (and `profiles/<id>/`
+`expected-NNN.png` fixtures under `crates/escpost-render/tests/cases/<case>/` (and
+`crates/escpost-profiles/profiles/<id>/`
 for calibration). Tests never rewrite expectations. When a rendering change is
-intentional, review the regenerated `local/test-output/<case>/actual-NNN.png`
+intentional, review the regenerated `.test-output/<case>/actual-NNN.png`
 by eye, then copy it over the matching `expected-NNN.png` to accept it. Never
 bless a golden solely because the implementation produced it — see
 `docs/TESTING.md`.

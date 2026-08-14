@@ -28,7 +28,7 @@ services:
       ESCPOST_CONFIG_DISPLAY_DIR: ${ESCPOST_CONFIG_DISPLAY_DIR:-}
     volumes:
       - .:/workspace
-      - ${ESCPOST_CONFIG_HOST_DIR:-./local/config}:/home/developer/.config/escpost
+      - ${ESCPOST_CONFIG_HOST_DIR:-./.config}:/home/developer/.config/escpost
       - cargo-home:/home/developer/.cargo
       - cargo-target:/home/developer/target
     devices:
@@ -36,7 +36,13 @@ services:
     group_add:
       - "${USB_GROUP_ID:-7}"
     entrypoint:
-      - /workspace/scripts/cli-entrypoint
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        cargo build --quiet --locked --package escpost
+        exec "$${CARGO_TARGET_DIR}/debug/escpost" "$$@"
+      - escpost
 
 volumes:
   cargo-home:

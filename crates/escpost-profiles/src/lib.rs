@@ -69,17 +69,11 @@ pub struct PrinterProfile {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProfileSource {
-    Upstream {
-        profile_sha256: String,
-    },
+    Upstream,
     /// A profile synthesized from an upstream entry with no hand-authored
     /// enrichment (DD-032): every deviation is conformant, and every
     /// descriptor comes from the upstream entry or a documented constant.
-    /// `profile_sha256` records the resolved upstream hash for drift
-    /// detection; unlike `Upstream`, it is never compared against a pin.
-    UpstreamDefault {
-        profile_sha256: String,
-    },
+    UpstreamDefault,
     Reference,
 }
 
@@ -308,19 +302,6 @@ pub enum CompileProfileError {
         system: BarcodeSystem,
     },
 
-    #[error(
-        "resolved upstream profile hash changed for {profile:?}: \
-         expected {expected}, got {actual}"
-    )]
-    UpstreamProfileHashMismatch {
-        profile: String,
-        expected: String,
-        actual: String,
-    },
-
-    #[error("could not normalize resolved upstream profile")]
-    NormalizeUpstreamProfile(#[source] serde_json::Error),
-
     #[error("could not normalize canonical profile content")]
     NormalizeCanonicalProfile(#[source] serde_json::Error),
 
@@ -434,7 +415,7 @@ struct ImportedProfile {
     vendor: Option<String>,
 }
 
-/// Upstream media descriptors. Fields are `Option` because the pinned
+/// Upstream media descriptors. Fields are `Option` because the imported
 /// `capabilities.json` represents unknown values with the literal string
 /// `"Unknown"` (or omits the key entirely) rather than `null`.
 #[derive(Debug, Default)]
@@ -632,12 +613,11 @@ pub fn synthesize_profile(
     capabilities_json: &[u8],
     id: &str,
 ) -> Result<Option<PrinterProfile>, CompileProfileError> {
-    let (imported, upstream_profile) = import_upstream(capabilities_json, id)?;
+    let imported = import_upstream(capabilities_json, id)?;
     if imported.media.width_pixels.is_none() {
         return Ok(None);
     }
 
-    let profile_sha256 = hash_resolved_profile(&upstream_profile)?;
     let code_pages = import_code_pages(&imported)?;
     let mut features = apply_feature_overrides(imported.features, &FeatureOverrides::default());
     // Cutter geometry has no upstream source and no documented constant
@@ -674,7 +654,7 @@ pub fn synthesize_profile(
     let mut profile = PrinterProfile {
         schema_version: CANONICAL_PROFILE_SCHEMA_VERSION,
         id: id.to_owned(),
-        source: ProfileSource::UpstreamDefault { profile_sha256 },
+        source: ProfileSource::UpstreamDefault,
         geometry: resolved.geometry,
         cutter: None,
         motion: resolved.motion,
@@ -756,35 +736,27 @@ struct UpstreamDescriptors {
     vendor: Option<String>,
 }
 
+type CompiledProfileSource = (
+    ProfileSource,
+    BTreeMap<u8, String>,
+    Features,
+    Option<UpstreamDescriptors>,
+);
+
 fn compile_profile_source(
     capabilities_json: &[u8],
     enrichment: &Enrichment,
-) -> Result<
-    (
-        ProfileSource,
-        BTreeMap<u8, String>,
-        Features,
-        Option<UpstreamDescriptors>,
-    ),
-    CompileProfileError,
-> {
+) -> Result<CompiledProfileSource, CompileProfileError> {
     match &enrichment.source {
-        ProfileSource::Upstream {
-            profile_sha256: expected_hash,
-        } => {
+        ProfileSource::Upstream => {
             if enrichment.code_pages.is_some() {
                 return Err(CompileProfileError::UpstreamCodePagesOverride);
             }
-            let (imported, upstream_profile) =
-                import_upstream(capabilities_json, &enrichment.profile)?;
-            let actual_hash = hash_resolved_profile(&upstream_profile)?;
-            validate_upstream_hash(&enrichment.profile, expected_hash, &actual_hash)?;
+            let imported = import_upstream(capabilities_json, &enrichment.profile)?;
             let code_pages = import_code_pages(&imported)?;
             let features = apply_feature_overrides(imported.features, &enrichment.features);
             Ok((
-                ProfileSource::Upstream {
-                    profile_sha256: actual_hash,
-                },
+                ProfileSource::Upstream,
                 code_pages,
                 features,
                 Some(UpstreamDescriptors {
@@ -795,11 +767,9 @@ fn compile_profile_source(
                 }),
             ))
         }
-        ProfileSource::UpstreamDefault { .. } => {
-            Err(CompileProfileError::InvalidEnrichmentSource {
-                kind: "upstream_default",
-            })
-        }
+        ProfileSource::UpstreamDefault => Err(CompileProfileError::InvalidEnrichmentSource {
+            kind: "upstream_default",
+        }),
         ProfileSource::Reference => {
             let code_pages = enrichment.code_pages.clone().ok_or(
                 CompileProfileError::MissingReferenceField {
@@ -882,16 +852,15 @@ pub fn import_upstream_descriptors(
     capabilities_json: &[u8],
     id: &str,
 ) -> Result<(ImportedMedia, BTreeMap<u8, ImportedFont>), CompileProfileError> {
-    let (imported, _) = import_upstream(capabilities_json, id)?;
+    let imported = import_upstream(capabilities_json, id)?;
     Ok((imported.media, imported.fonts))
 }
 
-/// Locates and imports the upstream `capabilities.json` entry for `id`,
-/// alongside the raw JSON value the resolved-profile hash is computed from.
+/// Locates and imports the upstream `capabilities.json` entry for `id`.
 fn import_upstream(
     capabilities_json: &[u8],
     id: &str,
-) -> Result<(ImportedProfile, Value), CompileProfileError> {
+) -> Result<ImportedProfile, CompileProfileError> {
     let capabilities: UpstreamCapabilities = serde_json::from_slice(capabilities_json)
         .map_err(CompileProfileError::InvalidCapabilities)?;
     let upstream_profile = capabilities
@@ -901,8 +870,7 @@ fn import_upstream(
             profile: id.to_owned(),
         })?
         .clone();
-    let imported = import_upstream_profile(&upstream_profile, id)?;
-    Ok((imported, upstream_profile))
+    import_upstream_profile(&upstream_profile, id)
 }
 
 /// The resolved (post-fill) descriptor and deviation values shared by
@@ -1332,12 +1300,6 @@ fn validate_font(name: &'static str, font: &Font) -> Result<(), CompileProfileEr
     })
 }
 
-fn hash_resolved_profile(profile: &Value) -> Result<String, CompileProfileError> {
-    let normalized =
-        serde_json::to_vec(profile).map_err(CompileProfileError::NormalizeUpstreamProfile)?;
-    Ok(hash_bytes(&normalized))
-}
-
 fn hash_canonical_profile(profile: &PrinterProfile) -> Result<String, serde_json::Error> {
     // The stored hash cannot cover itself. Every other canonical field affects
     // rendering behavior.
@@ -1386,20 +1348,4 @@ fn verify_canonical_profile(profile: &PrinterProfile) -> Result<(), CanonicalPro
 fn hash_bytes(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
-}
-
-fn validate_upstream_hash(
-    profile: &str,
-    expected_hash: &str,
-    actual_hash: &str,
-) -> Result<(), CompileProfileError> {
-    if expected_hash == actual_hash {
-        return Ok(());
-    }
-
-    Err(CompileProfileError::UpstreamProfileHashMismatch {
-        profile: profile.to_owned(),
-        expected: expected_hash.to_owned(),
-        actual: actual_hash.to_owned(),
-    })
 }

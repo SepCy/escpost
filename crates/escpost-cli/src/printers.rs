@@ -39,6 +39,16 @@ struct UsbPrinter {
     in_endpoints: Vec<u8>,
 }
 
+/// Best-effort USB enumeration for `printers discover`: printers found so
+/// far, plus a warning line for each device that could not be opened or
+/// whose active configuration could not be inspected. A device-level
+/// failure never aborts the rest of the sweep, the same way the network
+/// sweep silently skips unreachable hosts.
+struct UsbEnumeration {
+    printers: Vec<UsbPrinter>,
+    warnings: Vec<String>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct UsbAddTarget {
     vendor_id: u16,
@@ -117,6 +127,22 @@ enum ListedPrinterKind<'a> {
 
 trait UsbInventory {
     fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError>;
+
+    /// Best-effort enumeration for `printers discover`: a device that fails
+    /// to open or whose active configuration cannot be inspected is skipped
+    /// with a warning instead of aborting the whole enumeration, mirroring
+    /// the network sweep's own tolerance of unreachable hosts. Total
+    /// enumeration failure (the initial USB device listing itself) still
+    /// propagates as an error. The default forwards to the strict `list()`
+    /// with no warnings, since only the real USB backend can fail on
+    /// individual devices; a test double that needs to exercise a partial
+    /// failure overrides this directly.
+    fn list_tolerant(&mut self) -> Result<UsbEnumeration, CliError> {
+        Ok(UsbEnumeration {
+            printers: self.list()?,
+            warnings: Vec::new(),
+        })
+    }
 }
 
 trait AddPrompter {
@@ -772,6 +798,7 @@ async fn run_discover(
         &hosts,
         arguments.transport,
         &mut io::stdout().lock(),
+        &mut io::stderr().lock(),
     )?;
     if let Some(hint) = usb_registration_hint(&connected) {
         eprintln!("{hint}");
@@ -785,19 +812,28 @@ async fn run_discover(
 /// The pure core of `printers discover`: enumerate USB (unless
 /// `--transport network`) and format the sweep hosts (unless `--transport
 /// usb`), printing USB blocks before network blocks with continuous
-/// numbering. Returns the connected USB printers so the caller can also
-/// build the USB registration hint without enumerating USB devices twice.
+/// numbering. USB enumeration is best-effort (see `UsbInventory::
+/// list_tolerant`): a device that could not be opened or inspected is
+/// reported as a warning on `warnings_output` before anything is written to
+/// `output`, and the rest of the sweep still runs. Returns the connected USB
+/// printers so the caller can also build the USB registration hint without
+/// enumerating USB devices twice.
 fn execute_discover(
     inventory: &mut impl UsbInventory,
     configuration: &PrinterConfiguration,
     hosts: &[DiscoveredHost],
     transport: Option<InventoryTransport>,
     output: &mut impl Write,
+    warnings_output: &mut impl Write,
 ) -> Result<Vec<ConnectedUsbPrinter>, CliError> {
     let connected = if transport == Some(InventoryTransport::Network) {
         Vec::new()
     } else {
-        discovered_usb_printers(inventory.list()?, configuration)
+        let enumeration = inventory.list_tolerant()?;
+        for warning in &enumeration.warnings {
+            writeln!(warnings_output, "Warning: {warning}").map_err(CliError::WriteHumanOutput)?;
+        }
+        discovered_usb_printers(enumeration.printers, configuration)
     };
     let hosts: &[DiscoveredHost] = if transport == Some(InventoryTransport::Usb) {
         &[]
@@ -1229,39 +1265,91 @@ impl UsbInventory for NusbInventory {
         // Filter with operating-system metadata first. Listing should never
         // open unrelated USB devices merely to find their interface classes.
         for device_info in devices.filter(is_printer_device) {
-            let device = device_info
-                .open()
-                .wait()
-                .map_err(|source| CliError::OpenUsbDevice {
-                    vendor_id: device_info.vendor_id(),
-                    product_id: device_info.product_id(),
-                    source,
-                })?;
-            let configuration = device.active_configuration().map_err(|source| {
-                CliError::InspectUsbConfiguration {
-                    vendor_id: device_info.vendor_id(),
-                    product_id: device_info.product_id(),
-                    source,
-                }
-            })?;
-
-            for interface in printer_interfaces(configuration) {
-                printers.push(UsbPrinter {
-                    vendor_id: device_info.vendor_id(),
-                    product_id: device_info.product_id(),
-                    bus: device_info.bus_id().to_owned(),
-                    address: device_info.device_address(),
-                    manufacturer: device_info.manufacturer_string().map(str::to_owned),
-                    product: device_info.product_string().map(str::to_owned),
-                    serial_number: device_info.serial_number().map(str::to_owned),
-                    interface_number: interface.interface_number,
-                    out_endpoints: interface.out_endpoints,
-                    in_endpoints: interface.in_endpoints,
-                });
-            }
+            printers.extend(usb_printers_for_device(&device_info)?);
         }
 
         Ok(printers)
+    }
+
+    fn list_tolerant(&mut self) -> Result<UsbEnumeration, CliError> {
+        let devices = nusb::list_devices()
+            .wait()
+            .map_err(CliError::EnumerateUsb)?;
+        let mut printers = Vec::new();
+        let mut warnings = Vec::new();
+
+        for device_info in devices.filter(is_printer_device) {
+            match usb_printers_for_device(&device_info) {
+                Ok(device_printers) => printers.extend(device_printers),
+                Err(error) => warnings.push(describe_usb_enumeration_failure(&error)),
+            }
+        }
+
+        Ok(UsbEnumeration { printers, warnings })
+    }
+}
+
+/// Open one USB device and collect the printer-class interfaces it exposes.
+/// Shared by `list()`'s strict enumeration (used by `printers list` and
+/// `printers add`, where a device failure aborts the whole command) and
+/// `list_tolerant()`'s best-effort enumeration (used by `printers discover`,
+/// where a device failure becomes a warning and enumeration continues).
+fn usb_printers_for_device(device_info: &nusb::DeviceInfo) -> Result<Vec<UsbPrinter>, CliError> {
+    let device = device_info
+        .open()
+        .wait()
+        .map_err(|source| CliError::OpenUsbDevice {
+            vendor_id: device_info.vendor_id(),
+            product_id: device_info.product_id(),
+            source,
+        })?;
+    let configuration =
+        device
+            .active_configuration()
+            .map_err(|source| CliError::InspectUsbConfiguration {
+                vendor_id: device_info.vendor_id(),
+                product_id: device_info.product_id(),
+                source,
+            })?;
+
+    Ok(printer_interfaces(configuration)
+        .into_iter()
+        .map(|interface| UsbPrinter {
+            vendor_id: device_info.vendor_id(),
+            product_id: device_info.product_id(),
+            bus: device_info.bus_id().to_owned(),
+            address: device_info.device_address(),
+            manufacturer: device_info.manufacturer_string().map(str::to_owned),
+            product: device_info.product_string().map(str::to_owned),
+            serial_number: device_info.serial_number().map(str::to_owned),
+            interface_number: interface.interface_number,
+            out_endpoints: interface.out_endpoints,
+            in_endpoints: interface.in_endpoints,
+        })
+        .collect())
+}
+
+/// Render a USB enumeration failure gathered by `list_tolerant` as a warning
+/// line for `printers discover`, using the same bare `vendor:product` hex
+/// notation as discover's own `usb:` coordinate line. `CliError`'s Display
+/// uses a `0x`-prefixed form instead, which stays unchanged for the fatal
+/// case where `list()` itself propagates the error (`printers list`,
+/// `printers add`).
+fn describe_usb_enumeration_failure(error: &CliError) -> String {
+    match error {
+        CliError::OpenUsbDevice {
+            vendor_id,
+            product_id,
+            source,
+        } => format!("could not open USB device {vendor_id:04x}:{product_id:04x}: {source}"),
+        CliError::InspectUsbConfiguration {
+            vendor_id,
+            product_id,
+            source,
+        } => format!(
+            "could not inspect the active configuration of USB device {vendor_id:04x}:{product_id:04x}: {source}"
+        ),
+        other => other.to_string(),
     }
 }
 
@@ -1556,10 +1644,11 @@ mod tests {
 
     use super::{
         AddPrompter, ConnectedUsbPrinter, DiscoverChoice, DiscoverPicker, ResolvedAddConnection,
-        ResolvedAddPrinter, UsbAddTarget, UsbInventory, UsbPrinter, UsbPrinterInterface,
-        UsbSelector, choose_discovered_host, execute, execute_add, execute_discover,
-        filter_usb_targets, printer_interfaces, registration_hint, resolve_add, select_usb_target,
-        usb_add_targets, usb_registration_hint, usb_selector, write_discovered_network_printers,
+        ResolvedAddPrinter, UsbAddTarget, UsbEnumeration, UsbInventory, UsbPrinter,
+        UsbPrinterInterface, UsbSelector, choose_discovered_host, execute, execute_add,
+        execute_discover, filter_usb_targets, printer_interfaces, registration_hint, resolve_add,
+        select_usb_target, usb_add_targets, usb_registration_hint, usb_selector,
+        write_discovered_network_printers,
     };
     use crate::cli::{AddPrinterArgs, InventoryTransport, PrinterTransport};
     use crate::configuration::PrinterConfiguration;
@@ -2579,6 +2668,30 @@ out_endpoint = \"0x01\"
         }
     }
 
+    /// A `UsbInventory` double that exercises `list_tolerant`'s partial-
+    /// failure path directly: some devices enumerate fine, others report a
+    /// canned warning, mirroring what `NusbInventory::list_tolerant` does
+    /// when a real device cannot be opened or inspected. `list()` stays
+    /// strict (as `printers list`/`add` need), returning only the printers
+    /// that "succeeded".
+    struct PartiallyFailingInventory {
+        printers: Vec<UsbPrinter>,
+        warnings: Vec<String>,
+    }
+
+    impl UsbInventory for PartiallyFailingInventory {
+        fn list(&mut self) -> Result<Vec<UsbPrinter>, CliError> {
+            Ok(self.printers.clone())
+        }
+
+        fn list_tolerant(&mut self) -> Result<UsbEnumeration, CliError> {
+            Ok(UsbEnumeration {
+                printers: self.printers.clone(),
+                warnings: self.warnings.clone(),
+            })
+        }
+    }
+
     fn netum_usb_printer(out_endpoints: Vec<u8>, in_endpoints: Vec<u8>) -> UsbPrinter {
         UsbPrinter {
             vendor_id: 0x0416,
@@ -2889,6 +3002,7 @@ port = 9100
             &[],
             None,
             &mut output,
+            &mut Vec::new(),
         )
         .expect("discovery should succeed");
 
@@ -2926,8 +3040,15 @@ in_endpoint = \"0x81\"
         .expect("the printer configuration should be valid");
         let mut output = Vec::new();
 
-        execute_discover(&mut inventory, &configuration, &[], None, &mut output)
-            .expect("discovery should succeed");
+        execute_discover(
+            &mut inventory,
+            &configuration,
+            &[],
+            None,
+            &mut output,
+            &mut Vec::new(),
+        )
+        .expect("discovery should succeed");
 
         assert_eq!(
             String::from_utf8(output).expect("the listing should be UTF-8"),
@@ -2962,8 +3083,15 @@ out_endpoint = \"0x01\"
         .expect("an unprofiled USB printer should be valid");
         let mut output = Vec::new();
 
-        execute_discover(&mut inventory, &configuration, &[], None, &mut output)
-            .expect("discovery should succeed");
+        execute_discover(
+            &mut inventory,
+            &configuration,
+            &[],
+            None,
+            &mut output,
+            &mut Vec::new(),
+        )
+        .expect("discovery should succeed");
 
         assert!(
             String::from_utf8(output)
@@ -3016,8 +3144,15 @@ out_endpoint = \"0x01\"
         .expect("the printer configuration should be valid");
         let mut output = Vec::new();
 
-        execute_discover(&mut inventory, &configuration, &[], None, &mut output)
-            .expect("discovery should succeed");
+        execute_discover(
+            &mut inventory,
+            &configuration,
+            &[],
+            None,
+            &mut output,
+            &mut Vec::new(),
+        )
+        .expect("discovery should succeed");
 
         let output = String::from_utf8(output).expect("the listing should be UTF-8");
         assert_eq!(output.matches("] shared-identity\n").count(), 1);
@@ -3072,8 +3207,15 @@ in_endpoint = \"0x81\"
         let hosts = vec![discovered([10, 42, 0, 5], 9100)];
         let mut output = Vec::new();
 
-        execute_discover(&mut inventory, &configuration, &hosts, None, &mut output)
-            .expect("discovery should succeed");
+        execute_discover(
+            &mut inventory,
+            &configuration,
+            &hosts,
+            None,
+            &mut output,
+            &mut Vec::new(),
+        )
+        .expect("discovery should succeed");
 
         let headings = String::from_utf8(output)
             .expect("the listing should be UTF-8")
@@ -3105,6 +3247,7 @@ in_endpoint = \"0x81\"
             &hosts,
             Some(InventoryTransport::Usb),
             &mut output,
+            &mut Vec::new(),
         )
         .expect("discovery should succeed");
 
@@ -3130,6 +3273,7 @@ in_endpoint = \"0x81\"
             &hosts,
             Some(InventoryTransport::Network),
             &mut output,
+            &mut Vec::new(),
         )
         .expect("discovery should succeed");
 
@@ -3154,6 +3298,7 @@ in_endpoint = \"0x81\"
             &[],
             None,
             &mut output,
+            &mut Vec::new(),
         )
         .expect("discovery should succeed");
 
@@ -3208,5 +3353,39 @@ in_endpoint = \"0x81\"
 
         assert!(usb_hint.is_some(), "a new USB printer should hint");
         assert!(network_hint.is_some(), "a new network host should hint");
+    }
+
+    #[test]
+    fn discover_surfaces_a_per_device_warning_and_still_lists_the_rest() {
+        let mut inventory = PartiallyFailingInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+            warnings: vec![
+                "could not open USB device 0416:5012: permission denied (errno 13)".to_owned(),
+            ],
+        };
+        let mut output = Vec::new();
+        let mut warnings_output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &[],
+            None,
+            &mut output,
+            &mut warnings_output,
+        )
+        .expect("a per-device enumeration failure must not abort discovery");
+
+        let output = String::from_utf8(output).expect("the listing should be UTF-8");
+        assert!(
+            output.contains("[1] USB Portable Printer (YICHIP3121)"),
+            "the device that enumerated fine should still be listed:\n{output}"
+        );
+        let warnings_output =
+            String::from_utf8(warnings_output).expect("the warnings should be UTF-8");
+        assert_eq!(
+            warnings_output,
+            "Warning: could not open USB device 0416:5012: permission denied (errno 13)\n"
+        );
     }
 }

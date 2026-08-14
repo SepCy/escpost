@@ -555,7 +555,13 @@ also part of listing.
 `discover` is a read-only sweep for USB and network printers that are not yet
 configured. It enumerates connected USB printer-class interfaces the same way
 `printers list` does, and probes a TCP connection on one port across small
-directly connected IPv4 networks, reporting which hosts accept it:
+directly connected IPv4 networks, reporting which hosts accept it. Unlike
+`list`, USB enumeration on `discover` is best-effort: a device that cannot be
+opened or inspected (for example, an operating-system permission error) is
+reported as a `Warning:` line on stderr and skipped, and the sweep still
+reports every other USB and network printer it found, exiting successfully.
+Only a failure to enumerate USB devices at all is fatal, exactly like
+`list`.
 
 ```bash
 escpost printers discover

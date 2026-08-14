@@ -601,7 +601,8 @@ be repeated to scan several networks in one sweep.
 `--port` selects the probed port and defaults to `9100`. `--timeout <MS>`
 bounds each per-host connection attempt and defaults to `1000`. Probes run
 concurrently and send zero bytes; a reachable port is reported as-is and is
-never assumed to be a printer.
+never assumed to be a printer. A progress bar is shown on stderr during the
+network sweep when stderr is attached to a terminal.
 
 USB results are listed first, then network results, numbered continuously
 across both; network results are ordered by ascending IPv4 address,

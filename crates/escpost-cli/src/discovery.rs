@@ -159,42 +159,65 @@ pub(crate) struct DiscoveredHost {
 /// dropping a stream proves a listener without sending a byte the printer
 /// could interpret as ESC/POS data. Failures and timeouts are the normal
 /// case for a sweep and are silently skipped.
+///
+/// `on_progress` is called once up front with `(0, total)` before any probe
+/// is spawned, then again with `(done, total)` after each probe completes,
+/// ending with `(total, total)`. `total` is the number of probes actually
+/// spawned (every target host minus its target's excluded address), so a
+/// caller building a progress bar can size it exactly. This module stays
+/// free of any UI concern beyond that callback; rendering a bar from it is
+/// the caller's job.
 pub(crate) async fn scan(
     targets: &[ScanTarget],
     port: u16,
     probe_timeout: Duration,
+    mut on_progress: impl FnMut(u64, u64),
 ) -> Vec<DiscoveredHost> {
+    // Collected before spawning so `total` is known, and reported via
+    // `on_progress`, before the first probe starts.
+    let candidates: Vec<(&ScanTarget, Ipv4Addr)> = targets
+        .iter()
+        .flat_map(|target| {
+            target
+                .subnet
+                .hosts()
+                .into_iter()
+                .filter(move |address| target.excluded != Some(*address))
+                .map(move |address| (target, address))
+        })
+        .collect();
+    let total = candidates.len() as u64;
+    on_progress(0, total);
+
     let limiter = Arc::new(Semaphore::new(MAX_CONCURRENT_PROBES));
     let mut probes = JoinSet::new();
-    for target in targets {
-        for address in target.subnet.hosts() {
-            if target.excluded == Some(address) {
-                continue;
-            }
-            let interface = target.interface.clone();
-            let limiter = Arc::clone(&limiter);
-            probes.spawn(async move {
-                let _permit = limiter
-                    .acquire_owned()
-                    .await
-                    .expect("the probe semaphore is never closed");
-                let connected = timeout(probe_timeout, TcpStream::connect((address, port)))
-                    .await
-                    .is_ok_and(|result| result.is_ok());
-                connected.then_some(DiscoveredHost {
-                    address,
-                    port,
-                    interface,
-                })
-            });
-        }
+    for (target, address) in candidates {
+        let interface = target.interface.clone();
+        let limiter = Arc::clone(&limiter);
+        probes.spawn(async move {
+            let _permit = limiter
+                .acquire_owned()
+                .await
+                .expect("the probe semaphore is never closed");
+            let connected = timeout(probe_timeout, TcpStream::connect((address, port)))
+                .await
+                .is_ok_and(|result| result.is_ok());
+            connected.then_some(DiscoveredHost {
+                address,
+                port,
+                interface,
+            })
+        });
     }
 
+    let mut done = 0u64;
     let mut hosts = Vec::new();
     while let Some(result) = probes.join_next().await {
         if let Ok(Some(host)) = result {
             hosts.push(host);
         }
+        done += 1;
+        on_progress(done, total);
     }
     // Overlapping explicit --subnet values may find one address twice.
     hosts.sort_by_key(|host| u32::from(host.address));
@@ -329,7 +352,13 @@ mod tests {
             excluded: None,
         };
 
-        let hosts = scan(std::slice::from_ref(&target), port, Duration::from_secs(1)).await;
+        let hosts = scan(
+            std::slice::from_ref(&target),
+            port,
+            Duration::from_secs(1),
+            |_, _| {},
+        )
+        .await;
         assert_eq!(
             hosts,
             vec![DiscoveredHost {
@@ -340,7 +369,7 @@ mod tests {
         );
 
         drop(listener);
-        let hosts = scan(&[target], port, Duration::from_secs(1)).await;
+        let hosts = scan(&[target], port, Duration::from_secs(1), |_, _| {}).await;
         assert!(hosts.is_empty());
     }
 
@@ -359,9 +388,55 @@ mod tests {
         };
 
         assert!(
-            scan(&[target], port, Duration::from_secs(1))
+            scan(&[target], port, Duration::from_secs(1), |_, _| {})
                 .await
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn scan_reports_progress_from_zero_to_total_monotonically() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .expect("an ephemeral loopback port should bind");
+        let port = listener
+            .local_addr()
+            .expect("the listener should report its address")
+            .port();
+        let target = ScanTarget {
+            subnet: Subnet::parse("127.0.0.1/32").expect("a valid CIDR should parse"),
+            interface: None,
+            excluded: None,
+        };
+        // Two targets probing the same address spawn two independent probes
+        // (the final results are what dedup, not the probe count), giving a
+        // known total of 2 without depending on the host's own interfaces.
+        let targets = vec![target.clone(), target];
+
+        let mut calls = Vec::new();
+        let hosts = scan(&targets, port, Duration::from_secs(1), |done, total| {
+            calls.push((done, total));
+        })
+        .await;
+
+        assert_eq!(hosts.len(), 1, "duplicate address should still dedup");
+        assert_eq!(
+            calls.first(),
+            Some(&(0, 2)),
+            "first call reports (0, total)"
+        );
+        assert_eq!(
+            calls.last(),
+            Some(&(2, 2)),
+            "final call reports (total, total)"
+        );
+        assert!(
+            calls.iter().all(|(_, total)| *total == 2),
+            "total never changes mid-scan"
+        );
+        assert!(
+            calls.windows(2).all(|pair| pair[0].0 <= pair[1].0),
+            "done is monotonically nondecreasing: {calls:?}"
+        );
+        assert_eq!(calls.len(), 3, "one call up front plus one per probe");
     }
 }

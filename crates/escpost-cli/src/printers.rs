@@ -12,6 +12,7 @@ use crate::configuration::{
 };
 use crate::discovery::{self, DiscoveredHost, ScanTarget, Subnet};
 use crate::error::CliError;
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use inquire::validator::Validation;
 use inquire::{CustomType, Select, Text};
 use nusb::MaybeFuture;
@@ -766,6 +767,34 @@ impl DiscoverPicker for InquireDiscoverPicker {
     }
 }
 
+/// Run the network sweep behind a progress bar on stderr, shared by `printers
+/// discover`'s network portion and the `add --discover` path so the two
+/// don't grow diverging bar setups. Hidden automatically by indicatif when
+/// stderr is not a terminal (piped output stays byte-identical), so there is
+/// no tty check here.
+async fn scan_with_progress(
+    targets: &[ScanTarget],
+    port: u16,
+    probe_timeout: Duration,
+) -> Vec<DiscoveredHost> {
+    let bar = ProgressBar::with_draw_target(Some(0), ProgressDrawTarget::stderr());
+    bar.set_style(
+        ProgressStyle::with_template("{msg} [{bar:40}] {pos}/{len}")
+            .expect("the progress bar template is a compile-time constant")
+            .progress_chars("=> "),
+    );
+    bar.set_message("Scanning for network printers");
+    let hosts = discovery::scan(targets, port, probe_timeout, |done, total| {
+        bar.set_length(total);
+        bar.set_position(done);
+    })
+    .await;
+    // Always clear before any listing/warning/hint output, so the bar never
+    // lingers in or interleaves with real output.
+    bar.finish_and_clear();
+    hosts
+}
+
 async fn discover_host_for_add(
     config_path: Option<&std::path::Path>,
     arguments: &AddPrinterArgs,
@@ -777,7 +806,7 @@ async fn discover_host_for_add(
     }
     let configuration = configuration::load_for_update(config_path)?;
     let targets = discovery_targets(&arguments.subnet)?;
-    let hosts = discovery::scan(
+    let hosts = scan_with_progress(
         &targets,
         port,
         Duration::from_millis(arguments.timeout.unwrap_or(1000)),
@@ -836,7 +865,7 @@ async fn run_discover(
         Vec::new()
     } else {
         let targets = discovery_targets(&arguments.subnet)?;
-        discovery::scan(
+        scan_with_progress(
             &targets,
             port,
             Duration::from_millis(arguments.timeout.unwrap_or(1000)),

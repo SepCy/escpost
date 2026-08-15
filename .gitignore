@@ -25,6 +25,7 @@ __pycache__/
 
 # Superpowers SDD scratch (ledger, briefs, reports)
 .superpowers/
+/.worktrees/
 
 # Superpowers spec/plan design artifacts (process, not product docs)
 docs/superpowers/

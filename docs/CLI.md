@@ -501,12 +501,46 @@ escpost printers grant-usb-permissions
 sudo escpost printers grant-usb-permissions
 ```
 
-Without root, it only prints the plan: the exact path it would write, the
-full rule content, and the `udevadm` commands it would run, followed by a
-stderr line pointing at rerunning the same command with `sudo`. Nothing is
-written and nothing is broken; it always exits successfully.
+Without root it fails — it was asked to grant access and cannot, so this is
+an error, not merely an FYI — with exit code 1 and nothing on stdout. The
+error message still carries the two ways to grant the access, so the
+failure is actionable rather than a bare "requires root":
 
-With root, it writes `/etc/udev/rules.d/70-escpost-usb-printers.rules`:
+```text
+error: granting USB printer access requires root
+
+Let escpost apply it:
+  sudo escpost printers grant-usb-permissions
+
+Or run the commands yourself:
+  sudo tee /etc/udev/rules.d/70-escpost-usb-printers.rules <<'EOF'
+# Grant locally logged-in users access to USB printer-class devices (escpost).
+SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*:0701*:*", TAG+="uaccess"
+EOF
+  sudo udevadm control --reload
+  sudo udevadm trigger --subsystem-match=usb
+```
+
+The second option is the exact bare-metal equivalent of the first, for
+anyone who would rather not run this binary as root at all: pasted as shown
+into a root shell, it applies the identical rule. The heredoc uses a quoted
+`'EOF'` marker so nothing in the rule is shell-expanded, and its body lines
+are intentionally flush left rather than indented like the surrounding
+commands — any leading whitespace there would become part of the rule file
+`tee` writes.
+
+With root and an interactive terminal (no `--non-interactive`, and both
+stdin and stderr attached to a terminal — the same `can_prompt` check
+`printers add` uses), it first shows the exact rule path, content, and
+`udevadm` commands it is about to apply, then asks `Write the rule and
+reload udev?` with a default answer of yes. Declining prints
+`Nothing changed.` and exits successfully without touching the system; only
+confirming proceeds to apply the change below. With `--non-interactive`, or
+without a terminal, it applies immediately without asking — the scripted
+provisioning path, safe to skip the prompt for since its own default answer
+is yes.
+
+Applying writes `/etc/udev/rules.d/70-escpost-usb-printers.rules`:
 
 ```text
 # Grant locally logged-in users access to USB printer-class devices (escpost).
@@ -526,6 +560,25 @@ effect immediately, then prints a reminder to replug the printer and rerun
 left in place (and udev is still reloaded); a rule that exists with
 different content is left untouched and reported as an error showing both
 versions, since it may have been hand-edited.
+
+Either outcome that leaves the rule in place — a fresh write or an
+already-current rerun — also prints how to undo it later:
+
+```text
+Undo this grant later with:
+  sudo rm /etc/udev/rules.d/70-escpost-usb-printers.rules
+  sudo udevadm control --reload
+  sudo udevadm trigger --subsystem-match=usb
+Then unplug and replug the printer to be certain access is fully revoked.
+```
+
+The trailing replug reminder is not filler: `uaccess` grants access through
+a logind ACL applied when the device is plugged in, and removing the rule
+does not retroactively strip that ACL from a device that is already
+plugged in — only a fresh plug, which logind re-evaluates against the
+now-gone rule, actually revokes it. This block is not printed when the
+prompt is declined or when the rule diverges and is refused, since neither
+of those actually grants anything.
 
 ### `printers scan`
 
@@ -734,7 +787,7 @@ the completed implementation must satisfy.
 | CLI-M16 | Reserve `printers discover` for a read-only sweep that enumerates USB printer interfaces and probes network hosts with a bare connect-and-drop TCP handshake that never sends a byte; neither ever writes to `printers.toml`. |
 | CLI-M17 | Without `--subnet`, scan only directly connected IPv4 networks at most a `/24` automatically, skipping larger ones; an explicit `--subnet` scans exactly the given networks instead and removes the `/24` cap. |
 | CLI-M18 | Resolve `printers add --discover` from the sweep: zero discovered hosts is always an error naming the probed port, exactly one is selected automatically, and several open an interactive selection menu or, under `--non-interactive`, are an error listing every candidate. |
-| CLI-M19 | On Linux, offer `printers grant-usb-permissions` to install a class-wide, `uaccess`-scoped udev rule granting USB printer access without root each time; without root it only prints the exact plan, and it never silently overwrites a rule whose on-disk content differs from what it would write. Point `discover`'s permission-denied USB warnings at it with one added hint line. |
+| CLI-M19 | On Linux, offer `printers grant-usb-permissions` to install a class-wide, `uaccess`-scoped udev rule granting USB printer access without root each time; without root it fails (exit 1) with an error naming both ways to grant the access instead, and it never silently overwrites a rule whose on-disk content differs from what it would write. Running it as root asks for confirmation before changing anything whenever a prompt is possible (honoring `--non-interactive` and applying without asking otherwise), with no separate force flag to bypass it. Point `discover`'s permission-denied USB warnings at it with one added hint line. |
 
 ### Web requirements
 

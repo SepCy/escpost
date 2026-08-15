@@ -20,6 +20,14 @@ use crate::cli::{
 use crate::configuration;
 use crate::error::CliError;
 
+/// Re-exported specifically so `error.rs` can build
+/// `CliError::GrantUsbPermissionsNeedsRoot`'s message from it, the same way
+/// several existing `CliError` variants already call into
+/// `crate::configuration::display_path` from their own `#[error(...)]`
+/// attributes.
+#[cfg(target_os = "linux")]
+pub(crate) use grant_usb_permissions::needs_root_guidance;
+
 use add::{InquireAddPrompter, discover_host_for_add, execute_add};
 use discover::run_discover;
 use inventory::NusbInventory;
@@ -83,7 +91,9 @@ pub(crate) async fn run(arguments: PrintersArgs, non_interactive: bool) -> Resul
             run_discover(discover, &configuration).await
         }
         #[cfg(target_os = "linux")]
-        PrintersCommand::GrantUsbPermissions(args) => grant_usb_permissions::run(args),
+        PrintersCommand::GrantUsbPermissions(args) => {
+            grant_usb_permissions::run(args, non_interactive)
+        }
     }
 }
 fn add_printer(

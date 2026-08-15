@@ -878,14 +878,14 @@ fn printers_grant_usb_permissions_documents_itself() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn printers_grant_usb_permissions_without_root_prints_the_plan_and_exits_successfully() {
+fn printers_grant_usb_permissions_without_root_fails_with_the_two_options() {
     // This test must not run as root: the whole point is exercising the
-    // read-only "print the plan" branch, never the branch that writes to
+    // without-root failure branch, never the branch that writes to
     // /etc/udev/rules.d or shells out to udevadm.
     assert_ne!(
         current_effective_uid(),
         0,
-        "this test must not run as root; it only covers the without-root plan"
+        "this test must not run as root; it only covers the without-root failure"
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
@@ -895,32 +895,41 @@ fn printers_grant_usb_permissions_without_root_prints_the_plan_and_exits_success
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
+    // Was asked to grant access and cannot: that is a failure, not just
+    // an FYI, so this must not exit successfully.
     assert!(
-        output.status.success(),
-        "command failed:\n{stdout}\n{stderr}"
-    );
-    assert!(
-        stdout.contains("/etc/udev/rules.d/70-escpost-usb-printers.rules"),
-        "the plan should name the exact rule path:\n{stdout}"
-    );
-    assert!(
-        stdout.contains(
-            "SUBSYSTEM==\"usb\", ENV{ID_USB_INTERFACES}==\"*:0701*:*\", TAG+=\"uaccess\""
-        ),
-        "the plan should include the full rule content:\n{stdout}"
-    );
-    assert!(
-        stdout.contains("udevadm control --reload"),
-        "the plan should show the reload command:\n{stdout}"
-    );
-    assert!(
-        stdout.contains("udevadm trigger --subsystem-match=usb"),
-        "the plan should show the trigger command:\n{stdout}"
+        !output.status.success(),
+        "without root this must fail, not merely inform:\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
     assert_eq!(
-        stderr.trim_end(),
-        "Run it with: sudo escpost printers grant-usb-permissions",
-        "stderr should point at rerunning the same command with sudo:\n{stderr}"
+        output.status.code(),
+        Some(1),
+        "the exit code should be 1:\nstderr:\n{stderr}"
+    );
+    assert_eq!(
+        stdout, "",
+        "nothing should be written to stdout on this failure path:\n{stdout}"
+    );
+    // Exact match, not just substring checks: this is the entire error
+    // path's output, and its shape (the `error: ` prefix `lib.rs` adds,
+    // both options, the sudo-prefixed bare-metal commands, the flush-left
+    // heredoc body) is exactly what a user is expected to read or paste.
+    assert_eq!(
+        stderr,
+        "\
+error: granting USB printer access requires root
+
+Let escpost apply it:
+  sudo escpost printers grant-usb-permissions
+
+Or run the commands yourself:
+  sudo tee /etc/udev/rules.d/70-escpost-usb-printers.rules <<'EOF'
+# Grant locally logged-in users access to USB printer-class devices (escpost).
+SUBSYSTEM==\"usb\", ENV{ID_USB_INTERFACES}==\"*:0701*:*\", TAG+=\"uaccess\"
+EOF
+  sudo udevadm control --reload
+  sudo udevadm trigger --subsystem-match=usb
+"
     );
 }
 

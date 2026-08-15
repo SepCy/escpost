@@ -558,12 +558,12 @@ port = 9100
         let hint = combined_registration_hint(false, true, 9100);
 
         assert_eq!(
-        hint,
-        Some(
-            "Register a new network printer with: escpost printers add <NAME> --transport network --discover"
-                .to_owned()
-        )
-    );
+            hint,
+            Some(
+                "Register a new network printer with: escpost printers add <NAME> --transport network --discover"
+                    .to_owned()
+            )
+        );
     }
 
     #[test]
@@ -571,12 +571,12 @@ port = 9100
         let hint = combined_registration_hint(false, true, 9200);
 
         assert_eq!(
-        hint,
-        Some(
-            "Register a new network printer with: escpost printers add <NAME> --transport network --discover --port 9200"
-                .to_owned()
-        )
-    );
+            hint,
+            Some(
+                "Register a new network printer with: escpost printers add <NAME> --transport network --discover --port 9200"
+                    .to_owned()
+            )
+        );
     }
 
     #[test]

@@ -113,6 +113,22 @@ normal ESCPost configuration path. This isolates configuration used by a
 checkout from an independently installed binary while keeping Docker-specific
 paths out of the Rust implementation.
 
+### CLI output ownership and testing
+
+The command that produces user-facing output owns its wording. Error types
+represent failure categories and carry any command-specific context needed to
+render them; the error module does not depend on command modules.
+
+Tests assert contracts at the boundary where those contracts exist. Unit tests
+cover semantics and safety invariants such as paths, preserved bytes, required
+commands, and state transitions. They do not duplicate an exact output contract
+already covered at another layer or pin incidental whitespace without a reason.
+Verbatim output comparisons remain appropriate when the complete output is the
+behavior under test and the literal is clearer than a set of fragmented
+assertions. When exact stdout or stderr is a supported CLI contract, one
+integration test asserts the rendered output. Documentation may show the same
+output for users, but lower-level tests do not maintain additional copies.
+
 ## Rust render command
 
 `escpost` is an application boundary around the renderer. It embeds the

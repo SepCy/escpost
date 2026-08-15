@@ -58,7 +58,9 @@ pub(super) fn run(
     non_interactive: bool,
 ) -> Result<(), CliError> {
     if !running_as_root() {
-        return Err(CliError::GrantUsbPermissionsNeedsRoot);
+        return Err(CliError::GrantUsbPermissionsNeedsRoot {
+            guidance: needs_root_guidance(),
+        });
     }
 
     let can_prompt = !non_interactive && io::stdin().is_terminal() && io::stderr().is_terminal();
@@ -120,18 +122,10 @@ Then it will reload udev:
     )
 }
 
-/// The two independent ways to grant the access, embedded in
-/// `CliError::GrantUsbPermissionsNeedsRoot`'s message (see `error.rs`) so
-/// the without-root failure is still actionable rather than a bare
-/// "requires root". `pub(crate)` and re-exported from `printers::mod`
-/// specifically so `error.rs` can build that error's `#[error(...)]` text
-/// from it, the same way several existing `CliError` variants already call
-/// into `crate::configuration::display_path` from their own attributes —
-/// this keeps the guidance defined exactly once rather than duplicated
-/// between the error type and this module. No trailing newline: the
-/// `#[error(...)]` interpolation site and, ultimately, `eprintln!` in
-/// `lib.rs` each contribute exactly the newlines needed around it.
-pub(crate) fn needs_root_guidance() -> String {
+/// The two ways to grant access included with the non-root error. The
+/// command owns this presentation and passes it into the error rather than
+/// making the error module depend on printer-command internals.
+fn needs_root_guidance() -> String {
     format!(
         "Let escpost apply it:
   sudo escpost printers grant-usb-permissions
@@ -381,14 +375,7 @@ mod tests {
     }
 
     #[test]
-    fn describe_change_matches_the_exact_first_person_format() {
-        // `run` performs these steps itself right after confirmation, so
-        // this must read as narration ("This will write...", "Then it
-        // will reload udev...") rather than instructions to the user —
-        // unlike `manual_commands`/`needs_root_guidance`, which stay
-        // imperative since a human runs those. A full literal comparison
-        // pins the exact wording, not just that the path/content/commands
-        // appear somewhere in it.
+    fn describe_change_matches_the_commands_that_will_run() {
         assert_eq!(
             describe_change(),
             "\
@@ -400,40 +387,6 @@ Then it will reload udev:
   udevadm control --reload
   udevadm trigger --subsystem-match=usb
 "
-        );
-    }
-
-    #[test]
-    fn needs_root_guidance_matches_the_exact_two_ways_format() {
-        // A full literal comparison, not just substring checks: this text
-        // is embedded verbatim in `CliError::GrantUsbPermissionsNeedsRoot`
-        // (see `error.rs`'s own exact-match test for the complete rendered
-        // error), so its shape (the two options, the blank lines between
-        // them, the indentation, the heredoc marker, no trailing newline)
-        // matters as much as its content.
-        assert_eq!(
-            needs_root_guidance(),
-            "\
-Let escpost apply it:
-  sudo escpost printers grant-usb-permissions
-
-Or run the commands yourself:
-  sudo tee /etc/udev/rules.d/70-escpost-usb-printers.rules <<'EOF'
-# Grant locally logged-in users access to USB printer-class devices (escpost).
-SUBSYSTEM==\"usb\", ENV{ID_USB_INTERFACES}==\"*:0701*:*\", TAG+=\"uaccess\"
-EOF
-  sudo udevadm control --reload
-  sudo udevadm trigger --subsystem-match=usb"
-        );
-    }
-
-    #[test]
-    fn manual_commands_embeds_the_rule_constant_verbatim_instead_of_duplicating_it() {
-        let commands = manual_commands();
-
-        assert!(
-            commands.contains(RULE_CONTENT),
-            "the heredoc body should be RULE_CONTENT verbatim, not a second hand-typed copy:\n{commands}"
         );
     }
 
@@ -460,15 +413,11 @@ EOF
 
     #[test]
     fn manual_commands_heredoc_body_equals_the_rule_constant_exactly() {
-        // The requirement this pins: pasting the printed block into a
-        // shell must reproduce RULE_CONTENT byte-for-byte, not merely
-        // "contain" it or resemble it. See the fix report for the same
-        // check re-run against a real shell, independent of this parser.
         assert_eq!(extract_heredoc_body(&manual_commands()), RULE_CONTENT);
     }
 
     #[test]
-    fn undo_commands_matches_the_exact_format() {
+    fn undo_commands_reverse_the_applied_change() {
         assert_eq!(
             undo_commands(),
             "\
@@ -478,14 +427,6 @@ Undo this grant later with:
   sudo udevadm trigger --subsystem-match=usb
 Then unplug and replug the printer to be certain access is fully revoked.
 "
-        );
-    }
-
-    #[test]
-    fn undo_commands_removes_the_exact_rules_path() {
-        assert!(
-            undo_commands().contains(&format!("sudo rm {RULES_PATH}")),
-            "the undo block should remove RULES_PATH exactly, not a hand-typed path"
         );
     }
 

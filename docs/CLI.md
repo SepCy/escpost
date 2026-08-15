@@ -384,7 +384,13 @@ opened or inspected (for example, an operating-system permission error) is
 reported as a `Warning:` line on stderr and skipped, and the sweep still
 reports every other USB and network printer it found, exiting successfully.
 Only a failure to enumerate USB devices at all is fatal, exactly like
-`list`.
+`list`. On Linux, when at least one of those warnings is a permission error,
+stderr prints one additional line after the warnings: `Fix USB permissions
+with: sudo escpost printers grant-usb-permissions` (see `printers grant-usb-permissions` below). The
+same line follows any other command's fatal USB permission error too — for
+example `print` sending to a USB printer, or `printers add`'s interactive or
+non-interactive USB selection — since those open the device directly instead
+of tolerating the failure the way `discover` does.
 
 ```bash
 escpost printers discover
@@ -476,6 +482,50 @@ never depends on how many were found); finding new printers on both
 transports instead prints the transport-agnostic "Register a new printer
 with" and hints at the bare `printers add <NAME>`, since the interactive
 wizard it launches prompts for the transport itself.
+
+### `printers grant-usb-permissions` (Linux only)
+
+USB printer device nodes under `/dev/bus/usb/` are root-owned by default on
+most Linux distributions, so `printers discover` degrades to a permission
+warning and any command that opens the device directly — `print`, and
+`printers add`'s USB selection — fails outright until something grants
+access. (`printers list` is unaffected: it checks USB presence from
+operating-system metadata alone and never opens the device, so it cannot hit
+this error; see `printers list` above.) `grant-usb-permissions` writes the udev rule
+that fixes this and exists only on Linux: the subcommand is absent from
+`--help` and unrecognized if typed on macOS or Windows, where no equivalent
+step is needed.
+
+```bash
+escpost printers grant-usb-permissions
+sudo escpost printers grant-usb-permissions
+```
+
+Without root, it only prints the plan: the exact path it would write, the
+full rule content, and the `udevadm` commands it would run, followed by a
+stderr line pointing at rerunning the same command with `sudo`. Nothing is
+written and nothing is broken; it always exits successfully.
+
+With root, it writes `/etc/udev/rules.d/70-escpost-usb-printers.rules`:
+
+```text
+# Grant locally logged-in users access to USB printer-class devices (escpost).
+SUBSYSTEM=="usb", ENV{ID_USB_INTERFACES}=="*:0701*:*", TAG+="uaccess"
+```
+
+The match is class-wide (USB interface class `07`, subclass `01` is the USB
+printer class) rather than tied to any specific vendor or product, so it
+covers any USB printer, not only ones escpost has a profile for.
+`TAG+="uaccess"` grants access to whichever user holds the active local
+session (the same mechanism systemd-logind already uses for input and audio
+devices) instead of `MODE="0666"`, which would open the device to every
+local user and process. After writing the rule, it runs `udevadm control
+--reload` and `udevadm trigger --subsystem-match=usb` so the change takes
+effect immediately, then prints a reminder to replug the printer and rerun
+`printers discover`. Running it again is safe: an identical existing rule is
+left in place (and udev is still reloaded); a rule that exists with
+different content is left untouched and reported as an error showing both
+versions, since it may have been hand-edited.
 
 ### `printers scan`
 
@@ -684,6 +734,7 @@ the completed implementation must satisfy.
 | CLI-M16 | Reserve `printers discover` for a read-only sweep that enumerates USB printer interfaces and probes network hosts with a bare connect-and-drop TCP handshake that never sends a byte; neither ever writes to `printers.toml`. |
 | CLI-M17 | Without `--subnet`, scan only directly connected IPv4 networks at most a `/24` automatically, skipping larger ones; an explicit `--subnet` scans exactly the given networks instead and removes the `/24` cap. |
 | CLI-M18 | Resolve `printers add --discover` from the sweep: zero discovered hosts is always an error naming the probed port, exactly one is selected automatically, and several open an interactive selection menu or, under `--non-interactive`, are an error listing every candidate. |
+| CLI-M19 | On Linux, offer `printers grant-usb-permissions` to install a class-wide, `uaccess`-scoped udev rule granting USB printer access without root each time; without root it only prints the exact plan, and it never silently overwrites a rule whose on-disk content differs from what it would write. Point `discover`'s permission-denied USB warnings at it with one added hint line. |
 
 ### Web requirements
 

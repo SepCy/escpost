@@ -138,11 +138,19 @@ fn execute_discover(
     let connected = if transport == Some(InventoryTransport::Network) {
         Vec::new()
     } else {
-        let enumeration = inventory.list_tolerant()?;
-        for warning in &enumeration.warnings {
+        let usb_enumeration = inventory.list_tolerant()?;
+        for warning in &usb_enumeration.warnings {
             writeln!(warnings_output, "Warning: {warning}").map_err(CliError::WriteHumanOutput)?;
         }
-        discovered_usb_printers(enumeration.printers, configuration)
+        #[cfg(target_os = "linux")]
+        if usb_enumeration.permission_denied {
+            writeln!(
+                warnings_output,
+                "Fix USB permissions with: sudo escpost printers grant-usb-permissions"
+            )
+            .map_err(CliError::WriteHumanOutput)?;
+        }
+        discovered_usb_printers(usb_enumeration.printers, configuration)
     };
     let hosts: &[DiscoveredHost] = if transport == Some(InventoryTransport::Usb) {
         &[]
@@ -367,6 +375,14 @@ mod tests {
     struct PartiallyFailingInventory {
         printers: Vec<UsbPrinter>,
         warnings: Vec<String>,
+        /// Set directly by the test rather than derived from `warnings`'
+        /// text: production computes this the same way, from the
+        /// structured `CliError` at the point of failure
+        /// (`CliError::is_permission_denied_usb_open`, checked in
+        /// `NusbInventory::list_tolerant` before the error is ever
+        /// formatted into a warning string), not by pattern-matching the
+        /// formatted message afterward.
+        permission_denied: bool,
     }
 
     impl UsbInventory for PartiallyFailingInventory {
@@ -378,6 +394,7 @@ mod tests {
             Ok(UsbEnumeration {
                 printers: self.printers.clone(),
                 warnings: self.warnings.clone(),
+                permission_denied: self.permission_denied,
             })
         }
 
@@ -1128,11 +1145,15 @@ in_endpoint = \"0x81\"
 
     #[test]
     fn discover_surfaces_a_per_device_warning_and_still_lists_the_rest() {
+        // A non-permission failure shape (config inspection, not open) on
+        // purpose: this test is about partial-failure tolerance, not the
+        // permission hint below, which has its own dedicated tests.
         let mut inventory = PartiallyFailingInventory {
             printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
             warnings: vec![
-                "could not open USB device 0416:5012: permission denied (errno 13)".to_owned(),
+                "could not inspect the active configuration of USB device 0416:5012: device is not configured".to_owned(),
             ],
+            permission_denied: false,
         };
         let mut output = Vec::new();
         let mut warnings_output = Vec::new();
@@ -1156,7 +1177,74 @@ in_endpoint = \"0x81\"
             String::from_utf8(warnings_output).expect("the warnings should be UTF-8");
         assert_eq!(
             warnings_output,
-            "Warning: could not open USB device 0416:5012: permission denied (errno 13)\n"
+            "Warning: could not inspect the active configuration of USB device 0416:5012: device is not configured\n"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn discover_appends_the_grant_usb_permissions_hint_once_after_permission_denied_warnings() {
+        let mut inventory = PartiallyFailingInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+            warnings: vec![
+                "could not open USB device 0416:5012: permission denied (errno 13)".to_owned(),
+                "could not open USB device 0416:5013: permission denied (errno 13)".to_owned(),
+            ],
+            permission_denied: true,
+        };
+        let mut output = Vec::new();
+        let mut warnings_output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &[],
+            None,
+            &mut output,
+            &mut warnings_output,
+        )
+        .expect("a per-device enumeration failure must not abort discovery");
+
+        let warnings_output =
+            String::from_utf8(warnings_output).expect("the warnings should be UTF-8");
+        assert_eq!(
+            warnings_output,
+            "\
+Warning: could not open USB device 0416:5012: permission denied (errno 13)
+Warning: could not open USB device 0416:5013: permission denied (errno 13)
+Fix USB permissions with: sudo escpost printers grant-usb-permissions
+"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn discover_prints_no_grant_usb_permissions_hint_without_a_permission_denied_warning() {
+        let mut inventory = PartiallyFailingInventory {
+            printers: vec![netum_usb_printer(vec![0x01], vec![0x81])],
+            warnings: vec![
+                "could not inspect the active configuration of USB device 0416:5012: device is not configured".to_owned(),
+            ],
+            permission_denied: false,
+        };
+        let mut output = Vec::new();
+        let mut warnings_output = Vec::new();
+
+        execute_discover(
+            &mut inventory,
+            &PrinterConfiguration::default(),
+            &[],
+            None,
+            &mut output,
+            &mut warnings_output,
+        )
+        .expect("a per-device enumeration failure must not abort discovery");
+
+        let warnings_output =
+            String::from_utf8(warnings_output).expect("the warnings should be UTF-8");
+        assert!(
+            !warnings_output.contains("grant-usb-permissions"),
+            "no permission-denied warning means no grant-usb-permissions hint:\n{warnings_output}"
         );
     }
 }

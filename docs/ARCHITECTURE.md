@@ -47,17 +47,121 @@ The Python package is only the render binding; it contains no CLI. The root
 development wrapper routes every command to the Rust executable. Hardware
 inventory and printing live in `escpost`, not the Rust rendering library.
 
-## Rust named-printer output
+## Native application architecture
 
-`escpost` loads a `print` source through the same immutable source loader
-as `render`, resolves one configured printer name, then hands those decoded
-bytes directly to its USB or RAW TCP transport. It does not invoke the renderer
-or require a printer profile.
+The `escpost` crate is organized by capability. Each capability owns its
+application operation and its thin CLI adapter:
 
 ```text
-Known ESC/POS source → decode once → configured printer name
-                                         ├── nusb bulk OUT
-                                         └── RAW TCP socket
+src/
+├── application/              shared application error/result boundary
+├── cli.rs                    root Clap tree
+├── cli/
+│   └── web.rs                shared web-viewer CLI presentation
+├── lib.rs                    root command dispatch
+├── features/
+│   ├── printers/
+│   │   ├── add/{mod,operation,cli}.rs
+│   │   ├── discover/{mod,cli}.rs
+│   │   ├── list/{mod,cli}.rs
+│   │   ├── cli.rs              shared CLI and command dispatch
+│   │   ├── cli/
+│   │   │   └── grant_usb_permissions.rs
+│   │   └── inventory.rs
+│   ├── profiles/{mod,cli}.rs
+│   ├── rendering/{mod,cli}.rs
+│   ├── printing/{mod,cli}.rs
+│   └── capture/{mod,cli}.rs
+├── configuration.rs
+├── discovery.rs
+├── net.rs
+├── source.rs
+├── watch.rs
+└── web.rs
+```
+
+A feature's `mod.rs` defines typed requests, factual responses, and operations.
+Application operations and their low-level dependencies share
+`application::ApplicationError`, whose variants contain factual failure context
+without terminal guidance. A feature operation has no dependency on Clap,
+terminal I/O, web-store updates, or wire serialization.
+
+Its `cli.rs` converts command input into validated application values, wraps
+application failures with adapter-owned recovery guidance, and presents the
+structured response. Wire DTOs, serialization, terminal labels, and prose also
+belong to the adapter. Operation facts retain their native types; for example,
+profile provenance and barcode support remain `ProfileSource` and
+`BarcodeSystem` values until the CLI maps them into human or JSON output.
+
+```text
+root CLI dispatch ─> feature::cli ─> feature operation ─> configuration, discovery, rendering, hardware
+```
+
+Capability-local `http.rs` adapters are added with the HTTP API for the
+capabilities it exposes; the tree does not reserve empty HTTP adapter
+placeholders. Those adapters will translate typed HTTP input into the same
+feature operations:
+
+```text
+HTTP router ─> feature::http ─> feature operation
+```
+
+The root `cli.rs` contains the Clap tree, while CLI-wide adapter infrastructure
+lives under `cli/`; a future `http/` module will contain shared HTTP transport
+infrastructure, not mirrored copies of every operation. Low-level
+operating-system modules remain at the crate root until a concrete boundary
+warrants moving them. A separate application crate is justified only when a
+second executable or library host needs the service layer.
+
+Application requests contain validated execution values. Clap argument types
+and HTTP request DTOs remain adapter-owned and convert explicitly into those
+requests. Application responses contain facts, not terminal prose or HTTP
+status codes. HTTP operations never prompt; interactive workflows belong to
+the CLI or browser. Render requests carry `escpost_render::RenderScale`, whose
+constructor accepts only the supported integer densities 1 through 3. Adapters
+must construct it before source, configuration, listener, or device I/O.
+
+`printers grant-usb-permissions` is the deliberate CLI-only host-command
+exception. Root checks, confirmation, udev rule mutation, `udevadm` execution,
+and recovery instructions live together under `features/printers/cli/`; there
+is no reusable application or HTTP operation for that host-administration
+workflow.
+
+The capture operation consumes one exact, completed RAW byte vector, a
+validated printer profile, and render parameters, then returns that same byte
+vector with traced render facts. Its CLI adapter resolves the profile before
+binding listeners and owns listener binding, idle-timeout validation, browser
+policy, connection lifecycle, task spawning, terminal output, and `JobStore`
+updates. It runs the synchronous capture operation through `spawn_blocking` so
+a render cannot stall web responses.
+
+### CLI output ownership and testing
+
+The command that produces user-facing output owns its wording. Shared
+application errors represent factual failure categories. CLI errors add
+invocation failures, prompts, terminal and viewer failures, and command-specific
+recovery text without making application modules depend on command modules.
+
+Tests assert contracts at the boundary where those contracts exist. Unit tests
+cover semantics and safety invariants such as paths, preserved bytes, required
+commands, and state transitions. They do not duplicate an exact output contract
+already covered at another layer or pin incidental whitespace without a reason.
+Verbatim output comparisons remain appropriate when the complete output is the
+behavior under test and the literal is clearer than fragmented assertions.
+
+## Rust named-printer output
+
+`escpost print` chooses one configured printer name, resolves and validates its
+owned target facts, and only then loads the source through the same immutable
+source loader as `render`. This preflight rejects a missing or invalid named
+target before reading a file or blocking on stdin. The operation then hands the
+decoded bytes directly to its USB or RAW TCP transport; it does not invoke the
+renderer or require a printer profile.
+
+```text
+configured printer name → target preflight → load and decode source
+                                                   ├── nusb bulk OUT
+                                                   └── RAW TCP socket
 ```
 
 Transport details live only in `printers.toml`. This keeps `print` independent
@@ -81,53 +185,61 @@ listeners for network output. Source loading, name resolution, target
 validation, and byte preservation remain real; ordinary tests cannot open or
 write to configured physical hardware.
 
-`printers list` uses the same `nusb` dependency but remains a separate passive
-inventory path. It first selects USB printer-class devices, opens them only to
-read their cached active configuration descriptors, and reports every
-alternate-setting-zero printer interface with at least one bulk OUT endpoint.
-It never claims an interface, detaches a kernel driver, or sends a USB
-transfer. It reads `printers.toml` only to identify matching configured names.
-An explicit `--config` file takes precedence over `ESCPOST_CONFIG_DIR`, which
-takes precedence over the platform user-configuration directory resolved by
-Rust's `directories` crate. A missing implicit file is an empty configuration,
-and this read-only path never creates a directory.
+`printers list` is a metadata-only inventory of configured printers. For saved
+USB entries it compares `nusb`'s operating-system device identities without
+opening a device or reading active configuration descriptors; for saved
+network entries it performs the bounded reachability probe. A matching saved
+entry is reported as connected and an unmatched saved entry as unavailable.
+When several saved aliases ambiguously match the same USB identity, the
+deterministic first alias is connected and its sibling aliases are omitted
+rather than double-counted. Connected USB devices with no saved identity are
+also omitted entirely and belong to `printers discover`, not `list`. Connected
+entries sort first, then unavailable entries, and each group sorts
+case-insensitively by configured name with stable transport tie-breakers.
 
-Inventory merges discovered interfaces with saved configuration by USB
-identity. A matched printer is one connected named entry; unmatched discovered
-interfaces remain connected unnamed entries; unmatched configuration becomes
-unavailable entries. Connected entries sort first, then unavailable entries,
-and each group sorts case-insensitively by display name with stable USB
-tie-breakers. Descriptor parsing, configuration matching, merging, ordering,
-and human output are tested behind the USB inventory boundary.
+`printers discover` owns full USB discovery. It opens candidate printer-class
+devices to inspect their active interfaces and bulk endpoints, returns tolerant
+per-device warnings, and reports both configured and unconfigured devices.
+`printers add` separately owns the full USB enumeration used to present and
+persist a concrete interface and endpoint selection; it does not route that
+selection through the metadata-only list inventory. Neither workflow claims a
+printer interface, detaches a kernel driver, or sends a USB transfer.
 
-The interactive add workflow reuses that passive inventory. It removes
-already configured identities, presents each bulk OUT endpoint explicitly,
-and stores stable descriptor coordinates. Bus and address are diagnostic
-selection labels only because operating systems may change them after a
-reconnection. A serial number is stored when available; without one,
-simultaneously connected devices with equal VID/PID cannot be distinguished
-reliably and are reported as ambiguous.
+The add operation accepts one `Connection` enum describing the desired USB or
+network configuration. `Request::new` validates the name, optional profile,
+and every connection field, so execution receives a valid request. Its response
+returns the saved name, profile, connection, and configuration path; adapters
+present or serialize those authoritative facts rather than retaining a second
+copy of the request state.
 
-The Docker wrapper creates and mounts `.config` at the container user's
-normal ESCPost configuration path. This isolates configuration used by a
-checkout from an independently installed binary while keeping Docker-specific
-paths out of the Rust implementation.
+The discovery CLI first converts its arguments into a valid `DiscoveryScope`
+and `NetworkScan`; incompatible options and an invalid port fail before any
+configuration I/O. `prepare` then loads configuration and derives scan targets,
+and `execute` emits factual observer events and returns typed discovery facts.
+`printers add --discover` reuses that lifecycle and retains only prompting and
+selection in its CLI adapter.
 
-### CLI output ownership and testing
+All inventory commands read `printers.toml` through the same path precedence:
+an explicit `--config` file, then `ESCPOST_CONFIG_DIR`, then the platform user
+configuration directory resolved by Rust's `directories` crate. A missing
+implicit file is an empty configuration, and read-only inventory never creates
+a directory. Every mutation uses one whole-file transaction: acquire the stable
+sibling `.printers.toml.lock`, read the latest complete text, derive the complete
+replacement, and publish it with an atomic rename. The lock file remains in
+place; the operating system releases its advisory lock when the file descriptor
+closes, including after a process crash. Mutations append only the new printer
+table so hand-edited comments, ordering, and formatting remain intact. Reads do
+not lock because atomic replacement exposes either the old or new complete
+file. Bus and address are diagnostic selection labels only because an operating
+system may change them after reconnection. A serial number is stored when
+available; without one, simultaneously connected devices with equal VID/PID
+cannot be distinguished reliably and are reported as ambiguous.
 
-The command that produces user-facing output owns its wording. Error types
-represent failure categories and carry any command-specific context needed to
-render them; the error module does not depend on command modules.
-
-Tests assert contracts at the boundary where those contracts exist. Unit tests
-cover semantics and safety invariants such as paths, preserved bytes, required
-commands, and state transitions. They do not duplicate an exact output contract
-already covered at another layer or pin incidental whitespace without a reason.
-Verbatim output comparisons remain appropriate when the complete output is the
-behavior under test and the literal is clearer than a set of fragmented
-assertions. When exact stdout or stderr is a supported CLI contract, one
-integration test asserts the rendered output. Documentation may show the same
-output for users, but lower-level tests do not maintain additional copies.
+The Docker wrapper creates and mounts `.config` at the container user's normal
+ESCPost configuration path. This isolates configuration used by a checkout from
+an independently installed binary while keeping Docker-specific paths out of
+the Rust implementation. Commands and errors report the factual path used by
+the running process; Docker does not rewrite it to a host path.
 
 ## Rust render command
 
@@ -156,17 +268,68 @@ Single-PNG output never drops later sheets. Directory output publishes its
 manifest only after all current sheets are complete. An explicit file and the
 web viewer may consume the same render without parsing or rendering twice.
 
-The web application, CSS, and JavaScript are embedded in the executable.
-Rendered PNGs live in a shared in-memory job store, which is also the intended
-handoff point for the future virtual printer. HTTP binds to loopback by
-default. The viewer reports ordered sheet names and printer-dot dimensions,
-uses one screen pixel per dot initially, and offers only integer,
-nearest-neighbor zoom.
+Rendered PNGs live in a shared in-memory job store. The viewer reports ordered
+sheet names and printer-dot dimensions, uses one screen pixel per dot initially,
+and offers only integer, nearest-neighbor zoom.
 
 Watch mode polls the selected filesystem input and performs each rerender away
 from the asynchronous HTTP task. A successful result atomically replaces the
 visible job. A parse or render failure is reported by the page while the last
 complete sheets remain available.
+
+### Planned embedded web application
+
+The web UI will be a Preact and TypeScript single-page application built with
+Vite. Axum will own HTTP routing, JSON APIs, and static asset delivery. The
+frontend will have no server-side JavaScript runtime.
+
+Existing web-enabled commands will host the same Axum router and embedded
+frontend. `serve` will add RAW job capture; `render --web`, `render --browser`,
+and `render --watch` will seed or update the render job store. Every mode will
+expose the same application operations. There will be no daemon, separate
+backend executable, or inter-process API.
+
+RAW capture and HTTP serving remain concurrent tasks in one process. Splitting
+them into subprocesses is reserved for a measured performance or isolation
+problem; the architecture does not introduce IPC speculatively.
+
+HTTP operation paths will follow the CLI command tree without an API version
+prefix:
+
+```text
+escpost printers list       GET  /printers/list
+escpost printers discover   POST /printers/discover
+escpost printers add        POST /printers/add
+escpost profiles list       GET  /profiles/list
+escpost profiles get ID     GET  /profiles/get/{id}
+escpost render              POST /render
+escpost print               POST /print
+```
+
+Names and parameter concepts will transfer between CLI and HTTP. HTTP will
+accept typed query parameters or JSON, never argument arrays or shell strings,
+and return structured data rather than captured stdout or stderr. The web
+server will call the same feature operations as the CLI; it will never invoke
+the `escpost` executable or call Clap handlers. HTTP-only infrastructure such as
+health checks and static assets will need no CLI equivalent.
+
+Vite will emit fixed-name HTML, JavaScript, and CSS assets. The Cargo build
+script will run the pinned frontend toolchain, write its output under `OUT_DIR`,
+and the `escpost` crate will embed those bytes at compile time. Release artifacts
+will remain a single executable and require neither Node.js nor external web
+assets at runtime. Docker images will pin Node.js and install dependencies from
+the lockfile.
+
+For development, Vite will serve the frontend with hot reload and proxy
+application routes to a running escpost server. Production and test builds will
+serve only the embedded assets.
+
+Automatic listeners will continue to bind to loopback. Explicit `--web-listen`
+addresses will remain supported; non-loopback bindings will retain the exposure
+warning. State-changing API requests will require JSON, reject untrusted
+origins, and carry a per-process same-origin capability so an unrelated browser
+origin cannot mutate local printer state. Authentication, TLS, and remote
+exposure will belong to an operator's reverse proxy.
 
 ## Rendering pipeline
 

@@ -9,7 +9,7 @@ implemented commands appear in the final section.
 
 ## Installation
 
-Install the CLI from crates.io with Rust 1.87 or newer:
+Install the CLI from crates.io with Rust 1.89 or newer:
 
 ```bash
 cargo install escpost
@@ -136,9 +136,10 @@ wrapper and open the printed URL manually.
 
 ### Preview quality
 
-`--scale <N>` renders each printer dot at `N × N` preview pixels. The default
-is `1` for `render`. `--antialias` enables grayscale glyph edges for display;
-it does not represent additional dots produced by a physical printer.
+`--scale <N>` accepts `1`, `2`, or `3` and renders each printer dot at `N × N`
+preview pixels. The default is `1` for `render`. `--antialias` enables grayscale
+glyph edges for display; it does not represent additional dots produced by a
+physical printer.
 
 ## `escpost print`
 
@@ -632,13 +633,13 @@ Filters compose with AND:
 Without `--json`, the command prints a compact table. `--json` prints the full
 filtered catalog as a JSON array.
 
-### `profiles show`
+### `profiles get`
 
-Show the complete details of one profile:
+Get the complete details of one profile:
 
 ```bash
-escpost profiles show NT-5890K
-escpost profiles show REFERENCE --json
+escpost profiles get NT-5890K
+escpost profiles get REFERENCE --json
 ```
 
 An unknown profile id is an error. `--json` prints one JSON object instead of
@@ -694,8 +695,9 @@ The viewer opens automatically when the environment permits it. `--no-open`
 skipped with `--non-interactive`, without a terminal, under CI, or when
 `BROWSER=none`.
 
-`--scale` defaults to `3` for the browser preview. Antialiasing is enabled by
-default; pass `--antialias=false` for faithful one-bit printer dots.
+`--scale` accepts `1`, `2`, or `3` and defaults to `3` for the browser preview.
+Antialiasing is enabled by default; pass `--antialias=false` for faithful
+one-bit printer dots.
 
 RAW TCP port 9100 has no authentication or encryption. Binding either listener
 to a non-loopback address can expose receipt data and should be deliberate.

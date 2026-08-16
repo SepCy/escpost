@@ -1,20 +1,64 @@
+//! Terminal adapter for RAW job capture and the embedded web viewer.
+
 use std::io::IsTerminal;
+use std::net::SocketAddr;
 use std::time::Duration;
 
+use clap::Args;
 use escpost_profiles::PrinterProfile;
-use escpost_render::{RenderOptions, render_with_trace_and_options};
+use escpost_render::RenderScale;
 use tokio::io::AsyncReadExt;
 use tokio::net::{TcpListener, TcpStream};
 
-use crate::cli::ServeArgs;
+use crate::application::ApplicationError;
+use crate::cli::web as cli_web;
 use crate::error::CliError;
 use crate::{net, profiles, web};
+
+use super::{RenderRequest, render_job};
 
 /// Port 9100 is the common RAW/AppSocket transport used by network printers. A
 /// busy default escalates through this range, and every listener binds
 /// loopback so captured receipt data is not exposed by default.
 const FIRST_RAW_PORT: u16 = 9100;
 const LAST_RAW_PORT: u16 = 9109;
+
+#[derive(Debug, Args)]
+pub(crate) struct ServeArgs {
+    /// Printer profile used to render captured jobs.
+    #[arg(long, default_value = "REFERENCE")]
+    pub(crate) profile: String,
+
+    /// Address for the RAW TCP printer. When omitted, the first free loopback
+    /// port from 9100 through 9109 is used.
+    #[arg(long)]
+    pub(crate) listen: Option<SocketAddr>,
+
+    /// Address for the web viewer. When omitted, the first free loopback port
+    /// from 9000 through 9099 is used.
+    #[arg(long)]
+    pub(crate) web_listen: Option<SocketAddr>,
+
+    /// Complete a held-open connection's job after this many seconds of silence.
+    /// Use 0 to disable and end a job only when the connection closes.
+    #[arg(long, value_name = "SECONDS", default_value_t = 20.0)]
+    pub(crate) idle_timeout: f64,
+
+    /// Preview pixel density: 1 to 3 subpixels per dot. 1 is dot resolution.
+    #[arg(long, value_name = "N", default_value_t = 3)]
+    pub(crate) scale: u32,
+
+    /// Anti-alias glyph edges into a grayscale preview (cosmetic; never what a
+    /// printer emits). Pass --antialias=false for faithful 1-bit dots.
+    #[arg(long, num_args = 0..=1, default_value_t = true, default_missing_value = "true")]
+    pub(crate) antialias: bool,
+
+    /// Do not open the web viewer in the default browser on startup. Auto-open
+    /// is also skipped with --non-interactive, without a terminal, or when the
+    /// BROWSER=none or CI environment variables are set.
+    #[arg(long, alias = "no-browser")]
+    pub(crate) no_open: bool,
+}
 
 /// Decide whether to auto-open the web viewer in a browser. Open by default,
 /// but stay out of the way when the user opted out (`--no-open`), when there is
@@ -31,8 +75,9 @@ fn should_open_browser(
 }
 
 pub(crate) async fn run(arguments: ServeArgs, non_interactive: bool) -> Result<(), CliError> {
-    // The profile defaults to REFERENCE, so a virtual printer previews without
-    // any prompt and never needs an interactive terminal.
+    let scale = RenderScale::new(arguments.scale).map_err(ApplicationError::from)?;
+    // Validate the configured profile before opening either listener. Captured
+    // jobs pass that same validated profile to the synchronous rendering operation.
     let profile = profiles::load(&arguments.profile)?;
     eprintln!("Profile: {}", arguments.profile);
 
@@ -63,7 +108,7 @@ pub(crate) async fn run(arguments: ServeArgs, non_interactive: bool) -> Result<(
         None => eprintln!("Idle timeout: disabled (jobs end when the connection closes)"),
     }
 
-    let web_listener = web::bind(arguments.web_listen).await?;
+    let web_listener = cli_web::bind(arguments.web_listen).await?;
     let jobs = web::JobStore::awaiting_jobs(
         arguments.profile.clone(),
         format!(
@@ -74,17 +119,13 @@ pub(crate) async fn run(arguments: ServeArgs, non_interactive: bool) -> Result<(
 
     // Accept jobs while the web viewer runs. The viewer owns the foreground and
     // returns on Ctrl+C; stop accepting once it does.
-    let options = RenderOptions {
-        scale: arguments.scale,
-        antialias: arguments.antialias,
-        ..RenderOptions::default()
-    };
     let acceptor = tokio::spawn(accept_jobs(
         raw,
         jobs.clone(),
         profile,
         idle_timeout,
-        options,
+        scale,
+        arguments.antialias,
     ));
     let open_browser = should_open_browser(
         arguments.no_open,
@@ -93,7 +134,7 @@ pub(crate) async fn run(arguments: ServeArgs, non_interactive: bool) -> Result<(
         std::env::var("BROWSER").ok().as_deref(),
         std::env::var_os("CI").is_some(),
     );
-    let result = web::serve(web_listener, jobs, open_browser).await;
+    let result = cli_web::serve(web_listener, jobs, open_browser).await;
     acceptor.abort();
     result
 }
@@ -103,7 +144,8 @@ async fn accept_jobs(
     jobs: web::JobStore,
     profile: &'static PrinterProfile,
     idle_timeout: Option<Duration>,
-    options: RenderOptions,
+    scale: RenderScale,
+    antialias: bool,
 ) {
     loop {
         match listener.accept().await {
@@ -115,7 +157,8 @@ async fn accept_jobs(
                     jobs.clone(),
                     profile,
                     idle_timeout,
-                    options,
+                    scale,
+                    antialias,
                 ));
             }
             Err(_) => continue,
@@ -128,7 +171,8 @@ async fn capture_job(
     jobs: web::JobStore,
     profile: &'static PrinterProfile,
     idle_timeout: Option<Duration>,
-    options: RenderOptions,
+    scale: RenderScale,
+    antialias: bool,
 ) {
     let mut buffer = Vec::new();
     let mut chunk = [0u8; 8192];
@@ -146,7 +190,8 @@ async fn capture_job(
                             std::mem::take(&mut buffer),
                             profile,
                             "timeout",
-                            options,
+                            scale,
+                            antialias,
                         )
                         .await;
                         jobs.end_capture().await;
@@ -177,7 +222,7 @@ async fn capture_job(
     }
     // The connection closed: any remaining bytes are an explicitly completed job.
     if !buffer.is_empty() {
-        finalize(&jobs, buffer, profile, "closed", options).await;
+        finalize(&jobs, buffer, profile, "closed", scale, antialias).await;
     }
     if receiving {
         jobs.end_capture().await;
@@ -189,25 +234,32 @@ async fn finalize(
     bytes: Vec<u8>,
     profile: &'static PrinterProfile,
     completion: &'static str,
-    options: RenderOptions,
+    scale: RenderScale,
+    antialias: bool,
 ) {
     // Rendering is synchronous and CPU-bound; run it off the async workers so a
-    // job in flight cannot stall the web viewer's responses. The blocking task
-    // returns the bytes so the exact input can be kept for download.
+    // job in flight cannot stall the web viewer's responses.
     match tokio::task::spawn_blocking(move || {
-        (
-            render_with_trace_and_options(&bytes, profile, &options),
+        render_job(RenderRequest {
             bytes,
-        )
+            profile,
+            scale,
+            antialias,
+        })
     })
     .await
     {
-        Ok((Ok(rendered), raw_input)) => {
-            jobs.replace_captured(rendered, completion, raw_input).await;
+        Ok(Ok(response)) => {
+            jobs.replace_captured(response.rendered, completion, response.raw_input)
+                .await;
         }
-        Ok((Err(error), _)) => {
-            eprintln!("warning: could not render captured job: {error}");
-            jobs.set_error(error.to_string()).await;
+        Ok(Err(error)) => {
+            let message = match error {
+                crate::application::ApplicationError::Render(source) => source.to_string(),
+                error => error.to_string(),
+            };
+            eprintln!("warning: could not render captured job: {message}");
+            jobs.set_error(message).await;
         }
         // A panic or cancellation in the render task leaves no job to preview.
         Err(_) => {}

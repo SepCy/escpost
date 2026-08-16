@@ -1,17 +1,14 @@
 //! Native ESCPost developer command-line interface.
 
+mod application;
 mod cli;
 mod configuration;
 mod discovery;
 mod error;
+mod features;
 mod net;
 mod output;
-mod print;
-mod printers;
 mod profiles;
-pub mod profiles_cmd;
-mod render;
-mod serve;
 mod source;
 mod watch;
 mod web;
@@ -28,16 +25,7 @@ pub async fn main() -> ExitCode {
     match run(cli).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("error: {error}");
-            // Fatal USB-open permission errors (`print`, `printers add`'s
-            // USB selection) get the same actionable hint discover's
-            // tolerant warnings already carry, so a user hitting the
-            // problem the hard way is not left to find `grant-usb-permissions` in the
-            // docs.
-            #[cfg(target_os = "linux")]
-            if error.is_permission_denied_usb_open() {
-                eprintln!("Fix USB permissions with: sudo escpost printers grant-usb-permissions");
-            }
+            eprintln!("error: {}", error.display_message());
             ExitCode::FAILURE
         }
     }
@@ -45,10 +33,20 @@ pub async fn main() -> ExitCode {
 
 async fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
-        Command::Render(arguments) => render::run(arguments, cli.non_interactive).await,
-        Command::Print(arguments) => print::run(arguments, cli.non_interactive).await,
-        Command::Serve(arguments) => serve::run(arguments, cli.non_interactive).await,
-        Command::Printers(arguments) => printers::run(arguments, cli.non_interactive).await,
-        Command::Profiles(arguments) => profiles_cmd::run(arguments, cli.non_interactive),
+        Command::Render(arguments) => {
+            features::rendering::cli::run(arguments, cli.non_interactive).await
+        }
+        Command::Print(arguments) => {
+            features::printing::cli::run(arguments, cli.non_interactive).await
+        }
+        Command::Serve(arguments) => {
+            features::capture::cli::run(arguments, cli.non_interactive).await
+        }
+        Command::Printers(arguments) => {
+            features::printers::cli::run(arguments, cli.non_interactive).await
+        }
+        Command::Profiles(arguments) => {
+            features::profiles::cli::run(arguments, cli.non_interactive)
+        }
     }
 }

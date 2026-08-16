@@ -5,6 +5,77 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 #[test]
+fn serve_help_contract_is_unchanged() {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["serve", "--help"])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("serve help should be UTF-8"),
+        "\
+Capture RAW TCP print jobs and preview them in the web viewer
+
+Usage: escpost serve [OPTIONS]
+
+Options:
+      --non-interactive          Never prompt for missing values
+      --profile <PROFILE>        Printer profile used to render captured jobs [default: REFERENCE]
+      --listen <LISTEN>          Address for the RAW TCP printer. When omitted, the first free loopback port from 9100 through 9109 is used
+      --web-listen <WEB_LISTEN>  Address for the web viewer. When omitted, the first free loopback port from 9000 through 9099 is used
+      --idle-timeout <SECONDS>   Complete a held-open connection's job after this many seconds of silence. Use 0 to disable and end a job only when the connection closes [default: 20]
+      --scale <N>                Preview pixel density: 1 to 3 subpixels per dot. 1 is dot resolution [default: 3]
+      --antialias [<ANTIALIAS>]  Anti-alias glyph edges into a grayscale preview (cosmetic; never what a printer emits). Pass --antialias=false for faithful 1-bit dots [default: true] [possible values: true, false]
+      --no-open                  Do not open the web viewer in the default browser on startup. Auto-open is also skipped with --non-interactive, without a terminal, or when the BROWSER=none or CI environment variables are set
+  -h, --help                     Print help
+"
+    );
+}
+
+#[test]
+fn serve_rejects_an_unsupported_scale_before_opening_listeners() {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["serve", "--scale", "0", "--non-interactive"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the escpost command should start");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        if child
+            .try_wait()
+            .expect("the child status should be readable")
+            .is_some()
+        {
+            break;
+        }
+        if Instant::now() >= deadline {
+            child
+                .kill()
+                .expect("the blocked command should be stoppable");
+            let output = child
+                .wait_with_output()
+                .expect("the stopped command should be reapable");
+            panic!(
+                "serve opened listeners instead of rejecting the scale:\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    let output = child
+        .wait_with_output()
+        .expect("the rejected command should finish");
+
+    assert!(!output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "error: render scale must be between 1 and 3, got 0\n"
+    );
+}
+
+#[test]
 fn serve_captures_a_raw_job_and_previews_its_sheets() {
     let mut child = start_serve_on_ephemeral_ports();
     let (raw_port, web_port) = read_listen_ports(&mut child);
@@ -242,7 +313,13 @@ fn serve_reports_a_render_error_without_a_sheet() {
     // viewer reads `error` with no sheets and must report the failure rather
     // than keep waiting for the first job.
     let mut child = start_serve_on_ephemeral_ports();
-    let (raw_port, web_port) = read_listen_ports(&mut child);
+    let mut stderr = BufReader::new(
+        child
+            .stderr
+            .take()
+            .expect("the serve command stderr should be piped"),
+    );
+    let (raw_port, web_port) = read_listen_ports_from(&mut stderr);
     wait_until_listening(&mut child, raw_port);
     wait_until_listening(&mut child, web_port);
 
@@ -251,6 +328,10 @@ fn serve_reports_a_render_error_without_a_sheet() {
 
     let metadata = wait_for_render_error(web_port);
     stop(&mut child);
+    let mut remaining_stderr = String::new();
+    stderr
+        .read_to_string(&mut remaining_stderr)
+        .expect("the render warning should be readable");
 
     assert_eq!(
         metadata["sheets"]
@@ -263,9 +344,11 @@ fn serve_reports_a_render_error_without_a_sheet() {
     let error = metadata["error"]
         .as_str()
         .expect("the render error should be reported");
-    assert!(
-        error.contains("unsupported"),
-        "the error should explain the unsupported byte:\n{error}"
+    assert_eq!(error, "unsupported data byte 0x1c at byte offset 7");
+    assert_eq!(
+        remaining_stderr,
+        "Press Ctrl+C to stop.\n\
+warning: could not render captured job: unsupported data byte 0x1c at byte offset 7\n"
     );
 }
 
@@ -349,6 +432,20 @@ fn read_listen_ports(child: &mut Child) -> (u16, u16) {
             .take()
             .expect("the serve command stderr should be piped"),
     );
+    let ports = read_listen_ports_from(&mut stderr);
+
+    // Keep the stderr pipe open and drained for the rest of the run. Dropping it
+    // here would close the read end, so the server's next status line would hit
+    // a broken pipe and abort. The thread ends at EOF when the child is stopped.
+    thread::spawn(move || {
+        let mut discard = String::new();
+        let _ = stderr.read_to_string(&mut discard);
+    });
+
+    ports
+}
+
+fn read_listen_ports_from(stderr: &mut impl BufRead) -> (u16, u16) {
     let mut raw = None;
     let mut web = None;
     while raw.is_none() || web.is_none() {
@@ -373,14 +470,6 @@ fn read_listen_ports(child: &mut Child) -> (u16, u16) {
             web = Some(port);
         }
     }
-
-    // Keep the stderr pipe open and drained for the rest of the run. Dropping it
-    // here would close the read end, so the server's next status line would hit
-    // a broken pipe and abort. The thread ends at EOF when the child is stopped.
-    thread::spawn(move || {
-        let mut discard = String::new();
-        let _ = stderr.read_to_string(&mut discard);
-    });
 
     (raw.unwrap(), web.unwrap())
 }

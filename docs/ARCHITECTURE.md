@@ -43,14 +43,15 @@ WebAssembly targets, and is a deliberate boundary documented in
 Python calls into Rust once per job. The binding releases the Python
 interpreter lock while Rust renders.
 
-The Python package is only the render binding; it contains no CLI. The root
-development wrapper routes every command to the Rust executable. Hardware
-inventory and printing live in `escpost`, not the Rust rendering library.
+The Python package is only the render binding; it contains no CLI. Development
+tasks route CLI commands to the Rust executable. Hardware inventory and
+printing live in `escpost`, not the Rust rendering library.
 
 ## Native application architecture
 
 The `escpost` crate is organized by capability. Each capability owns its
-application operation and its thin CLI adapter:
+application operation and its thin CLI adapter. This boundary-oriented view
+omits supporting root modules that do not change those relationships:
 
 ```text
 src/
@@ -119,7 +120,7 @@ requests. Application responses contain facts, not terminal prose or HTTP
 status codes. HTTP operations never prompt; interactive workflows belong to
 the CLI or browser. Render requests carry `escpost_render::RenderScale`, whose
 constructor accepts only the supported integer densities 1 through 3. Adapters
-must construct it before source, configuration, listener, or device I/O.
+must construct it before application-side I/O or expensive work.
 
 `printers grant-usb-permissions` is the deliberate CLI-only host-command
 exception. Root checks, confirmation, udev rule mutation, `udevadm` execution,
@@ -235,11 +236,12 @@ system may change them after reconnection. A serial number is stored when
 available; without one, simultaneously connected devices with equal VID/PID
 cannot be distinguished reliably and are reported as ambiguous.
 
-The Docker wrapper creates and mounts `.config` at the container user's normal
-ESCPost configuration path. This isolates configuration used by a checkout from
-an independently installed binary while keeping Docker-specific paths out of
-the Rust implementation. Commands and errors report the factual path used by
-the running process; Docker does not rewrite it to a host path.
+The Docker Compose CLI service mounts the checkout-local `.config` directory at
+the container user's normal ESCPost configuration path. This isolates
+configuration used by a checkout from an independently installed binary while
+keeping Docker-specific paths out of the Rust implementation. Commands and
+errors report the factual path used by the running process; Docker does not
+rewrite it to a host path.
 
 ## Rust render command
 
@@ -270,12 +272,17 @@ web viewer may consume the same render without parsing or rendering twice.
 
 Rendered PNGs live in a shared in-memory job store. The viewer reports ordered
 sheet names and printer-dot dimensions, uses one screen pixel per dot initially,
-and offers only integer, nearest-neighbor zoom.
+and selects crisp or smoothed browser scaling to match the render mode.
 
 Watch mode polls the selected filesystem input and performs each rerender away
 from the asynchronous HTTP task. A successful result atomically replaces the
 visible job. A parse or render failure is reported by the page while the last
 complete sheets remain available.
+
+The current embedded viewer is a latest-job projection. Axum serves one inline
+HTML document, current render metadata at `/api/render`, the current raw input
+at `/job`, and current sheets under `/sheets/`. These routes do not provide
+stable job identity and are not the target workbench API.
 
 ### Planned embedded web application
 
@@ -284,14 +291,30 @@ Vite. Axum will own HTTP routing, JSON APIs, and static asset delivery. The
 frontend will have no server-side JavaScript runtime.
 
 Existing web-enabled commands will host the same Axum router and embedded
-frontend. `serve` will add RAW job capture; `render --web`, `render --browser`,
-and `render --watch` will seed or update the render job store. Every mode will
-expose the same application operations. There will be no daemon, separate
-backend executable, or inter-process API.
+frontend. `render --web`, `render --browser`, and `render --watch` will seed or
+update the render job store. `serve` will make the web workbench available
+without requiring a RAW listener. Every mode will expose the same application
+operations.
 
-RAW capture and HTTP serving remain concurrent tasks in one process. Splitting
-them into subprocesses is reserved for a measured performance or isolation
-problem; the architecture does not introduce IPC speculatively.
+Today, `serve` always opens a RAW listener, `--listen` selects its address, and
+`--web-listen` selects the viewer address. That behavior remains until the web
+app can control the virtual printer. At that transition, `--listen` will name
+the primary web listener, `--web-listen` will remain accepted for clarity, and
+RAW listener configuration will move exclusively to `--virtual-listen`.
+
+The RAW virtual printer will be an optional capability once the web app can
+enable and disable it. `--virtual-listen [ADDR]` will enable it at startup; its
+absence will leave the listener closed. When enabled, RAW capture and HTTP
+serving will remain concurrent tasks in one process. Splitting them into
+subprocesses is reserved for a measured performance or isolation problem; the
+architecture introduces neither a daemon nor IPC speculatively.
+
+The web host will construct one process-scoped state containing the job store,
+the resolved printer-configuration path, mutation protection, resource policy,
+and the optional virtual-printer controller. A root router will compose shared
+HTTP infrastructure with capability-local `http.rs` adapters. The configuration
+path is selected when the process starts; HTTP request DTOs cannot select
+arbitrary server filesystem paths.
 
 HTTP operation paths will follow the CLI command tree without an API version
 prefix:
@@ -307,18 +330,30 @@ escpost print               POST /print
 ```
 
 Names and parameter concepts will transfer between CLI and HTTP. HTTP will
-accept typed query parameters or JSON, never argument arrays or shell strings,
-and return structured data rather than captured stdout or stderr. The web
-server will call the same feature operations as the CLI; it will never invoke
-the `escpost` executable or call Clap handlers. HTTP-only infrastructure such as
-health checks and static assets will need no CLI equivalent.
+accept typed query parameters, JSON, or a route-specific binary upload; it will
+never accept argument arrays or shell strings. Responses will contain structured
+data rather than captured stdout or stderr. A shared HTTP error adapter will map
+factual application failures to status codes and a stable machine-readable
+envelope without exposing terminal guidance or unnecessary host details.
 
-Vite will emit fixed-name HTML, JavaScript, and CSS assets. The Cargo build
-script will run the pinned frontend toolchain, write its output under `OUT_DIR`,
-and the `escpost` crate will embed those bytes at compile time. Release artifacts
-will remain a single executable and require neither Node.js nor external web
-assets at runtime. Docker images will pin Node.js and install dependencies from
-the lockfile.
+The web server will call the same feature operations as the CLI; it will never
+invoke the `escpost` executable or call Clap handlers. HTTP-only infrastructure
+such as health checks and static assets will need no CLI equivalent. Operation,
+UI asset, and job-resource paths will remain distinct. SPA fallback applies only
+to browser navigation and never converts an unknown operation route into HTML.
+
+Jobs will have stable identifiers. Raw bytes, rendered sheets, and other job
+resources will be addressed by job id, while a separate pointer identifies the
+current job. Retention will be bounded in both job count and bytes. Persistence
+is a later opt-in capability rather than a prerequisite for the workbench.
+
+The frontend toolchain and dependency graph will be pinned by the container
+image and lockfile. Vite will emit content-hashed JavaScript and CSS assets.
+Docker and release automation will build and verify the production bundle, and
+the Cargo package will contain those production assets for compile-time
+embedding. Ordinary Cargo builds will not install JavaScript dependencies or
+require network access. Release artifacts will remain a single executable and
+require neither Node.js nor external web assets at runtime.
 
 For development, Vite will serve the frontend with hot reload and proxy
 application routes to a running escpost server. Production and test builds will
@@ -326,10 +361,25 @@ serve only the embedded assets.
 
 Automatic listeners will continue to bind to loopback. Explicit `--web-listen`
 addresses will remain supported; non-loopback bindings will retain the exposure
-warning. State-changing API requests will require JSON, reject untrusted
-origins, and carry a per-process same-origin capability so an unrelated browser
-origin cannot mutate local printer state. Authentication, TLS, and remote
-exposure will belong to an operator's reverse proxy.
+warning. State-changing API requests will reject untrusted browser origins and
+require a randomly generated per-process capability, independent of their
+route-specific content type. The embedded frontend will obtain the capability
+from a non-cacheable same-origin bootstrap response and return it in a custom
+request header. The server will expose no permissive CORS policy. Non-browser
+clients may use the same bootstrap and header contract.
+
+The capability protects against cross-origin browser requests; it is not
+remote-user authentication. Authentication, TLS, and remote exposure will
+belong to an operator's reverse proxy. A reverse proxy preserves the bootstrap
+contract under its authenticated origin rather than supplying or replacing the
+process capability.
+
+The HTTP host will enforce limits before accepting untrusted work: request and
+RAW input bytes, discovery address count, simultaneous connections, queued or
+running renders, and retained jobs and bytes. CPU-bound rendering and blocking
+filesystem work will run away from asynchronous HTTP workers. Application
+operations will retain their own semantic and resource invariants so every
+adapter receives the same protection.
 
 ## Rendering pipeline
 

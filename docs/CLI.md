@@ -321,8 +321,7 @@ Adding a printer:
 Registration reads USB descriptors or records the supplied network endpoint,
 whether that endpoint came from `--host` or from `--discover`. It does not
 send bytes, infer a profile, or prove that paper can be printed. Manual
-editing remains supported. Active Bluetooth discovery remains a separate
-planned capability.
+editing remains supported.
 
 ### `printers list`
 
@@ -330,8 +329,7 @@ planned capability.
 exactly the printers saved in `printers.toml`, each cross-checked against
 whether it is actually reachable right now. A USB or network device that is
 connected but not yet registered never appears here — finding those is
-`printers discover`'s job. Bluetooth and operating-system spooler inventory
-remain planned.
+`printers discover`'s job.
 
 The default includes every supported transport. `--transport usb|network`
 narrows the result without changing its shape. The command also reports the
@@ -358,9 +356,6 @@ allowing unknown printers to be registered before calibration.
 Connected printers appear before unavailable printers. Within each status
 group, results sort case-insensitively by display name with stable
 transport-specific tie-breakers. Sorting is intentionally not configurable.
-The future `--status` filter will narrow the same ordered inventory rather than
-define an alternate sort mode. `--json` will expose the same snapshot for
-scripts using a versioned schema, allowing callers to apply their own sorting.
 An empty registry — including a `--transport` filter that matches nothing —
 prints `No printers configured.` and exits successfully.
 
@@ -581,33 +576,6 @@ now-gone rule, actually revokes it. This block is not printed when the
 prompt is declined or when the rule diverges and is refused, since neither
 of those actually grants anything.
 
-### `printers scan`
-
-`scan` is reserved for an active search for new or unconfigured devices. It may
-take longer, request operating-system permissions, and find nearby Bluetooth
-or network candidates which are not yet usable. Results are candidates rather
-than silently saved printers. Scanning never pairs a device or sends printable
-ESC/POS probes.
-
-Transport-specific flags and timeouts must be documented when each scanning
-backend is implemented. A broad network scan must remain opt-in.
-
-### `printers pair`
-
-`pair` turns one explicit scan candidate into a connection the operating
-system or ESCPost can use. It is a state-changing operation and may delegate
-to the platform's Bluetooth UI or permission flow. It never infers a candidate
-from a printer name or silently selects one of several matches.
-
-Non-interactive pairing requires every value and authorization needed by the
-platform; otherwise it fails instead of waiting for a prompt. Some BLE
-printers do not use operating-system pairing, so support is defined by the
-transport backend rather than assumed for every Bluetooth device.
-
-The current Rust implementation lists attached USB printer-class interfaces.
-Bluetooth, network, spooler, `scan`, and `pair` support can be added without
-renaming the inventory command or changing its read-only meaning.
-
 ## `escpost profiles`
 
 Browse the embedded catalog of printer profiles. These commands do not access
@@ -711,109 +679,3 @@ JSON data.
 
 Cancellation with `Ctrl+C` shuts down long-running web and virtual-printer
 processes.
-
-## Requirement catalogue
-
-Implementation status belongs only in `TODO.md`. This catalogue defines what
-the completed implementation must satisfy.
-
-### Global requirements
-
-| ID | Requirement |
-|---|---|
-| CLI-G01 | Use one `escpost` executable with coherent top-level commands. |
-| CLI-G02 | Accept global `--non-interactive` before or after subcommands. |
-| CLI-G03 | Never prompt or assume confirmation in effective non-interactive mode. |
-| CLI-G04 | Resolve promptable values using the documented precedence. |
-| CLI-G05 | Keep binary, structured, and human output from corrupting one another. |
-| CLI-G06 | Return nonzero status for every failed operation. |
-| CLI-G07 | Shut down long-running commands cleanly on interruption. |
-
-### Input and profile requirements
-
-| ID | Requirement |
-|---|---|
-| CLI-I01 | Accept raw binary files, hexadecimal files, and stdin. |
-| CLI-I02 | Treat `-` as stdin/stdout and `--` only as the end of options. |
-| CLI-I03 | Never infer hexadecimal format by inspecting arbitrary input contents. |
-| CLI-I04 | Accept only recognized structured directories as input sources. |
-| CLI-I05 | Preserve immutable source bytes when loading captures. |
-| CLI-I06 | Resolve and report the selected printer profile explicitly. |
-
-### Render requirements
-
-| ID | Requirement |
-|---|---|
-| CLI-R01 | Render a known source to one or more PNG sheets. |
-| CLI-R02 | Support a single PNG file, stdout, all-sheet directory, and web destinations. |
-| CLI-R03 | Never silently discard or concatenate sheets for a single-PNG destination. |
-| CLI-R04 | Write only PNG bytes to stdout and refuse binary output to a terminal. |
-| CLI-R05 | Write the all-sheet manifest only after every referenced PNG is complete. |
-| CLI-R06 | Allow persisted PNG and web destinations in the same invocation. |
-| CLI-R07 | Reject stdout PNG output combined with a long-running web mode. |
-| CLI-R08 | Overwrite explicit and conflicting generated outputs without prompting while preserving unrelated files. |
-
-### Physical-print requirements
-
-| ID | Requirement |
-|---|---|
-| CLI-P01 | Accept the same file, hexadecimal, stdin, and recognized-directory sources as `render`. |
-| CLI-P02 | Address physical output only through a configured printer name, never transport options on `print`. |
-| CLI-P03 | Select a configured name interactively when allowed, offer the shared add-printer workflow, and print to the selected or newly added name. |
-| CLI-P04 | Send the loaded bytes unchanged without adding ESC/POS commands. |
-| CLI-P05 | Resolve USB and RAW TCP details from configuration and fail before printing for unknown or ambiguous targets. |
-| CLI-P06 | Report the selected name, transport, resolved target, and transferred byte count without logging receipt contents. |
-| CLI-P07 | Return typed, actionable errors and nonzero status for every failed physical operation. |
-| CLI-P08 | Keep automated tests physically inert by substituting USB and using loopback-only network listeners. |
-| CLI-P09 | Bound RAW TCP connection and write operations and send no probe, framing, or other extra bytes. |
-
-### Printer-management requirements
-
-| ID | Requirement |
-|---|---|
-| CLI-M01 | Make `printers list` a passive, transport-neutral inventory of configured printers, each showing whether it is currently usable. |
-| CLI-M02 | List all supported transports by default and permit an explicit transport filter. |
-| CLI-M03 | Identify each result's transport and expose the connection fields required for printing. |
-| CLI-M04 | Keep machine-readable listing output separate from human output and version its schema. |
-| CLI-M05 | Reserve `printers scan` for active discovery that never pairs, saves, or prints implicitly. |
-| CLI-M06 | Reserve `printers pair` for an explicit state-changing connection workflow which may delegate to the operating system. |
-| CLI-M07 | Never infer a scan or pairing target by display name or choose silently among several candidates. |
-| CLI-M08 | Resolve printer configuration from an explicit file, `ESCPOST_CONFIG_DIR`, then the platform user-configuration directory. |
-| CLI-M09 | Keep passive listing free of configuration writes while showing matched names and an explicit assigned or unassigned profile for every printer. |
-| CLI-M10 | Use one merge of connected and configured USB printers to resolve each configured printer's status, list connected before unavailable, and sort each status group by display name. |
-| CLI-M11 | Register USB or known network targets with `printers add`, selecting a USB descriptor interactively from a menu or non-interactively by explicit vendor, product, and optional serial selectors, and prompting for missing values only at an interactive terminal. |
-| CLI-M12 | Make non-interactive registration deterministic, default RAW TCP to port 9100, and keep the profile optional. |
-| CLI-M13 | Preserve hand-edited configuration and reject duplicate names or invalid existing data without a partial write. |
-| CLI-M14 | List configured network targets as connected or unavailable using concurrent, bounded TCP handshakes that send zero bytes. |
-| CLI-M15 | Exclude configured USB identities, never persist temporary bus/address values, and require explicit selection when endpoint or device identity is ambiguous, whether that selection is an interactive menu choice or a unique non-interactive descriptor match. |
-| CLI-M16 | Reserve `printers discover` for a read-only sweep that enumerates USB printer interfaces and probes network hosts with a bare connect-and-drop TCP handshake that never sends a byte; neither ever writes to `printers.toml`. |
-| CLI-M17 | Without `--subnet`, scan only directly connected IPv4 networks at most a `/24` automatically, skipping larger ones; an explicit `--subnet` scans exactly the given networks instead and removes the `/24` cap. |
-| CLI-M18 | Resolve `printers add --discover` from the sweep: zero discovered hosts is always an error naming the probed port, exactly one is selected automatically, and several open an interactive selection menu or, under `--non-interactive`, are an error listing every candidate. |
-| CLI-M19 | On Linux, offer `printers grant-usb-permissions` to install a class-wide, `uaccess`-scoped udev rule granting USB printer access without root each time; without root it fails (exit 1) with an error naming both ways to grant the access instead, and it never silently overwrites a rule whose on-disk content differs from what it would write. Running it as root asks for confirmation before changing anything whenever a prompt is possible (honoring `--non-interactive` and applying without asking otherwise), with no separate force flag to bypass it. Point `discover`'s permission-denied USB warnings at it with one added hint line. |
-
-### Web requirements
-
-| ID | Requirement |
-|---|---|
-| CLI-W01 | Make `--web` start the shared local web interface without opening a browser. |
-| CLI-W02 | Make `--browser` imply `--web` and open the selected URL. |
-| CLI-W03 | Search loopback ports 9000–9099 when no HTTP address was specified. |
-| CLI-W04 | Bind and retain candidate sockets atomically rather than probing first. |
-| CLI-W05 | Treat an explicit nonzero address as strict and support explicit port zero. |
-| CLI-W06 | Never select a non-loopback listener implicitly. |
-| CLI-W07 | Show ordered sheets at one printer dot per screen pixel by default. |
-| CLI-W08 | Support filesystem watch mode without speculative partial results. |
-| CLI-W09 | Keep receipt data in memory unless persistence was explicitly requested. |
-| CLI-W10 | Reuse one web implementation for `render --web` and `serve`. |
-
-### Automation and verification requirements
-
-| ID | Requirement |
-|---|---|
-| CLI-T01 | Test command parsing in interactive and non-interactive policies. |
-| CLI-T02 | Test binary stdout byte-for-byte without human-output contamination. |
-| CLI-T03 | Test zero, one, and several rendered sheets for every destination type. |
-| CLI-T04 | Test occupied automatic ports, exhausted ranges, strict ports, and port zero. |
-| CLI-T05 | Test loopback defaults and rejection or warning of unintended exposure. |
-| CLI-T06 | Test HTTP routes, ordered sheets, missing files, and path traversal. |
-| CLI-T07 | Verify the Rust web workflow before removing the Python preview service. |

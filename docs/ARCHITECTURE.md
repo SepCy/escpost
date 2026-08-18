@@ -236,7 +236,7 @@ system may change them after reconnection. A serial number is stored when
 available; without one, simultaneously connected devices with equal VID/PID
 cannot be distinguished reliably and are reported as ambiguous.
 
-The Docker Compose CLI service mounts the checkout-local `.config` directory at
+The Docker Compose `escpost` service mounts the checkout-local `.config` directory at
 the container user's normal ESCPost configuration path. This isolates
 configuration used by a checkout from an independently installed binary while
 keeping Docker-specific paths out of the Rust implementation. Commands and
@@ -286,10 +286,20 @@ stable job identity and are not the target workbench API.
 
 ### Embedded web applications
 
-The existing latest-job viewer remains authoritative at `/`. A new Preact and
-TypeScript shell is available at `/app/`; it does not yet call application APIs
-or reproduce viewer behavior. Unknown `/app/*` paths return 404 because this
-slice introduces neither a client router nor a fallback route.
+The existing latest-job viewer remains authoritative at `/`. A Preact and
+TypeScript workbench is available at `/app/`, with `preact-iso` client routing
+for Overview, Print jobs, Printers, Profiles, and Calibration. Its responsive
+shell uses semantic tables on wide screens and labeled cards on narrow screens.
+Jobs intentionally links to the legacy viewer while the next workbench
+milestone, a job inspector, is prepared.
+
+Feature-local HTTP adapters call the same application operations as the CLI.
+Read-only routes mirror CLI paths: `GET /api/printers/list` and
+`GET /api/profiles/list`; `GET /api/status` is runtime-only infrastructure,
+not a CLI operation. The shell polls status while mounted, retains successful
+printer and profile responses for the app session, and reports loading, empty,
+error, retry, and stale-data states without introducing client-side filters or
+search parameters.
 
 Bun installs and tests frontend dependencies. Vite builds and serves the
 frontend. Tailwind CSS and DaisyUI provide styling primitives. Axum embeds the
@@ -362,9 +372,14 @@ untracked. Release artifacts remain a single executable and require neither Bun
 nor external web assets at runtime.
 
 For development, Vite serves the frontend with hot reload and proxies `/api`
-requests to the running escpost server. `just docker-web-dev` is the canonical
-workflow; `just native-web-dev` provides the equivalent flow for hosts with
-Rust and Bun. Production and Rust test builds serve only embedded assets.
+requests to the running escpost server. `docker compose up` is the canonical
+Docker workflow: Vite updates the frontend in place, while Watchexec rebuilds
+and restarts the complete Rust process after backend changes. The frontend
+source tree is outside the Rust watch set. `./escpost serve` and
+`just docker-web-dev` alias this workflow; `just native-web-dev` provides the
+equivalent flow for hosts with Rust and Bun. Production builds and Rust tests
+serve only embedded assets; set `ESCPOST_WATCH=0` for a production-like Compose
+run.
 
 Automatic listeners will continue to bind to loopback. Explicit `--web-listen`
 addresses will remain supported; non-loopback bindings will retain the exposure

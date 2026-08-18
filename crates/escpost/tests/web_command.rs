@@ -93,23 +93,259 @@ fn web_mode_serves_hashed_spa_assets_with_immutable_caching() {
         response_header(&css, "cache-control"),
         Some("public, max-age=31536000, immutable")
     );
+    let javascript = String::from_utf8_lossy(response_body(&javascript));
+    for label in [
+        "Overview",
+        "Print jobs",
+        "Printers",
+        "Profiles",
+        "Calibration",
+    ] {
+        assert!(
+            javascript.contains(label),
+            "the production bundle should contain the {label:?} workbench label"
+        );
+    }
 }
 
 #[test]
-fn web_mode_rejects_unknown_spa_paths_and_asset_traversal() {
+fn web_mode_rejects_missing_spa_assets_and_asset_traversal() {
     let port = unused_loopback_port();
     let mut child = start_case_web("single-sheet", port);
 
     wait_until_listening(&mut child, port);
-    let unknown = http_get_bytes(port, "/app/printers");
     let missing = http_get_bytes(port, "/app/assets/missing.js");
     let traversal = http_get_bytes(port, "/app/assets/../../Cargo.toml");
     stop(&mut child);
 
-    for response in [&unknown, &missing, &traversal] {
+    for response in [&missing, &traversal] {
         assert_eq!(response_status(response), "HTTP/1.1 404 Not Found");
         assert!(!String::from_utf8_lossy(response_body(response)).contains("[workspace]"));
     }
+}
+
+#[test]
+fn read_only_api_lists_printers_and_profiles() {
+    let configuration_directory = temporary_directory("read-only-api");
+    fs::write(
+        configuration_directory.join("printers.toml"),
+        r#"
+[kitchen]
+transport = "network"
+host = "127.0.0.1"
+port = 9
+profile = "REFERENCE"
+"#,
+    )
+    .expect("the printer fixture should be writable");
+    let port = unused_loopback_port();
+    let mut child =
+        start_case_web_with_config_directory("single-sheet", port, &configuration_directory);
+
+    wait_until_listening(&mut child, port);
+    let printers = http_get_bytes(port, "/api/printers/list");
+    let network_printers = http_get_bytes(port, "/api/printers/list?transport=network");
+    let invalid_transport = http_get_bytes(port, "/api/printers/list?transport=invalid");
+    let undeclared_printer_query = http_get_bytes(port, "/api/printers/list?config=host.toml");
+    let profiles = http_get_bytes(port, "/api/profiles/list");
+    let undeclared_profile_query = http_get_bytes(port, "/api/profiles/list?source=virtual");
+    stop(&mut child);
+    fs::remove_dir_all(&configuration_directory)
+        .expect("the configuration fixture should be removable");
+
+    assert_eq!(response_status(&printers), "HTTP/1.1 200 OK");
+    assert_eq!(
+        response_header(&printers, "cache-control"),
+        Some("no-store")
+    );
+    let printers: serde_json::Value = serde_json::from_slice(response_body(&printers))
+        .expect("the printer response should be JSON");
+    assert_eq!(printers["printers"].as_array().map(Vec::len), Some(1));
+    assert_eq!(printers["printers"][0]["name"], "kitchen");
+    assert_eq!(printers["printers"][0]["transport"], "network");
+    assert_eq!(printers["printers"][0]["availability"], "unavailable");
+    assert_eq!(printers["printers"][0]["profile"], "REFERENCE");
+    assert_eq!(printers["printers"][0]["connection"]["type"], "network");
+    assert_eq!(printers["printers"][0]["connection"]["host"], "127.0.0.1");
+    assert_eq!(printers["printers"][0]["connection"]["port"], 9);
+    assert!(printers.get("config_path").is_none());
+
+    assert_eq!(response_status(&network_printers), "HTTP/1.1 200 OK");
+    let network_printers: serde_json::Value =
+        serde_json::from_slice(response_body(&network_printers))
+            .expect("the filtered printer response should be JSON");
+    assert_eq!(network_printers, printers);
+
+    assert_eq!(
+        response_status(&invalid_transport),
+        "HTTP/1.1 400 Bad Request"
+    );
+    assert_eq!(
+        response_header(&invalid_transport, "cache-control"),
+        Some("no-store")
+    );
+    let invalid_transport: serde_json::Value =
+        serde_json::from_slice(response_body(&invalid_transport))
+            .expect("the invalid query response should be JSON");
+    assert_eq!(invalid_transport["error"]["code"], "invalid_query");
+    assert!(invalid_transport["error"]["message"].is_string());
+
+    for response in [&undeclared_printer_query, &undeclared_profile_query] {
+        assert_eq!(response_status(response), "HTTP/1.1 400 Bad Request");
+        assert_eq!(response_header(response, "cache-control"), Some("no-store"));
+        assert!(matches!(
+            response_header(response, "content-type"),
+            Some(value) if value.starts_with("application/json")
+        ));
+        let response: serde_json::Value = serde_json::from_slice(response_body(response))
+            .expect("invalid query responses should be JSON");
+        assert_eq!(response["error"]["code"], "invalid_query");
+        assert!(response["error"]["message"].is_string());
+    }
+
+    assert_eq!(response_status(&profiles), "HTTP/1.1 200 OK");
+    assert_eq!(
+        response_header(&profiles, "cache-control"),
+        Some("no-store")
+    );
+    let profiles: serde_json::Value = serde_json::from_slice(response_body(&profiles))
+        .expect("the profile response should be JSON");
+    let profiles = profiles["profiles"]
+        .as_array()
+        .expect("profiles should be an array");
+    assert!(profiles.windows(2).all(|pair| {
+        pair[0]["id"]
+            .as_str()
+            .expect("profile IDs should be strings")
+            <= pair[1]["id"]
+                .as_str()
+                .expect("profile IDs should be strings")
+    }));
+    let reference = profiles
+        .iter()
+        .find(|profile| profile["id"] == "REFERENCE")
+        .expect("the reference profile should be present");
+    assert_eq!(reference["source"], "virtual");
+    for field in [
+        "vendor",
+        "model",
+        "paper_width_mm",
+        "printable_width_mm",
+        "printable_width_dots",
+        "dpi_x",
+        "dpi_y",
+        "full_cut",
+        "partial_cut",
+        "barcode_function_a",
+        "barcode_function_b",
+        "qr_code",
+    ] {
+        assert!(
+            reference.get(field).is_some(),
+            "REFERENCE should expose {field}"
+        );
+    }
+}
+
+#[test]
+fn known_api_routes_reject_non_get_methods_with_json_errors() {
+    let port = unused_loopback_port();
+    let mut child = start_case_web("single-sheet", port);
+
+    wait_until_listening(&mut child, port);
+    let paths = ["/api/status", "/api/printers/list", "/api/profiles/list"];
+    let responses: Vec<Vec<u8>> = ["POST", "PUT", "PATCH", "DELETE"]
+        .into_iter()
+        .flat_map(|method| {
+            paths
+                .iter()
+                .map(move |path| http_request_bytes(port, method, path))
+        })
+        .collect();
+    stop(&mut child);
+
+    for response in responses {
+        assert_eq!(
+            response_status(&response),
+            "HTTP/1.1 405 Method Not Allowed"
+        );
+        assert_eq!(
+            response_header(&response, "cache-control"),
+            Some("no-store")
+        );
+        assert_eq!(response_header(&response, "allow"), Some("GET, HEAD"));
+        assert!(matches!(
+            response_header(&response, "content-type"),
+            Some(value) if value.starts_with("application/json")
+        ));
+        let response: serde_json::Value = serde_json::from_slice(response_body(&response))
+            .expect("method failures should be JSON");
+        assert_eq!(response["error"]["code"], "method_not_allowed");
+        assert_eq!(
+            response["error"]["message"],
+            "This API endpoint only accepts GET and HEAD requests."
+        );
+    }
+}
+
+#[test]
+fn direct_spa_navigation_uses_index_without_catching_unknown_api_routes() {
+    let port = unused_loopback_port();
+    let mut child = start_case_web("single-sheet", port);
+
+    wait_until_listening(&mut child, port);
+    let index = http_get_bytes(port, "/app/");
+    let jobs = http_get_bytes(port, "/app/jobs");
+    let printers = http_get_bytes(port, "/app/printers");
+    let profiles = http_get_bytes(port, "/app/profiles");
+    let calibration = http_get_bytes(port, "/app/calibration");
+    let unknown = http_get_bytes(port, "/app/unknown");
+    let unknown_api = http_get_bytes(port, "/api/unknown");
+    stop(&mut child);
+
+    for response in [&index, &jobs, &printers, &profiles, &calibration, &unknown] {
+        assert_eq!(response_status(response), "HTTP/1.1 200 OK");
+        assert_eq!(response_header(response, "cache-control"), Some("no-cache"));
+        assert_eq!(response_body(response), response_body(&index));
+    }
+
+    assert_eq!(response_status(&unknown_api), "HTTP/1.1 404 Not Found");
+    assert_eq!(
+        response_header(&unknown_api, "cache-control"),
+        Some("no-store")
+    );
+    assert!(matches!(
+        response_header(&unknown_api, "content-type"),
+        Some(value) if value.starts_with("application/json")
+    ));
+    let unknown_api: serde_json::Value = serde_json::from_slice(response_body(&unknown_api))
+        .expect("unknown API responses should be JSON");
+    assert_eq!(unknown_api["error"]["code"], "not_found");
+    assert!(unknown_api["error"]["message"].is_string());
+}
+
+#[test]
+fn unknown_non_get_api_route_uses_the_json_not_found_envelope() {
+    let port = unused_loopback_port();
+    let mut child = start_case_web("single-sheet", port);
+
+    wait_until_listening(&mut child, port);
+    let response = http_post_bytes(port, "/api/unknown");
+    stop(&mut child);
+
+    assert_eq!(response_status(&response), "HTTP/1.1 404 Not Found");
+    assert_eq!(
+        response_header(&response, "cache-control"),
+        Some("no-store")
+    );
+    assert!(matches!(
+        response_header(&response, "content-type"),
+        Some(value) if value.starts_with("application/json")
+    ));
+    let response: serde_json::Value = serde_json::from_slice(response_body(&response))
+        .expect("unknown API responses should be JSON");
+    assert_eq!(response["error"]["code"], "not_found");
+    assert!(response["error"]["message"].is_string());
 }
 
 #[test]
@@ -123,6 +359,30 @@ fn health_endpoint_reports_ok() {
 
     assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
     assert_eq!(response_body(&response), b"ok");
+}
+
+#[test]
+fn api_status_has_no_virtual_printer_for_render_web_mode() {
+    let port = unused_loopback_port();
+    let mut child = start_case_web("single-sheet", port);
+
+    wait_until_listening(&mut child, port);
+    let response = http_get_bytes(port, "/api/status");
+    let status: serde_json::Value = serde_json::from_slice(response_body(&response))
+        .expect("the status response should be JSON");
+    stop(&mut child);
+
+    assert_eq!(response_status(&response), "HTTP/1.1 200 OK");
+    assert_eq!(
+        response_header(&response, "cache-control"),
+        Some("no-store")
+    );
+    assert!(matches!(
+        response_header(&response, "content-type"),
+        Some(value) if value.starts_with("application/json")
+    ));
+    assert_eq!(status["virtual_printer"], serde_json::Value::Null);
+    assert_eq!(status["jobs_processed"], 0);
 }
 
 #[test]
@@ -570,6 +830,28 @@ fn start_case_web(case: &str, port: u16) -> Child {
         .expect("the escpost command should start")
 }
 
+fn start_case_web_with_config_directory(case: &str, port: u16, config_directory: &Path) -> Child {
+    let case_directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/cases")
+        .join(case);
+    Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "render",
+            case_directory
+                .to_str()
+                .expect("the case path should be UTF-8"),
+            "--web",
+            "--web-listen",
+            &format!("127.0.0.1:{port}"),
+            "--non-interactive",
+        ])
+        .env("ESCPOST_CONFIG_DIR", config_directory)
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the escpost command should start")
+}
+
 fn start_file_web(input_path: &Path, port: u16, watch: bool) -> Child {
     let mut command = Command::new(env!("CARGO_BIN_EXE_escpost"));
     command.args([
@@ -631,11 +913,19 @@ fn http_get(port: u16, path: &str) -> String {
 }
 
 fn http_get_bytes(port: u16, path: &str) -> Vec<u8> {
+    http_request_bytes(port, "GET", path)
+}
+
+fn http_post_bytes(port: u16, path: &str) -> Vec<u8> {
+    http_request_bytes(port, "POST", path)
+}
+
+fn http_request_bytes(port: u16, method: &str, path: &str) -> Vec<u8> {
     let mut stream =
         TcpStream::connect((Ipv4Addr::LOCALHOST, port)).expect("the web server should accept HTTP");
     write!(
         stream,
-        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
     )
     .expect("the HTTP request should be writable");
     let mut response = Vec::new();

@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::get;
+use axum::routing::{any, get};
 use axum::{Json, Router};
 use escpost_render::{
     CommandCode, CommandTrace, DecodedCommand, Effect, Justification, PaintLifecycle, StateChange,
@@ -16,7 +16,9 @@ use serde::Serialize;
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
+pub(crate) mod error;
 mod frontend;
+mod status;
 
 const INDEX_HTML: &str = include_str!("../assets/index.html");
 const FIRST_AUTOMATIC_PORT: u16 = 9000;
@@ -25,6 +27,12 @@ const LAST_AUTOMATIC_PORT: u16 = 9099;
 #[derive(Clone)]
 pub(crate) struct JobStore {
     state: Arc<RwLock<JobStoreState>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct WebState {
+    jobs: JobStore,
+    virtual_printer_address: Option<SocketAddr>,
 }
 
 struct JobStoreState {
@@ -43,6 +51,13 @@ struct JobStoreState {
     completed_at: Option<u64>,
     /// The current job's exact captured bytes, offered for download.
     raw_input: Option<Vec<u8>>,
+    /// Captured RAW jobs that successfully rendered during this server session.
+    jobs_processed: u64,
+}
+
+pub(crate) struct JobRuntimeStatus {
+    pub(crate) receiving: bool,
+    pub(crate) jobs_processed: u64,
 }
 
 /// Current wall-clock time in Unix epoch milliseconds, for job completion.
@@ -175,6 +190,7 @@ impl JobStore {
                 antialias,
                 completed_at: Some(epoch_millis()),
                 raw_input: None,
+                jobs_processed: 0,
             })),
         }
     }
@@ -195,6 +211,7 @@ impl JobStore {
                 antialias,
                 completed_at: None,
                 raw_input: None,
+                jobs_processed: 0,
             })),
         }
     }
@@ -214,7 +231,7 @@ impl JobStore {
     /// Replace the preview with a render that has no capture semantics, such as
     /// `render --web`. Its source is a file, so nothing is offered for download.
     pub(crate) async fn replace_render(&self, rendered: TracedRenderResult) {
-        self.store_render(rendered, None, None).await;
+        self.store_render(rendered, None, None, false).await;
     }
 
     /// Replace the preview with a captured job, recording how it ended so the
@@ -226,7 +243,7 @@ impl JobStore {
         completion: &'static str,
         raw_input: Vec<u8>,
     ) {
-        self.store_render(rendered, Some(completion), Some(raw_input))
+        self.store_render(rendered, Some(completion), Some(raw_input), true)
             .await;
     }
 
@@ -235,6 +252,7 @@ impl JobStore {
         rendered: TracedRenderResult,
         completion: Option<&'static str>,
         raw_input: Option<Vec<u8>>,
+        captured: bool,
     ) {
         let mut state = self.state.write().await;
         state.jobs = VecDeque::from([Arc::new(RenderedJob::from(rendered))]);
@@ -243,6 +261,17 @@ impl JobStore {
         state.completion = completion;
         state.completed_at = Some(epoch_millis());
         state.raw_input = raw_input;
+        if captured {
+            state.jobs_processed += 1;
+        }
+    }
+
+    pub(crate) async fn runtime_status(&self) -> JobRuntimeStatus {
+        let state = self.state.read().await;
+        JobRuntimeStatus {
+            receiving: state.receiving > 0,
+            jobs_processed: state.jobs_processed,
+        }
     }
 
     /// The current job's captured bytes and completion time, for download.
@@ -480,17 +509,30 @@ pub(crate) async fn bind(
     crate::net::bind_loopback(requested, FIRST_AUTOMATIC_PORT..=LAST_AUTOMATIC_PORT).await
 }
 
-pub(crate) async fn serve(listener: TcpListener, jobs: JobStore) -> std::io::Result<()> {
+pub(crate) async fn serve(
+    listener: TcpListener,
+    jobs: JobStore,
+    virtual_printer_address: Option<SocketAddr>,
+) -> std::io::Result<()> {
     let router = Router::new()
+        .merge(crate::features::printers::http::router())
+        .merge(crate::features::profiles::http::router())
+        .merge(status::route())
         .route("/", get(index))
         .route("/app", get(frontend::redirect))
         .route("/app/", get(frontend::index))
         .route("/app/assets/{*path}", get(frontend::asset))
+        .route("/app/{*path}", get(frontend::index))
         .route("/health", get(health))
         .route("/api/render", get(current_render))
+        .route("/api", any(error::not_found))
+        .route("/api/{*path}", any(error::not_found))
         .route("/sheets/{file}", get(sheet_png))
         .route("/job", get(download_job))
-        .with_state(jobs);
+        .with_state(WebState {
+            jobs,
+            virtual_printer_address,
+        });
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await
@@ -506,12 +548,12 @@ async fn health() -> &'static str {
     "ok"
 }
 
-async fn current_render(State(jobs): State<JobStore>) -> Json<RenderResponse> {
-    Json(jobs.render_response().await)
+async fn current_render(State(state): State<WebState>) -> Json<RenderResponse> {
+    Json(state.jobs.render_response().await)
 }
 
-async fn download_job(State(jobs): State<JobStore>) -> Response {
-    let Some((bytes, completed_at)) = jobs.raw_input_download().await else {
+async fn download_job(State(state): State<WebState>) -> Response {
+    let Some((bytes, completed_at)) = state.jobs.raw_input_download().await else {
         return StatusCode::NOT_FOUND.into_response();
     };
     // Name the file by completion time so several captures do not collide.
@@ -529,14 +571,14 @@ async fn download_job(State(jobs): State<JobStore>) -> Response {
         .into_response()
 }
 
-async fn sheet_png(Path(file): Path<String>, State(jobs): State<JobStore>) -> Response {
+async fn sheet_png(Path(file): Path<String>, State(state): State<WebState>) -> Response {
     let Some(number) = file
         .strip_suffix(".png")
         .and_then(|number| number.parse::<usize>().ok())
     else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let Some((job, _, _)) = jobs.snapshot().await else {
+    let Some((job, _, _)) = state.jobs.snapshot().await else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let Some(sheet) = number

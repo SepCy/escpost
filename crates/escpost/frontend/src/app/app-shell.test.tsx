@@ -9,7 +9,9 @@ beforeEach(() => {
   globalThis.fetch = ((input: RequestInfo | URL) => Promise.resolve(new Response(JSON.stringify(
     String(input) === "/api/status"
       ? { virtual_printer: null, jobs_processed: 0 }
-      : { printers: [] },
+      : String(input) === "/api/jobs/current"
+        ? { receiving: false, profile: "REFERENCE", error: null, job: null }
+        : { printers: [] },
   ), { headers: { "content-type": "application/json" } }))) as unknown as typeof globalThis.fetch;
 });
 
@@ -24,13 +26,12 @@ function renderAt(path: string) {
 }
 
 describe("App", () => {
-  test("shows the current job viewer from the Print jobs route", () => {
+  test("shows the current job workbench from the Print jobs route", async () => {
     renderAt("/app/jobs");
 
-    expect(screen.getByRole("heading", { name: "Print jobs" })).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "Open current job viewer" }).getAttribute("href"),
-    ).toBe("/");
+    expect(screen.getByRole("heading", { name: "Print jobs" }).getAttribute("class")).toContain("sr-only");
+    expect(await screen.findByText("Waiting for first job")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Open current job viewer" })).toBeNull();
     expect(
       within(screen.getByRole("navigation", { name: "Workbench navigation" }))
         .getByRole("link", { name: "Print jobs" })
@@ -104,6 +105,40 @@ describe("App", () => {
         .getByRole("link", { name: "Overview" })
         .getAttribute("aria-current"),
     ).toBe("page");
+  });
+
+  test("visually marks the current destination in desktop and mobile navigation", () => {
+    renderAt("/app/jobs");
+
+    const desktop = within(screen.getByRole("navigation", { name: "Workbench navigation" }))
+      .getByRole("link", { name: "Print jobs" });
+    const mobile = within(screen.getByRole("navigation", { name: "Mobile workbench navigation" }))
+      .getByRole("link", { name: "Print jobs" });
+    expect(desktop.getAttribute("class")).toContain("menu-active");
+    expect(mobile.getAttribute("class")).toContain("bg-primary");
+  });
+
+  test("lets pages own their width instead of centering the entire application", () => {
+    const view = renderAt("/app/jobs");
+    const pageContainer = view.container.querySelector("main > div");
+
+    expect(pageContainer?.getAttribute("class")).toBe("flex w-full flex-col");
+  });
+
+  test("keeps semantic page headings while hiding every repeated visual title", () => {
+    const pages = [
+      ["/app/", "Overview"],
+      ["/app/jobs", "Print jobs"],
+      ["/app/printers", "Printers"],
+      ["/app/profiles", "Profiles"],
+      ["/app/calibration", "Calibration"],
+    ];
+
+    for (const [path, name] of pages) {
+      const view = renderAt(path);
+      expect(screen.getByRole("heading", { name }).getAttribute("class")).toContain("sr-only");
+      view.unmount();
+    }
   });
 
   test("replaces the old construction screen", () => {

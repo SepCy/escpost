@@ -1,10 +1,14 @@
 //! The `printers discover` terminal adapter.
 
-use std::io::{self, Write};
+use std::future::{Future, pending, poll_fn};
+use std::io::{self, ErrorKind, Write};
 use std::path::PathBuf;
+use std::pin::pin;
+use std::sync::Arc;
 use std::time::Duration;
 
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
+use tokio::sync::{Notify, oneshot};
 
 use super::super::cli::output::{
     NetworkListing, UsbListing, format_network_endpoint, usb_printer_label_parts,
@@ -13,9 +17,19 @@ use super::super::cli::output::{
 use super::super::cli::scan_announcement;
 use super::super::cli::{DiscoverPrintersArgs, InventoryTransport};
 use super::super::inventory::{NusbInventory, UsbEnumerationFailure, UsbFailureStage};
-use super::{DiscoveryEvent, DiscoveryScope, NetworkScan, Response, execute, prepare};
+use super::{
+    DiscoveryEvent, DiscoveryScope, NetworkDiscovery, NetworkScan, RegistrationAvailability,
+    UsbDiscovery, execute, prepare,
+};
 use crate::discovery::SkippedInterface;
 use crate::error::CliError;
+
+/// The exit status of a sweep stopped with Ctrl+C: 128 + SIGINT, the shell's
+/// convention for "died from an interrupt". Catching the signal to clear the
+/// progress bar and print the closing hint must not cost a script the ability
+/// to tell a stopped scan from a finished one, so the status still says the
+/// run was interrupted.
+const INTERRUPTED_EXIT_CODE: i32 = 130;
 
 impl TryFrom<DiscoverPrintersArgs> for DiscoveryScope {
     type Error = CliError;
@@ -71,143 +85,354 @@ pub(crate) async fn run_discover(
             .progress_chars("=> "),
     );
     bar.set_message("Scanning for network printers");
+    let mut listing = LiveListing::new(&bar, io::stdout(), io::stderr());
+    let output_closed = listing.output_closed_signal();
     let mut length_set = false;
-    let response = execute(
-        prepared,
-        |event| match event {
-            DiscoveryEvent::Prepared {
-                config_path,
-                scope,
-                scan_targets,
-                skipped,
-            } => {
-                eprintln!("Reading configuration from {}", config_path.display());
-                if let Some(scan) = scope.network_scan() {
-                    // Printed whenever an adapter was skipped, even if nothing is
-                    // left to scan: a combined USB+network discovery still has USB
-                    // work to do, and the omission must be reported either way.
-                    for adapter in skipped {
-                        eprintln!("{}", skipped_line(adapter));
-                    }
-                    if !scan_targets.is_empty() {
-                        eprintln!("{}", scan_announcement(scan_targets, scan.port()));
-                        if scan.uses_automatic_subnets() {
-                            eprintln!("Tip: pass --subnet <CIDR> to scan a different network.");
+    let mut inventory = NusbInventory;
+    // Armed before the sweep, so no result can be printed before Ctrl+C is
+    // caught. See `watch_for_interrupt`.
+    let interrupted = watch_for_interrupt().await;
+    // Ctrl+C stops the sweep only at a point where the command waits. The USB
+    // scan does not wait, because it reads the devices in one step. A signal
+    // that comes during that step waits until the step ends. With
+    // `--transport usb` the command does not wait again after that step, so it
+    // does not see the signal and it ends with a success status. A USB scan
+    // takes a short time, so the delay is small.
+    let finished = tokio::select! {
+        result = execute(
+            prepared,
+            |event| match event {
+                DiscoveryEvent::Prepared {
+                    config_path,
+                    scope,
+                    scan_targets,
+                    skipped,
+                } => bar.suspend(|| {
+                    // Suspended like every other write: the bar is already
+                    // drawing on stderr by now, and an unsuspended line lands
+                    // on top of it.
+                    eprintln!("Reading configuration from {}", config_path.display());
+                    if let Some(scan) = scope.network_scan() {
+                        // Printed whenever an adapter was skipped, even if nothing is
+                        // left to scan: a combined USB+network discovery still has USB
+                        // work to do, and the omission must be reported either way.
+                        for adapter in skipped {
+                            eprintln!("{}", skipped_line(adapter));
+                        }
+                        if !scan_targets.is_empty() {
+                            eprintln!("{}", scan_announcement(scan_targets, scan.port()));
+                            if scan.uses_automatic_subnets() {
+                                eprintln!("Tip: pass --subnet <CIDR> to scan a different network.");
+                            }
                         }
                     }
+                }),
+                DiscoveryEvent::UsbPrinter(printer) => listing.usb_printer(printer),
+                DiscoveryEvent::UsbFailure(failure) => listing.usb_failure(failure),
+                DiscoveryEvent::NetworkPrinter(printer) => listing.network_printer(printer),
+                DiscoveryEvent::NetworkScanProgress { completed, total } => {
+                    if !length_set {
+                        bar.set_length(total);
+                        length_set = true;
+                    }
+                    bar.set_position(completed);
                 }
-            }
-            // The CLI still renders from the final `Response` once discovery
-            // finishes, so a live result here needs no immediate handling —
-            // only the progress bar reacts as the sweep runs.
-            DiscoveryEvent::UsbPrinter(_)
-            | DiscoveryEvent::UsbFailure(_)
-            | DiscoveryEvent::NetworkPrinter(_) => {}
-            DiscoveryEvent::NetworkScanProgress { completed, total } => {
-                if !length_set {
-                    bar.set_length(total);
-                    length_set = true;
-                }
-                bar.set_position(completed);
-            }
-        },
-        &mut NusbInventory,
-    )
-    .await;
+            },
+            &mut inventory,
+        ) => Some(result),
+        // Ctrl+C stops the sweep, not the process: everything already streamed
+        // stays on stdout and the closing hint below still names the command
+        // that registers it. Dropping the discovery future is exactly how the
+        // web app cancels a scan when its response is dropped, so a terminal
+        // and a browser abandon a sweep through one mechanism rather than two.
+        _ = interrupted => None,
+        // A reader that closes stdout asks for no more output. Stop the sweep
+        // there instead of probing every remaining address into a pipe that
+        // nobody reads.
+        () = output_closed.notified() => None,
+    };
     bar.finish_and_clear();
-    let response = response?;
-    write_response(
-        &response,
-        &mut io::stdout().lock(),
-        &mut io::stderr().lock(),
-    )?;
-    if let Some(hint) = combined_registration_hint(
-        response.registration.usb,
-        response.registration.network,
-        port,
-    ) {
-        eprintln!("{hint}");
+    // A closed stdout is the reader's decision, not a fault in the scan. The
+    // command therefore ends without a message, without the closing hint, and
+    // with a success status, the same way a reader expects `| head` to end.
+    if listing.output_closed() {
+        return Ok(());
     }
+    let Some(result) = finished else {
+        // Registration availability is tallied from what actually reached
+        // stdout, because the `Response` that normally carries it was never
+        // built. The hint therefore never names a printer the user never saw.
+        print_registration_hint(listing.registration(), port);
+        // Exit rather than return: a caught SIGINT must still look to the
+        // shell like the interrupt it sent. Nothing here waits on anything, so
+        // a second Ctrl+C has nothing to be trapped behind.
+        std::process::exit(INTERRUPTED_EXIT_CODE);
+    };
+    // A stdout that could not be written outranks a discovery error: the
+    // command has nowhere to report anything else.
+    listing.take_error()?;
+    let response = result?;
+    listing.write_empty_notice()?;
+    print_registration_hint(response.registration, port);
     Ok(())
 }
 
-fn write_response(
-    response: &Response,
+/// Start to watch for Ctrl+C, and return only after the signal handler is
+/// installed. The returned receiver resolves when the user asks for the sweep
+/// to stop.
+///
+/// Tokio installs the handler at the first poll of its `ctrl_c` future. The
+/// sweep can print its first results before that poll happens, because
+/// `select!` polls its branches in an unspecified order and the sweep spawns
+/// and collects many probes in one poll. A signal that comes in that gap gets
+/// the default action, which ends the process and loses every result. The
+/// task below therefore polls the future once and reports back, and the sweep
+/// starts only after that.
+///
+/// A handler that cannot be installed must not cost the user their scan, so
+/// the receiver then never resolves and the run finishes under the default
+/// signal disposition.
+async fn watch_for_interrupt() -> oneshot::Receiver<()> {
+    let (installed, ready) = oneshot::channel();
+    let (interrupted, asked_to_stop) = oneshot::channel();
+    tokio::spawn(async move {
+        let mut signal = pin!(tokio::signal::ctrl_c());
+        let mut installed = Some(installed);
+        let outcome = poll_fn(|context| {
+            let polled = signal.as_mut().poll(context);
+            if let Some(installed) = installed.take() {
+                let _ = installed.send(());
+            }
+            polled
+        })
+        .await;
+        if outcome.is_err() {
+            pending::<()>().await;
+        }
+        let _ = interrupted.send(());
+    });
+    let _ = ready.await;
+    asked_to_stop
+}
+
+fn print_registration_hint(registration: RegistrationAvailability, port: u16) {
+    if let Some(hint) = combined_registration_hint(registration.usb, registration.network, port) {
+        eprintln!("{hint}");
+    }
+}
+
+/// Renders each printer the moment discovery announces it, so a sweep stopped
+/// with Ctrl+C keeps everything it already found instead of discarding it.
+///
+/// The price is that `[N]` numbers follow arrival order rather than the stable
+/// order of the final `Response`: USB printers first, then network hosts as
+/// they answer. Nothing can be numbered against a list that does not exist
+/// yet. The blocks themselves are the ones `printers list` writes, so the two
+/// commands still cannot drift apart.
+struct LiveListing<'a, O: Write, W: Write> {
+    bar: &'a ProgressBar,
+    output: O,
+    warnings: W,
+    printed: usize,
+    registration: RegistrationAvailability,
+    grant_hint_written: bool,
+    /// The first failure to write a result. Kept rather than returned because
+    /// the discovery observer this drives cannot report an error.
+    error: Option<CliError>,
+    /// Set when a write to the output finds a closed reader.
+    output_closed: bool,
+    /// Tells the sweep that the output closed. The observer runs inside the
+    /// sweep, so it cannot stop the sweep itself. It sends this signal, and
+    /// the caller waits for it beside the sweep.
+    output_closed_signal: Arc<Notify>,
+}
+
+impl<'a, O: Write, W: Write> LiveListing<'a, O, W> {
+    fn new(bar: &'a ProgressBar, output: O, warnings: W) -> Self {
+        Self {
+            bar,
+            output,
+            warnings,
+            printed: 0,
+            registration: RegistrationAvailability::default(),
+            grant_hint_written: false,
+            error: None,
+            output_closed: false,
+            output_closed_signal: Arc::new(Notify::new()),
+        }
+    }
+
+    /// A handle on the "the output closed" signal, for the caller to wait on
+    /// beside the sweep.
+    fn output_closed_signal(&self) -> Arc<Notify> {
+        Arc::clone(&self.output_closed_signal)
+    }
+
+    fn output_closed(&self) -> bool {
+        self.output_closed
+    }
+
+    fn usb_printer(&mut self, discovered: &UsbDiscovery) {
+        self.registration.usb |= discovered.configured_name.is_none();
+        let number = self.printed + 1;
+        self.write_result(|output| write_usb_discovery(output, number, discovered));
+    }
+
+    fn network_printer(&mut self, discovered: &NetworkDiscovery) {
+        self.registration.network |= discovered.configured_names.is_empty();
+        let number = self.printed + 1;
+        self.write_result(|output| write_network_discovery(output, number, discovered));
+    }
+
+    /// A tolerated USB enumeration failure, on the warning stream. A write
+    /// error here is dropped rather than kept: a diagnostic that cannot be
+    /// printed must not become the command's own failure.
+    fn usb_failure(&mut self, failure: &UsbEnumerationFailure) {
+        let with_grant_hint = self.claim_grant_hint(failure);
+        let Self { bar, warnings, .. } = self;
+        let _ = bar.suspend(|| -> Result<(), CliError> {
+            write_usb_failure(warnings, failure)?;
+            if with_grant_hint {
+                writeln!(
+                    warnings,
+                    "Fix USB permissions with: sudo escpost printers grant-usb-permissions"
+                )
+                .map_err(CliError::WriteHumanOutput)?;
+            }
+            warnings.flush().map_err(CliError::WriteHumanOutput)
+        });
+    }
+
+    /// The closing line for a sweep that finished having found nothing.
+    /// Suppressed once anything streamed, since the results are the report.
+    fn write_empty_notice(&mut self) -> Result<(), CliError> {
+        if self.printed > 0 || self.output_closed {
+            return Ok(());
+        }
+        if let Err(error) =
+            writeln!(self.output, "No printers discovered.").map_err(CliError::WriteHumanOutput)
+        {
+            self.record_write_failure(error);
+        }
+        self.take_error()
+    }
+
+    fn registration(&self) -> RegistrationAvailability {
+        self.registration
+    }
+
+    fn take_error(&mut self) -> Result<(), CliError> {
+        self.error.take().map_or(Ok(()), Err)
+    }
+
+    /// One result on stdout, drawn through the bar's `suspend` so it cannot
+    /// land inside the bar's own line on stderr, and flushed immediately. A
+    /// sweep that is stopped never closes its output, so a result that stays
+    /// in a buffer is lost. The flush keeps every printed result, whatever
+    /// writer is behind the output.
+    fn write_result(&mut self, render: impl FnOnce(&mut O) -> Result<(), CliError>) {
+        if self.error.is_some() || self.output_closed {
+            return;
+        }
+        let Self { bar, output, .. } = self;
+        let result = bar.suspend(|| {
+            render(output)?;
+            output.flush().map_err(CliError::WriteHumanOutput)
+        });
+        match result {
+            Ok(()) => self.printed += 1,
+            Err(error) => self.record_write_failure(error),
+        }
+    }
+
+    /// Sort a failed write into the two answers it can get. A broken pipe
+    /// means the reader closed the output, so the sweep stops and the command
+    /// ends quietly. Every other failure is kept and reported.
+    fn record_write_failure(&mut self, error: CliError) {
+        if matches!(&error, CliError::WriteHumanOutput(cause) if cause.kind() == ErrorKind::BrokenPipe)
+        {
+            self.output_closed = true;
+            self.output_closed_signal.notify_one();
+            return;
+        }
+        if self.error.is_none() {
+            self.error = Some(error);
+        }
+    }
+
+    /// Whether this failure carries the "fix USB permissions" line. Only the
+    /// first permission error does: the remedy is one command however many
+    /// devices it unlocks. Never off Linux, where the udev rule it names has
+    /// no equivalent. The line is written beside the warning that motivates it
+    /// instead of after the listing, so an interrupted sweep keeps it too.
+    fn claim_grant_hint(&mut self, failure: &UsbEnumerationFailure) -> bool {
+        if !cfg!(target_os = "linux") || !failure.permission_denied || self.grant_hint_written {
+            return false;
+        }
+        self.grant_hint_written = true;
+        true
+    }
+}
+
+fn write_usb_discovery(
     output: &mut impl Write,
-    warnings_output: &mut impl Write,
+    number: usize,
+    discovered: &UsbDiscovery,
 ) -> Result<(), CliError> {
-    for failure in &response.usb_failures {
-        write_usb_failure(warnings_output, failure)?;
-    }
-    #[cfg(target_os = "linux")]
-    if response
-        .usb_failures
+    let product = usb_printer_label_parts(discovered.printer.product.as_deref(), None);
+    let listing = match &discovered.configured_name {
+        Some(name) => UsbListing {
+            heading: name,
+            status: "configured",
+            model: Some(product.as_str()),
+            profile: Some(discovered.configured_profile.as_deref()),
+            printer: &discovered.printer,
+        },
+        None => UsbListing {
+            heading: &product,
+            status: "new",
+            model: None,
+            profile: None,
+            printer: &discovered.printer,
+        },
+    };
+    write_usb_listing(output, number, &listing)
+}
+
+fn write_network_discovery(
+    output: &mut impl Write,
+    number: usize,
+    discovered: &NetworkDiscovery,
+) -> Result<(), CliError> {
+    let endpoint = format_network_endpoint(&discovered.host, discovered.port);
+    let also_configured = discovered
+        .configured_names
         .iter()
-        .any(|failure| failure.permission_denied)
-    {
-        writeln!(
-            warnings_output,
-            "Fix USB permissions with: sudo escpost printers grant-usb-permissions"
-        )
-        .map_err(CliError::WriteHumanOutput)?;
-    }
-    if response.usb_printers.is_empty() && response.network_printers.is_empty() {
-        writeln!(output, "No printers discovered.").map_err(CliError::WriteHumanOutput)?;
-        return Ok(());
-    }
-    for (offset, discovered) in response.usb_printers.iter().enumerate() {
-        let product = usb_printer_label_parts(discovered.printer.product.as_deref(), None);
-        let listing = match &discovered.configured_name {
-            Some(name) => UsbListing {
-                heading: name,
-                status: "configured",
-                model: Some(product.as_str()),
-                profile: Some(discovered.configured_profile.as_deref()),
-                printer: &discovered.printer,
-            },
-            None => UsbListing {
-                heading: &product,
-                status: "new",
-                model: None,
-                profile: None,
-                printer: &discovered.printer,
-            },
-        };
-        write_usb_listing(output, offset + 1, &listing)?;
-    }
-    let start = response.usb_printers.len() + 1;
-    for (offset, discovered) in response.network_printers.iter().enumerate() {
-        let endpoint = format_network_endpoint(&discovered.host, discovered.port);
-        let also_configured = discovered
-            .configured_names
-            .iter()
-            .skip(1)
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        let listing = if let Some(first) = discovered.configured_names.first() {
-            NetworkListing {
-                heading: first,
-                status: "configured",
-                profile: Some(discovered.configured_profile.as_deref()),
-                host: &discovered.host,
-                port: discovered.port,
-                interface: discovered.interface.as_deref(),
-                also_configured: &also_configured,
-            }
-        } else {
-            NetworkListing {
-                heading: &endpoint,
-                status: "new",
-                profile: None,
-                host: &discovered.host,
-                port: discovered.port,
-                interface: discovered.interface.as_deref(),
-                also_configured: &[],
-            }
-        };
-        write_network_listing(output, start + offset, &listing)?;
-    }
-    Ok(())
+        .skip(1)
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let listing = if let Some(first) = discovered.configured_names.first() {
+        NetworkListing {
+            heading: first,
+            status: "configured",
+            profile: Some(discovered.configured_profile.as_deref()),
+            host: &discovered.host,
+            port: discovered.port,
+            interface: discovered.interface.as_deref(),
+            also_configured: &also_configured,
+        }
+    } else {
+        NetworkListing {
+            heading: &endpoint,
+            status: "new",
+            profile: None,
+            host: &discovered.host,
+            port: discovered.port,
+            interface: discovered.interface.as_deref(),
+            also_configured: &[],
+        }
+    };
+    write_network_listing(output, number, &listing)
 }
 
 fn write_usb_failure(
@@ -252,7 +477,6 @@ fn combined_registration_hint(new_usb: bool, new_network: bool, port: u16) -> Op
 #[cfg(test)]
 mod tests {
     use std::net::Ipv4Addr;
-    use std::path::PathBuf;
 
     use super::*;
     use crate::application::ApplicationError;
@@ -372,59 +596,52 @@ mod tests {
         }
     }
 
+    /// Streamed results carry the same blocks the command printed when it
+    /// rendered the finished `Response`, numbered continuously in the order
+    /// discovery announced them: USB printers first, then network hosts.
     #[test]
-    fn rich_typed_response_uses_the_production_discover_writer() {
-        let response = Response {
-            config_path: PathBuf::from("/tmp/printers.toml"),
-            scan_targets: Vec::new(),
-            usb_printers: vec![
-                UsbDiscovery {
-                    configured_name: None,
-                    configured_profile: None,
-                    printer: usb_printer("003", 60, Some("B120300001"), Some("YICHIP3121")),
-                },
-                UsbDiscovery {
-                    configured_name: Some("counter".to_owned()),
-                    configured_profile: None,
-                    printer: usb_printer("004", 61, Some("B120300002"), None),
-                },
-            ],
-            network_printers: vec![
-                NetworkDiscovery {
-                    configured_names: Vec::new(),
-                    configured_profile: None,
-                    host: "10.42.0.5".to_owned(),
-                    port: 9100,
-                    interface: None,
-                },
-                NetworkDiscovery {
-                    configured_names: vec!["kitchen".to_owned(), "kitchen-spare".to_owned()],
-                    configured_profile: Some("TM-T88V".to_owned()),
-                    host: "2001:db8::5".to_owned(),
-                    port: 9100,
-                    interface: Some("enx0".to_owned()),
-                },
-            ],
-            usb_failures: vec![UsbEnumerationFailure {
-                stage: UsbFailureStage::InspectConfiguration,
-                vendor_id: 0x0416,
-                product_id: 0x5012,
-                reason: "device is not configured".to_owned(),
-                permission_denied: false,
-            }],
-            registration: RegistrationAvailability {
-                usb: true,
-                network: true,
-            },
-        };
-        let mut output = Vec::new();
-        let mut warnings = Vec::new();
+    fn streaming_numbers_results_continuously_in_arrival_order() {
+        let bar = ProgressBar::hidden();
+        let mut listing = LiveListing::new(&bar, Vec::new(), Vec::new());
 
-        write_response(&response, &mut output, &mut warnings)
-            .expect("the typed response should be writable");
+        listing.usb_printer(&UsbDiscovery {
+            configured_name: None,
+            configured_profile: None,
+            printer: usb_printer("003", 60, Some("B120300001"), Some("YICHIP3121")),
+        });
+        listing.usb_printer(&UsbDiscovery {
+            configured_name: Some("counter".to_owned()),
+            configured_profile: None,
+            printer: usb_printer("004", 61, Some("B120300002"), None),
+        });
+        listing.usb_failure(&UsbEnumerationFailure {
+            stage: UsbFailureStage::InspectConfiguration,
+            vendor_id: 0x0416,
+            product_id: 0x5012,
+            reason: "device is not configured".to_owned(),
+            permission_denied: false,
+        });
+        listing.network_printer(&NetworkDiscovery {
+            configured_names: Vec::new(),
+            configured_profile: None,
+            host: "10.42.0.5".to_owned(),
+            port: 9100,
+            interface: None,
+        });
+        listing.network_printer(&NetworkDiscovery {
+            configured_names: vec!["kitchen".to_owned(), "kitchen-spare".to_owned()],
+            configured_profile: Some("TM-T88V".to_owned()),
+            host: "2001:db8::5".to_owned(),
+            port: 9100,
+            interface: Some("enx0".to_owned()),
+        });
+        // Results were streamed, so nothing claims an empty sweep.
+        listing
+            .write_empty_notice()
+            .expect("the listing should be writable");
 
         assert_eq!(
-            String::from_utf8(output).expect("the listing should be UTF-8"),
+            String::from_utf8(listing.output).expect("the listing should be UTF-8"),
             "\
 [1] USB Portable Printer
     status: new
@@ -455,55 +672,196 @@ mod tests {
 "
         );
         assert_eq!(
-            String::from_utf8(warnings).expect("the warnings should be UTF-8"),
+            String::from_utf8(listing.warnings).expect("the warnings should be UTF-8"),
             "Warning: could not inspect the active configuration of USB device 0416:5012: device is not configured\n"
         );
     }
 
+    /// An interrupted sweep has no `Response` to read availability from, so
+    /// the closing hint is chosen from what was streamed. Only a `status: new`
+    /// result may enable a transport's hint.
     #[test]
-    fn empty_typed_response_is_a_successful_snapshot() {
-        let response = empty_response(Vec::new());
-        let mut output = Vec::new();
-        let mut warnings = Vec::new();
+    fn streaming_tallies_registration_from_unconfigured_results_only() {
+        let bar = ProgressBar::hidden();
+        let mut listing = LiveListing::new(&bar, Vec::new(), Vec::new());
 
-        write_response(&response, &mut output, &mut warnings)
-            .expect("the empty response should be writable");
+        listing.usb_printer(&UsbDiscovery {
+            configured_name: Some("counter".to_owned()),
+            configured_profile: None,
+            printer: usb_printer("004", 61, Some("B120300002"), None),
+        });
+        listing.network_printer(&NetworkDiscovery {
+            configured_names: vec!["kitchen".to_owned()],
+            configured_profile: None,
+            host: "10.42.0.5".to_owned(),
+            port: 9100,
+            interface: None,
+        });
+        assert_eq!(
+            listing.registration(),
+            RegistrationAvailability {
+                usb: false,
+                network: false
+            }
+        );
 
-        assert_eq!(output, b"No printers discovered.\n");
-        assert!(warnings.is_empty());
+        listing.network_printer(&NetworkDiscovery {
+            configured_names: Vec::new(),
+            configured_profile: None,
+            host: "10.42.0.6".to_owned(),
+            port: 9100,
+            interface: None,
+        });
+
+        assert_eq!(
+            listing.registration(),
+            RegistrationAvailability {
+                usb: false,
+                network: true
+            }
+        );
+    }
+
+    #[test]
+    fn a_sweep_that_streamed_nothing_reports_an_empty_snapshot() {
+        let bar = ProgressBar::hidden();
+        let mut listing = LiveListing::new(&bar, Vec::new(), Vec::new());
+
+        listing
+            .write_empty_notice()
+            .expect("the empty listing should be writable");
+
+        assert_eq!(listing.output, b"No printers discovered.\n");
+        assert!(listing.warnings.is_empty());
+    }
+
+    /// A writer that records how much output each flush pushed out.
+    #[derive(Default)]
+    struct FlushRecorder {
+        written: Vec<u8>,
+        /// The size of `written` at each flush.
+        flushed_at: Vec<usize>,
+    }
+
+    impl Write for FlushRecorder {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            self.written.extend_from_slice(buffer);
+            Ok(buffer.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            self.flushed_at.push(self.written.len());
+            Ok(())
+        }
+    }
+
+    /// Each result must leave the program as soon as it is complete, because
+    /// a sweep that is stopped never gets a chance to empty a buffer. Only
+    /// the flush proves that: a buffered output holds the same bytes but
+    /// loses every one of them when the sweep stops.
+    #[test]
+    fn each_streamed_result_is_flushed_as_soon_as_it_is_written() {
+        let bar = ProgressBar::hidden();
+        let mut listing = LiveListing::new(&bar, FlushRecorder::default(), Vec::new());
+
+        listing.usb_printer(&UsbDiscovery {
+            configured_name: None,
+            configured_profile: None,
+            printer: usb_printer("003", 60, Some("B120300001"), Some("YICHIP3121")),
+        });
+        let after_first = listing.output.written.len();
+        assert!(after_first > 0, "the first result should have been written");
+        assert_eq!(
+            listing.output.flushed_at,
+            vec![after_first],
+            "the first result should be flushed as a whole block, once"
+        );
+
+        listing.network_printer(&NetworkDiscovery {
+            configured_names: Vec::new(),
+            configured_profile: None,
+            host: "10.42.0.5".to_owned(),
+            port: 9100,
+            interface: None,
+        });
+        let after_second = listing.output.written.len();
+        assert!(
+            after_second > after_first,
+            "the second result should have been written"
+        );
+        assert_eq!(
+            listing.output.flushed_at,
+            vec![after_first, after_second],
+            "the second result should be flushed as a whole block too"
+        );
+    }
+
+    /// A writer whose reader has gone away.
+    struct ClosedOutput;
+
+    impl Write for ClosedOutput {
+        fn write(&mut self, _buffer: &[u8]) -> io::Result<usize> {
+            Err(io::Error::from(ErrorKind::BrokenPipe))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::from(ErrorKind::BrokenPipe))
+        }
+    }
+
+    /// `printers discover | head -n 1` closes the output while the sweep
+    /// runs. That is the reader's decision, so the listing keeps no error and
+    /// tells the sweep to stop instead of probing every address that is left.
+    #[tokio::test]
+    async fn a_closed_output_stops_the_sweep_without_an_error() {
+        let bar = ProgressBar::hidden();
+        let mut listing = LiveListing::new(&bar, ClosedOutput, Vec::new());
+        let closed = listing.output_closed_signal();
+
+        listing.network_printer(&NetworkDiscovery {
+            configured_names: Vec::new(),
+            configured_profile: None,
+            host: "10.42.0.5".to_owned(),
+            port: 9100,
+            interface: None,
+        });
+
+        assert!(listing.output_closed(), "the closed output should be seen");
+        listing
+            .take_error()
+            .expect("a closed output is not a command failure");
+        listing
+            .write_empty_notice()
+            .expect("a closed output must not turn into an empty-sweep failure");
+        tokio::time::timeout(Duration::from_secs(5), closed.notified())
+            .await
+            .expect("the sweep should be told to stop");
     }
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn typed_permission_failures_append_one_grant_hint() {
-        let response = empty_response(vec![
-            UsbEnumerationFailure {
+    fn streamed_permission_failures_carry_one_grant_hint() {
+        let bar = ProgressBar::hidden();
+        let mut listing = LiveListing::new(&bar, Vec::new(), Vec::new());
+
+        for product_id in [0x5012, 0x5013] {
+            listing.usb_failure(&UsbEnumerationFailure {
                 stage: UsbFailureStage::OpenDevice,
                 vendor_id: 0x0416,
-                product_id: 0x5012,
+                product_id,
                 reason: "permission denied (errno 13)".to_owned(),
                 permission_denied: true,
-            },
-            UsbEnumerationFailure {
-                stage: UsbFailureStage::OpenDevice,
-                vendor_id: 0x0416,
-                product_id: 0x5013,
-                reason: "permission denied (errno 13)".to_owned(),
-                permission_denied: true,
-            },
-        ]);
-        let mut output = Vec::new();
-        let mut warnings = Vec::new();
+            });
+        }
 
-        write_response(&response, &mut output, &mut warnings)
-            .expect("the partial response should be writable");
-
+        // The hint follows the first permission error rather than the whole
+        // listing, so a sweep stopped mid-scan still carries the remedy.
         assert_eq!(
-            String::from_utf8(warnings).expect("the warnings should be UTF-8"),
+            String::from_utf8(listing.warnings).expect("the warnings should be UTF-8"),
             "\
 Warning: could not open USB device 0416:5012: permission denied (errno 13)
-Warning: could not open USB device 0416:5013: permission denied (errno 13)
 Fix USB permissions with: sudo escpost printers grant-usb-permissions
+Warning: could not open USB device 0416:5013: permission denied (errno 13)
 "
         );
     }
@@ -590,17 +948,6 @@ Fix USB permissions with: sudo escpost printers grant-usb-permissions
             interface_number: 0,
             out_endpoints: vec![0x01],
             in_endpoints: vec![0x81],
-        }
-    }
-
-    fn empty_response(usb_failures: Vec<UsbEnumerationFailure>) -> Response {
-        Response {
-            config_path: PathBuf::from("/tmp/printers.toml"),
-            scan_targets: Vec::new(),
-            usb_printers: Vec::new(),
-            network_printers: Vec::new(),
-            usb_failures,
-            registration: RegistrationAvailability::default(),
         }
     }
 }

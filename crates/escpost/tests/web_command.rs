@@ -725,8 +725,11 @@ fn api_status_events_starts_with_the_current_complete_snapshot() {
     assert!(event.starts_with("HTTP/1.1 200 OK\r\n"));
     assert!(event.contains("content-type: text/event-stream"));
     assert!(event.contains("cache-control: no-store"));
-    assert!(event.contains("event: status\n"));
-    let data = event_data(&event, "status");
+    assert!(
+        !event.contains("event:"),
+        "a single-snapshot stream should use the standard message event"
+    );
+    let data = event_data(&event);
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(data).unwrap(),
         serde_json::from_slice::<serde_json::Value>(response_body(&snapshot)).unwrap()
@@ -1437,21 +1440,13 @@ fn http_get_first_event(port: u16, path: &str) -> String {
     }
 }
 
-fn event_data<'a>(event: &'a str, requested: &str) -> &'a str {
-    let mut matched_name = false;
+fn event_data(event: &str) -> &str {
     for line in event.lines() {
-        if line.strip_prefix("event: ") == Some(requested) {
-            matched_name = true;
-        } else if matched_name {
-            if let Some(data) = line.strip_prefix("data: ") {
-                return data;
-            }
-            if line.is_empty() {
-                break;
-            }
+        if let Some(data) = line.strip_prefix("data: ") {
+            return data;
         }
     }
-    panic!("the stream did not contain a data line for event {requested:?}")
+    panic!("the stream did not contain a data line")
 }
 
 fn http_get_bytes(port: u16, path: &str) -> Vec<u8> {

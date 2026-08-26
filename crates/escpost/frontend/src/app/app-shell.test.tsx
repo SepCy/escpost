@@ -54,7 +54,7 @@ async function flush() {
 function renderAt(path: string) {
   locationStub(path);
   const view = render(<App />);
-  act(() => FakeEventSource.forUrl("/api/status/events")?.emit("status", {
+  act(() => FakeEventSource.forUrl("/api/status/events")?.emit("message", {
     virtual_printer: virtualPrinter,
     jobs_processed: 0,
     config_path: "/tmp/printers.toml",
@@ -117,7 +117,7 @@ async function renderShell(path: string) {
       </AppDataProvider>
     </ServerStatusProvider>,
   );
-  act(() => FakeEventSource.forUrl("/api/status/events")?.emit("status", {
+  act(() => FakeEventSource.forUrl("/api/status/events")?.emit("message", {
     virtual_printer: virtualPrinter,
     jobs_processed: 0,
     config_path: "/tmp/printers.toml",
@@ -394,7 +394,7 @@ describe("App", () => {
     renderAt("/app/profiles");
     const statusStream = FakeEventSource.forUrl("/api/status/events");
 
-    act(() => statusStream?.emit("status", {
+    act(() => statusStream?.emit("message", {
       virtual_printer: receiving,
       jobs_processed: 0,
       config_path: "/tmp/printers.toml",
@@ -434,7 +434,7 @@ describe("App", () => {
     const statusStream = FakeEventSource.forUrl("/api/status/events");
 
     act(() => statusStream?.emit("error", null));
-    act(() => statusStream?.emit("status", {
+    act(() => statusStream?.emit("message", {
       virtual_printer: ready,
       jobs_processed: 0,
       config_path: "/tmp/printers.toml",
@@ -447,7 +447,7 @@ describe("App", () => {
     await act(async () => { await flush(); });
     expect(printerRequests).toBe(2);
 
-    act(() => statusStream?.emit("status", {
+    act(() => statusStream?.emit("message", {
       virtual_printer: ready,
       jobs_processed: 1,
       config_path: "/tmp/printers.toml",
@@ -571,7 +571,7 @@ describe("App", () => {
     expect(screen.getAllByText("Disconnected")).toHaveLength(2);
     expect(screen.queryAllByRole("region", { name: "Print job" })).toHaveLength(0);
 
-    act(() => statusStream?.emit("status", {
+    act(() => statusStream?.emit("message", {
       virtual_printer: receiving,
       jobs_processed: 0,
       config_path: "/tmp/printers.toml",
@@ -587,7 +587,7 @@ describe("App", () => {
     const view = await renderShell("/app/jobs");
     expect(screen.getAllByRole("region", { name: "Print job" })).toHaveLength(2);
 
-    act(() => FakeEventSource.forUrl("/api/status/events")?.emit("status", {
+    act(() => FakeEventSource.forUrl("/api/status/events")?.emit("message", {
       virtual_printer: ready,
       jobs_processed: 0,
       config_path: "/tmp/printers.toml",

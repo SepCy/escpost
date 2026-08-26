@@ -26,7 +26,7 @@ function isServerStatusSnapshot(value: unknown): value is ServerStatusSnapshot {
 
 export function openServerStatusStream(handlers: ServerStatusHandlers): () => void {
   const source = new EventSource("/api/status/events");
-  source.addEventListener("status", (event) => {
+  source.addEventListener("message", (event) => {
     try {
       const value: unknown = JSON.parse((event as MessageEvent<string>).data);
       if (!isServerStatusSnapshot(value)) {

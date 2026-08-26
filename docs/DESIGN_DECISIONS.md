@@ -1088,6 +1088,56 @@ facts rather than from another interface's sentence.
 - A shared reason must read as a complete clause, since it is spliced into
   sentences the shared layer does not write.
 
+## DD-036 — Match SSE event names to stream shape
+
+**Status:** Accepted
+
+### Context
+
+Server-sent events support both a default event type, delivered by
+`EventSource` as `message`, and application-defined event names. The workbench
+uses both snapshot streams and finite operation streams, but they do not carry
+the same kind of information.
+
+A snapshot stream mirrors one resource whose JSON shape is already its
+contract. Repeating the resource name as an SSE event type adds no information.
+An operation stream such as printer discovery instead carries several payload
+shapes over one connection: preparation facts, individual results, progress,
+tolerated failures, and a terminal outcome. Consumers need an explicit
+discriminator for those records.
+
+The browser also owns `EventSource`'s native `error` event for connection
+failures and reconnection. Reusing that name for an application failure mixes a
+server payload with a browser transport signal in the same listener.
+
+### Decision
+
+A persistent SSE stream that mirrors one snapshot resource omits the `event`
+field. Each `data` field contains the same complete JSON shape as the paired
+one-shot `GET` response, at the payload root. A client receives the current
+snapshot when it connects and another complete snapshot whenever that resource
+changes.
+
+An SSE stream that carries several payload shapes uses application-defined
+event names as discriminators. Each event's `data` field contains the JSON
+shape belonging to that event; terminal markers may carry an empty object when
+the client already holds every result.
+
+Application failures on an open stream use an application-defined event such
+as `failed`. The name `error` is reserved for `EventSource`'s native connection
+failure signal, which carries no application payload.
+
+### Consequences
+
+- Snapshot consumers subscribe to the standard `message` event and reuse the
+  one-shot response type without an SSE-only envelope or discriminator.
+- Multi-shape streams remain self-describing: the event name selects the
+  payload contract before the client parses its data.
+- A browser can handle server-owned failures separately from connection loss
+  and automatic reconnection.
+- Adding a second payload shape changes a snapshot stream into a named-event
+  stream and therefore requires an explicit contract change.
+
 ## Open questions
 
 The following are intentionally not decided yet:

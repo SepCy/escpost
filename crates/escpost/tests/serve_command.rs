@@ -829,7 +829,6 @@ fn open_status_events(port: u16) -> BufReader<TcpStream> {
 
 fn next_status_event(events: &mut BufReader<TcpStream>) -> serde_json::Value {
     let deadline = Instant::now() + Duration::from_secs(5);
-    let mut event_name = None;
     let mut data = None;
     loop {
         let remaining = deadline
@@ -847,18 +846,14 @@ fn next_status_event(events: &mut BufReader<TcpStream>) -> serde_json::Value {
             .unwrap_or_else(|error| panic!("the status stream stalled: {error}"));
         assert!(read != 0, "the status stream closed before its next event");
         let line = line.trim_end_matches(['\r', '\n']);
-        if let Some(name) = line.strip_prefix("event: ") {
-            event_name = Some(name.to_owned());
+        if line.starts_with("event:") {
+            panic!("the single-snapshot status stream should use standard message events");
         } else if let Some(value) = line.strip_prefix("data: ") {
             data = Some(value.to_owned());
         } else if line.is_empty() {
-            if event_name.as_deref() == Some("status") {
-                let data = data
-                    .as_deref()
-                    .expect("a named status event should contain data");
+            if let Some(data) = data.as_deref() {
                 return serde_json::from_str(data).expect("status event data should be JSON");
             }
-            event_name = None;
             data = None;
         }
     }

@@ -24,14 +24,20 @@ x-frontend-service: &frontend-service
     - frontend-node-modules:/workspace/crates/escpost/frontend/node_modules
 
 services:
+  # Only `bun install`. The Vite server needs node_modules, not a bundle.
+  frontend-install:
+    <<: *frontend-service
+    command: ["bun", "install", "--frozen-lockfile"]
+
+  # The production bundle, for the Rust tests that serve it.
   frontend-build:
     <<: *frontend-service
-    command: /workspace/scripts/frontend-build
+    command: ["sh", "-c", "bun install --frozen-lockfile && bun run build"]
 
   frontend:
     <<: *frontend-service
     depends_on:
-      frontend-build:
+      frontend-install:
         condition: service_completed_successfully
       escpost:
         condition: service_healthy
@@ -87,9 +93,6 @@ services:
 
   escpost:
     <<: *development-service
-    depends_on:
-      frontend-build:
-        condition: service_completed_successfully
     # The test has two parts. The container uses the network of the host.
     # Thus a test of the port only can find the server of a different
     # directory. The start period gives time for the first build. The

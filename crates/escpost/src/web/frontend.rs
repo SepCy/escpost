@@ -8,6 +8,12 @@ const IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
 #[derive(RustEmbed)]
 #[folder = "frontend/dist/"]
+// Only debug builds of the server read the web app from disk at run time
+// (used by tests), while release builds embed the web app directly in the
+// binary. rust-embed would stop the compilation if the folder is absent, also
+// for a debug build, thus `allow_missing` keeps a debug build possible with
+// no web app. `build.rs` keeps the web app mandatory for a release build.
+#[allow_missing = true]
 struct FrontendAssets;
 
 pub(super) async fn redirect() -> Redirect {

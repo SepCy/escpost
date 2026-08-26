@@ -156,6 +156,10 @@ services:
       - --web-listen
       - 127.0.0.1:9000
       - --no-open
+      # Vite serves the web app on port 5173 and sends each /api request here.
+      # Without this flag port 9000 would answer with the last built bundle,
+      # which is easy to open by accident and is usually out of date.
+      - --no-web-app
 
 networks:
   # Fixed subnet so the address the dummy printer answers on is stable, and

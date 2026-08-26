@@ -15,19 +15,20 @@ fn serve_help_contract_is_unchanged() {
     assert_eq!(
         String::from_utf8(output.stdout).expect("serve help should be UTF-8"),
         "\
-Capture RAW TCP print jobs and preview them in the web viewer
+Capture RAW TCP print jobs and preview them in the web app
 
 Usage: escpost serve [OPTIONS]
 
 Options:
       --non-interactive          Never prompt for missing values
       --profile <PROFILE>        Printer profile used to render captured jobs [default: REFERENCE]
-      --listen <LISTEN>          Address for the RAW TCP printer. When omitted, the first free loopback port from 9100 through 9109 is used
-      --web-listen <WEB_LISTEN>  Address for the web viewer. When omitted, the first free loopback port from 9000 through 9099 is used
+      --listen [<ADDRESS>]       Start the virtual IP printer. Without an address, the first free loopback port from 9100 through 9109 is used
+      --web-listen [<ADDRESS>]   Start the web and API server. Without an address, the first free loopback port from 9000 through 9099 is used
       --idle-timeout <SECONDS>   Complete a held-open connection's job after this many seconds of silence. Use 0 to disable and end a job only when the connection closes [default: 20]
       --scale <N>                Preview pixel density: 1 to 3 subpixels per dot. 1 is dot resolution [default: 3]
       --antialias [<ANTIALIAS>]  Anti-alias glyph edges into a grayscale preview (cosmetic; never what a printer emits). Pass --antialias=false for faithful 1-bit dots [default: true] [possible values: true, false]
-      --no-open                  Do not open the web viewer in the default browser on startup. Auto-open is also skipped with --non-interactive, without a terminal, or when the BROWSER=none or CI environment variables are set
+      --no-open                  Do not open the web app in the default browser on startup. Auto-open is also skipped with --non-interactive, without a terminal, or when the BROWSER=none or CI environment variables are set
+      --no-web-app               Serve the API but not the web application. Needs --web-listen. Use it when no web application is necessary, or when a Vite development server serves the web application and sends each /api request to this server
   -h, --help                     Print help
 "
     );
@@ -516,6 +517,97 @@ fn serve_splits_and_warns_on_a_cut_without_a_cutter() {
     );
 }
 
+#[test]
+fn serve_without_a_listener_fails_and_names_the_flags() {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args(["--non-interactive", "serve"])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("serve needs --listen, --web-listen, or both")
+    );
+}
+
+#[test]
+fn no_web_app_without_a_web_listener_fails() {
+    let output = Command::new(env!("CARGO_BIN_EXE_escpost"))
+        .args([
+            "--non-interactive",
+            "serve",
+            "--listen",
+            "127.0.0.1:0",
+            "--no-web-app",
+        ])
+        .output()
+        .expect("the escpost command should finish");
+
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("--no-web-app needs --web-listen"));
+}
+
+#[test]
+fn no_web_app_keeps_the_api_and_drops_the_web_application() {
+    let mut child = start_serve(&[
+        "--listen",
+        "127.0.0.1:0",
+        "--web-listen",
+        "127.0.0.1:0",
+        "--no-web-app",
+    ]);
+    let (raw_port, web_port) = read_listen_ports(&mut child);
+    wait_until_listening(&mut child, raw_port);
+    wait_until_listening(&mut child, web_port);
+
+    let root = http_get_bytes(web_port, "/");
+    let status = http_get_bytes(web_port, "/api/status");
+    stop(&mut child);
+
+    assert_eq!(response_status(&root), "HTTP/1.1 404 Not Found");
+    assert_eq!(response_status(&status), "HTTP/1.1 200 OK");
+}
+
+#[test]
+fn web_listen_alone_starts_no_virtual_printer() {
+    let mut child = start_serve(&["--web-listen", "127.0.0.1:0"]);
+    let mut stderr = BufReader::new(
+        child
+            .stderr
+            .take()
+            .expect("the serve command stderr should be piped"),
+    );
+    let mut lines = Vec::new();
+    let web_port = loop {
+        let mut line = String::new();
+        let read = stderr
+            .read_line(&mut line)
+            .expect("the serve status should be readable");
+        assert!(read != 0, "serve exited before reporting its API address");
+        if let Some(port) = line
+            .trim()
+            .strip_prefix("API: http://127.0.0.1:")
+            .and_then(|value| value.strip_suffix("/api"))
+            .and_then(|value| value.parse::<u16>().ok())
+        {
+            break port;
+        }
+        lines.push(line);
+    };
+    wait_until_listening(&mut child, web_port);
+    let status = http_get_bytes(web_port, "/api/status");
+    stop(&mut child);
+
+    assert_eq!(response_status(&status), "HTTP/1.1 200 OK");
+    assert!(
+        !lines
+            .iter()
+            .any(|line| line.starts_with("Virtual IP printer:")),
+        "no virtual IP printer should start:\n{lines:?}"
+    );
+}
+
 fn start_serve(arguments: &[&str]) -> Child {
     Command::new(env!("CARGO_BIN_EXE_escpost"))
         .args(["--non-interactive", "serve"])
@@ -572,15 +664,15 @@ fn read_listen_ports_from(stderr: &mut impl BufRead) -> (u16, u16) {
         assert!(read != 0, "serve exited before reporting its listen ports");
         if let Some(port) = line
             .trim()
-            .strip_prefix("RAW printer: 127.0.0.1:")
+            .strip_prefix("Virtual IP printer: 127.0.0.1:")
             .and_then(|value| value.parse::<u16>().ok())
         {
             raw = Some(port);
         }
         if let Some(port) = line
             .trim()
-            .strip_prefix("Web viewer: http://127.0.0.1:")
-            .and_then(|value| value.strip_suffix('/'))
+            .strip_prefix("API: http://127.0.0.1:")
+            .and_then(|value| value.strip_suffix("/api"))
             .and_then(|value| value.parse::<u16>().ok())
         {
             web = Some(port);
@@ -600,7 +692,7 @@ fn send_raw_job(port: u16, bytes: &[u8]) {
             Err(error) => {
                 assert!(
                     Instant::now() < deadline,
-                    "the RAW printer never accepted data: {error}"
+                    "the virtual IP printer never accepted data: {error}"
                 );
                 thread::sleep(Duration::from_millis(25));
             }
@@ -623,7 +715,7 @@ fn open_raw_connection(port: u16) -> TcpStream {
             Err(error) => {
                 assert!(
                     Instant::now() < deadline,
-                    "the RAW printer never accepted a connection: {error}"
+                    "the virtual IP printer never accepted a connection: {error}"
                 );
                 thread::sleep(Duration::from_millis(25));
             }
@@ -639,7 +731,7 @@ fn send_raw_job_one_byte_at_a_time(port: u16, bytes: &[u8]) {
             Err(error) => {
                 assert!(
                     Instant::now() < deadline,
-                    "the RAW printer never accepted data: {error}"
+                    "the virtual IP printer never accepted data: {error}"
                 );
                 thread::sleep(Duration::from_millis(25));
             }
@@ -863,6 +955,14 @@ fn response_body(response: &[u8]) -> &[u8] {
         .position(|window| window == b"\r\n\r\n")
         .expect("the HTTP response should contain a header boundary");
     &response[boundary + 4..]
+}
+
+fn response_status(response: &[u8]) -> &str {
+    std::str::from_utf8(response)
+        .expect("an HTTP status line should be UTF-8")
+        .lines()
+        .next()
+        .expect("an HTTP response should have a status line")
 }
 
 fn response_header<'a>(response: &'a [u8], requested: &str) -> Option<&'a str> {

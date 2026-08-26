@@ -165,7 +165,7 @@ is fixed.
 ### Network discovery without hardware
 
 `printers discover` needs something on the network to find. A Compose profile
-provides a RAW TCP printer for that, so the scan can be exercised without a
+provides a virtual IP printer for that, so the scan can be exercised without a
 physical device:
 
 ```sh

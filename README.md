@@ -54,11 +54,10 @@ changes:
 escpost render receipt.hex --profile REFERENCE --web --watch
 ```
 
-Or run a virtual printer and point an application at the reported RAW TCP
-address:
+Or run a virtual printer and point an application at the reported address:
 
 ```bash
-escpost serve
+escpost serve --listen --web-listen
 ```
 
 <p align="center">

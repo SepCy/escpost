@@ -966,17 +966,17 @@ fn explicit_port_zero_reports_the_operating_system_selected_port() {
         stderr
             .read_line(&mut line)
             .expect("web status should be readable");
-        assert!(!line.is_empty(), "web viewer URL should be reported");
-        if line.starts_with("Web viewer: ") {
+        assert!(!line.is_empty(), "web app URL should be reported");
+        if line.starts_with("Web app: ") {
             break line;
         }
     };
     let port = viewer_line
         .trim()
-        .strip_prefix("Web viewer: http://127.0.0.1:")
+        .strip_prefix("Web app: http://127.0.0.1:")
         .and_then(|value| value.strip_suffix('/'))
         .and_then(|value| value.parse::<u16>().ok())
-        .expect("the web viewer status should contain the selected port");
+        .expect("the web app status should contain the selected port");
 
     let response = http_get(port, "/");
     stop(&mut child);

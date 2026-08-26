@@ -223,23 +223,27 @@ pub(crate) async fn serve(
     listener: TcpListener,
     jobs: JobStore,
     virtual_printer_address: Option<SocketAddr>,
+    web_app: bool,
 ) -> std::io::Result<()> {
     let status_metadata = status::ServerStatusMetadata::resolve(virtual_printer_address);
-    let router = Router::new()
+    let mut router = Router::new()
         .merge(crate::features::printers::http::router())
         .merge(crate::features::profiles::http::router())
         .merge(status::route())
         .merge(jobs::router())
-        .route("/", get(frontend::index))
-        .route("/assets/{*path}", get(frontend::asset))
-        .route("/{*path}", get(frontend::index))
         .route("/health", get(health))
         .route("/api", any(error::not_found))
-        .route("/api/{*path}", any(error::not_found))
-        .with_state(WebState {
-            jobs,
-            status_metadata,
-        });
+        .route("/api/{*path}", any(error::not_found));
+    if web_app {
+        router = router
+            .route("/", get(frontend::index))
+            .route("/assets/{*path}", get(frontend::asset))
+            .route("/{*path}", get(frontend::index));
+    }
+    let router = router.with_state(WebState {
+        jobs,
+        status_metadata,
+    });
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await

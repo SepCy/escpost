@@ -82,7 +82,7 @@ impl JobStore {
         }
     }
 
-    /// Create a store with no job yet. The web viewer shows `hint` and the
+    /// Create a store with no job yet. The web app shows `hint` and the
     /// `profile` until the first job arrives, which suits a listener that
     /// renders on demand with a known profile.
     pub(crate) fn awaiting_jobs(profile: String, hint: String, antialias: bool) -> Self {

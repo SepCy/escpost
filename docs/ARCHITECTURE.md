@@ -298,17 +298,10 @@ from the asynchronous HTTP task. A successful result atomically replaces the
 visible job. A parse or render failure is reported by the page while the last
 complete sheets remain available.
 
-The current embedded viewer is a latest-job projection. Axum serves one inline
-HTML document, current render metadata at `/api/render`, the current raw input
-at `/job`, and current sheets under `/sheets/`. These routes do not provide
-stable job identity and are not the target workbench API.
-
 ### Embedded web applications
 
-The existing latest-job viewer remains available at `/` as a behavioral
-reference. A Preact and TypeScript workbench is available at `/app/`, with
-`preact-iso` client routing for Overview, Print jobs, Printers, Profiles, and
-Calibration. Its responsive shell uses semantic tables on wide screens and
+A Preact and TypeScript workbench is available at `/`, with `preact-iso`
+client routing for Overview, Print jobs, Printers, Profiles, and Calibration. Its responsive shell uses semantic tables on wide screens and
 labeled cards on narrow screens. Print jobs renders the current job directly;
 job history is a later capability. Printers discovers and registers printers as
 well as listing them, which makes it the first page that writes. Its inventory

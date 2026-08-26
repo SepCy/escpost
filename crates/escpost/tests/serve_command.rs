@@ -96,21 +96,21 @@ fn serve_captures_a_raw_job_and_previews_its_sheets() {
     send_raw_job(raw_port, b"Captured over RAW\n");
 
     let metadata = wait_for_first_job(web_port);
-    let sheets = metadata["sheets"]
+    let sheets = metadata["job"]["sheets"]
         .as_array()
         .expect("sheets should be an array");
     assert!(!sheets.is_empty(), "the captured job should render a sheet");
     assert_eq!(metadata["profile"], "REFERENCE");
 
     // A job ended by the client closing the connection is labelled "closed".
-    assert_eq!(metadata["completion"], "closed");
+    assert_eq!(metadata["job"]["completion"], "closed");
     // Its completion time is reported so the viewer always shows a status.
     assert!(
-        metadata["completed_at"].as_u64().is_some(),
+        metadata["job"]["completed_at_unix_ms"].as_u64().is_some(),
         "a completed job should carry a completion timestamp"
     );
 
-    let png = response_body(&http_get_bytes(web_port, "/sheets/1.png")).to_vec();
+    let png = sheet_png(web_port, 1);
     stop(&mut child);
     assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
 }
@@ -138,9 +138,8 @@ fn api_status_reports_virtual_printer_and_only_successful_captured_jobs() {
     assert_eq!(initial["virtual_printer"]["address"], raw_address);
     assert_eq!(initial["jobs_processed"], 0);
 
-    let generation = render_metadata(web_port)["generation"]
-        .as_u64()
-        .expect("the initial render generation should be numeric");
+    // No job is captured yet, thus each captured job gets a higher generation.
+    let generation = 0;
     send_raw_job(raw_port, b"Count this captured job\n");
     wait_for_generation_change(web_port, generation);
     assert_eq!(status_metadata(web_port)["jobs_processed"], 1);
@@ -248,13 +247,13 @@ fn serve_finalizes_a_held_open_connection_after_the_idle_timeout() {
 
     let metadata = wait_for_first_job(web_port);
     assert!(
-        !metadata["sheets"]
+        !metadata["job"]["sheets"]
             .as_array()
             .expect("sheets should be an array")
             .is_empty(),
         "the held-open job should render once the idle timeout elapses"
     );
-    assert_eq!(metadata["completion"], "timeout");
+    assert_eq!(metadata["job"]["completion"], "timeout");
 
     drop(stream);
     stop(&mut child);
@@ -269,8 +268,7 @@ fn serve_offers_the_captured_raw_input_for_download() {
 
     let sent = b"Downloadable raw input\n";
     send_raw_job(raw_port, sent);
-    let metadata = wait_for_first_job(web_port);
-    assert_eq!(metadata["input_available"], true);
+    wait_for_first_job(web_port);
 
     let current_response = http_get_bytes(web_port, "/api/jobs/current");
     let current: serde_json::Value = serde_json::from_slice(response_body(&current_response))
@@ -331,13 +329,13 @@ fn serve_flags_a_connection_that_is_still_receiving() {
     stop(&mut child);
 
     assert!(
-        !metadata["sheets"]
+        !metadata["job"]["sheets"]
             .as_array()
             .expect("sheets should be an array")
             .is_empty(),
         "the finalized job should render"
     );
-    assert_eq!(metadata["completion"], "closed");
+    assert_eq!(metadata["job"]["completion"], "closed");
     assert_eq!(status["virtual_printer"]["state"], "ready");
 }
 
@@ -350,12 +348,12 @@ fn serve_replaces_the_preview_with_the_most_recent_job() {
 
     send_raw_job(raw_port, b"First job\n");
     wait_for_first_job(web_port);
-    let first = response_body(&http_get_bytes(web_port, "/sheets/1.png")).to_vec();
+    let first = sheet_png(web_port, 1);
 
     send_raw_job(raw_port, b"A visibly different second job\n");
     let deadline = Instant::now() + Duration::from_secs(5);
     let second = loop {
-        let candidate = response_body(&http_get_bytes(web_port, "/sheets/1.png")).to_vec();
+        let candidate = sheet_png(web_port, 1);
         if candidate != first {
             break candidate;
         }
@@ -378,14 +376,7 @@ fn serve_viewer_shows_instructions_before_the_first_job() {
     let metadata = render_metadata(web_port);
     stop(&mut child);
 
-    assert_eq!(
-        metadata["sheets"]
-            .as_array()
-            .expect("sheets should be an array")
-            .len(),
-        0,
-        "no job has been captured yet"
-    );
+    assert!(metadata["job"].is_null(), "no job has been captured yet");
     let hint = metadata["hint"]
         .as_str()
         .expect("an idle viewer should carry a waiting hint");
@@ -410,13 +401,13 @@ fn serve_reassembles_a_job_sent_one_byte_at_a_time() {
 
     let metadata = wait_for_first_job(web_port);
     assert!(
-        !metadata["sheets"]
+        !metadata["job"]["sheets"]
             .as_array()
             .expect("sheets should be an array")
             .is_empty(),
         "a byte-by-byte job should still render"
     );
-    let png = response_body(&http_get_bytes(web_port, "/sheets/1.png")).to_vec();
+    let png = sheet_png(web_port, 1);
     stop(&mut child);
     assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
 }
@@ -462,12 +453,8 @@ fn serve_reports_a_render_error_without_a_sheet() {
         .read_to_string(&mut remaining_stderr)
         .expect("the render warning should be readable");
 
-    assert_eq!(
-        metadata["sheets"]
-            .as_array()
-            .expect("sheets should be an array")
-            .len(),
-        0,
+    assert!(
+        metadata["job"].is_null(),
         "a failed render produces no sheet"
     );
     let error = metadata["error"]
@@ -505,14 +492,14 @@ fn serve_splits_and_warns_on_a_cut_without_a_cutter() {
     stop(&mut child);
 
     assert_eq!(
-        metadata["sheets"]
+        metadata["job"]["sheets"]
             .as_array()
             .expect("sheets should be an array")
             .len(),
         2,
         "the cut should still split the preview into two receipts"
     );
-    let warnings = metadata["warnings"]
+    let warnings = metadata["job"]["warnings"]
         .as_array()
         .expect("warnings should be an array");
     assert_eq!(
@@ -677,7 +664,7 @@ fn wait_for_first_job(web_port: u16) -> serde_json::Value {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let metadata = render_metadata(web_port);
-        let has_sheets = metadata["sheets"]
+        let has_sheets = metadata["job"]["sheets"]
             .as_array()
             .is_some_and(|sheets| !sheets.is_empty());
         if has_sheets {
@@ -695,8 +682,9 @@ fn wait_for_generation_change(web_port: u16, previous: u64) -> serde_json::Value
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let metadata = render_metadata(web_port);
-        if metadata["generation"]
-            .as_u64()
+        if metadata["job"]["id"]
+            .as_str()
+            .and_then(|id| id.parse::<u64>().ok())
             .is_some_and(|generation| generation > previous)
         {
             return metadata;
@@ -725,8 +713,18 @@ fn wait_for_render_error(web_port: u16) -> serde_json::Value {
 }
 
 fn render_metadata(web_port: u16) -> serde_json::Value {
-    let response = http_get_bytes(web_port, "/api/render");
-    serde_json::from_slice(response_body(&response)).expect("the metadata response should be JSON")
+    let response = http_get_bytes(web_port, "/api/jobs/current");
+    serde_json::from_slice(response_body(&response))
+        .expect("the current job response should be JSON")
+}
+
+/// The PNG bytes of sheet `number` of the current job, through the jobs API.
+fn sheet_png(web_port: u16, number: usize) -> Vec<u8> {
+    let url = render_metadata(web_port)["job"]["sheets"][number - 1]["image_url"]
+        .as_str()
+        .expect("a rendered sheet should have an image URL")
+        .to_owned();
+    response_body(&http_get_bytes(web_port, &url)).to_vec()
 }
 
 fn status_metadata(web_port: u16) -> serde_json::Value {

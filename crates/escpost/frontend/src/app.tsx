@@ -10,7 +10,7 @@ export function App() {
     <ServerStatusProvider>
       <AppDataProvider>
         <ReconnectPrinters />
-        <LocationProvider scope="/app">
+        <LocationProvider>
           <AppShell>
             <AppRoutes />
           </AppShell>

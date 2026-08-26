@@ -88,7 +88,7 @@ They should not duplicate the complete Rust conformance suite.
 ### Rust CLI and HTTP tests
 
 `crates/escpost/tests/` exercises the developer command as a subprocess
-and the embedded viewer over real loopback sockets. These tests cover:
+and the web app over real loopback sockets. These tests cover:
 
 - binary, hexadecimal, stdin, and case-directory inputs;
 - explicit and metadata-supplied profile resolution;
@@ -133,7 +133,7 @@ docker compose run --rm --no-deps frontend bun test src/features/printers/page.t
 ```
 
 Rust HTTP integration tests exercise the embedded production bundle, including
-the `/app` redirect, direct navigation to every workbench route, navigation
+direct navigation to every workbench route, navigation
 labels in the production bundle, asset MIME and cache headers, missing assets,
 and traversal rejection. They also cover the read-only `/api/status`,
 `/api/printers/list`, `/api/profiles/list`, and current-job resource contracts,

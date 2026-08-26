@@ -139,7 +139,6 @@ services:
             --watch /workspace/Cargo.lock \
             --watch /workspace/crates/escpost/Cargo.toml \
             --watch /workspace/crates/escpost/build.rs \
-            --watch /workspace/crates/escpost/assets \
             --watch /workspace/crates/escpost/src \
             --watch /workspace/crates/escpost-profiles/Cargo.toml \
             --watch /workspace/crates/escpost-profiles/profiles \

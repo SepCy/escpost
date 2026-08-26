@@ -20,7 +20,6 @@ categories = ["command-line-utilities", "development-tools"]
 include = [
     "/src/**/*",
     "/tests/**/*",
-    "/assets/**/*",
     "/frontend/dist/**/*",
     "/build.rs",
     "/README.md",

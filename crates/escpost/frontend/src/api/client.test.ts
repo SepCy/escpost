@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from "bun:test";
-import { addPrinter, ApiRequestError, getPrinters, getStatus } from "./client";
+import { addPrinter, ApiRequestError, getPrinters } from "./client";
 
 const originalFetch = globalThis.fetch;
 
@@ -43,13 +43,20 @@ describe("API client", () => {
     }
   });
 
-  test("rejects an HTML response instead of treating it as JSON", async () => {
+  test("rejects an HTML response with an unexpected-response API error", async () => {
     globalThis.fetch = jest.fn(() => Promise.resolve(new Response("<html></html>", {
       status: 200,
       headers: { "content-type": "text/html" },
     }))) as unknown as typeof globalThis.fetch;
 
-    await expect(getStatus()).rejects.toMatchObject({ code: "unexpected_response" });
+    const failure = await getPrinters().catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ApiRequestError);
+    expect(failure).toMatchObject({
+      status: 200,
+      code: "unexpected_response",
+      message: "The server returned an unexpected response.",
+    });
   });
 
   test("addPrinter posts a JSON body and returns the parsed response", async () => {

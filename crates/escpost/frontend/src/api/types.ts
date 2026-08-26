@@ -10,7 +10,7 @@ export type VirtualPrinterStatus = {
   address: string;
 };
 
-export type StatusResponse = {
+export type ServerStatusSnapshot = {
   virtual_printer: VirtualPrinterStatus | null;
   jobs_processed: number;
   config_path: string;

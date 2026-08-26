@@ -59,3 +59,10 @@ pack:
 # Build and test the Python render binding.
 python-test:
     scripts/python-binding-test
+
+# Publish escpost-render and escpost-profiles first, because escpost needs
+# them at the versions in this workspace.
+[doc("Publish the CLI to crates.io with the web app built in.")]
+publish:
+    scripts/frontend-build
+    cargo publish -p escpost

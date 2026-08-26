@@ -24,24 +24,21 @@ x-frontend-service: &frontend-service
     - frontend-node-modules:/workspace/crates/escpost/frontend/node_modules
 
 services:
-  # Only `bun install`. The Vite server needs node_modules, not a bundle.
-  frontend-install:
-    <<: *frontend-service
-    command: ["bun", "install", "--frozen-lockfile"]
-
-  # The production bundle, for the Rust tests that serve it.
+  # The production bundle, for the Rust tests that serve it. A profile keeps it
+  # out of `docker compose up`, where it would write the node_modules volume at
+  # the same time as `frontend`.
   frontend-build:
     <<: *frontend-service
+    profiles:
+      - tools
     command: ["sh", "-c", "bun install --frozen-lockfile && bun run build"]
 
   frontend:
     <<: *frontend-service
     depends_on:
-      frontend-install:
-        condition: service_completed_successfully
       escpost:
         condition: service_healthy
-    command: ["bun", "run", "dev"]
+    command: ["sh", "-c", "bun install --frozen-lockfile && bun run dev"]
 
   test:
     <<: *development-service

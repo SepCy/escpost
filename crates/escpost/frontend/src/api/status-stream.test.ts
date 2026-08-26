@@ -2,7 +2,7 @@ import { afterEach, describe, expect, jest, test } from "bun:test";
 import { openServerStatusStream } from "./status-stream";
 
 // Neither Bun nor happy-dom provides EventSource. This small stand-in drives
-// the adapter through the same named events that the browser receives.
+// the adapter through the same standard message events that the browser receives.
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
   readonly url: string;
@@ -59,7 +59,7 @@ describe("openServerStatusStream", () => {
       config_path: "/tmp/printers.toml",
     };
 
-    source.emit("status", snapshot);
+    source.emit("message", snapshot);
 
     expect(source.url).toBe("/api/status/events");
     expect(handlers.onStatus).toHaveBeenCalledWith(snapshot);
@@ -83,8 +83,8 @@ describe("openServerStatusStream", () => {
     openServerStatusStream(handlers);
     const source = FakeEventSource.instances[0]!;
 
-    source.emitRaw("status", "not json");
-    source.emit("status", { virtual_printer: null, jobs_processed: 0, config_path: "" });
+    source.emitRaw("message", "not json");
+    source.emit("message", { virtual_printer: null, jobs_processed: 0, config_path: "" });
 
     expect(handlers.onError).toHaveBeenCalledTimes(1);
     expect(handlers.onStatus).toHaveBeenCalledTimes(1);
@@ -105,14 +105,14 @@ describe("openServerStatusStream", () => {
       { virtual_printer: null, jobs_processed: 0.5, config_path: "/tmp/printers.toml" },
       { virtual_printer: null, jobs_processed: 0, config_path: null },
     ]) {
-      source.emit("status", invalid);
+      source.emit("message", invalid);
     }
     const snapshot = {
       virtual_printer: { state: "receiving" as const, address: "127.0.0.1:9100" },
       jobs_processed: 4,
       config_path: "/tmp/printers.toml",
     };
-    source.emit("status", snapshot);
+    source.emit("message", snapshot);
 
     expect(handlers.onError).toHaveBeenCalledTimes(6);
     expect(handlers.onStatus).toHaveBeenCalledWith(snapshot);

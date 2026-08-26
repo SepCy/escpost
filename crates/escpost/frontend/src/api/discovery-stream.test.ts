@@ -140,13 +140,13 @@ describe("openDiscoveryStream", () => {
     expect(callbacks.onCompleted).toHaveBeenCalledTimes(1);
   });
 
-  test("closes the stream and surfaces the server's message on a server-sent error event", () => {
+  test("closes the stream and surfaces the server's message on a server-sent failed event", () => {
     installFakeEventSource();
     const callbacks = handlers();
     openDiscoveryStream({ usb: true, network: true, subnets: [], port: 9100, timeoutMs: 1000 }, callbacks);
     const source = FakeEventSource.instances[0]!;
 
-    source.emit("error", { message: "The configuration file could not be read." });
+    source.emit("failed", { message: "The configuration file could not be read." });
 
     expect(source.closed).toBe(true);
     expect(callbacks.onError).toHaveBeenCalledWith("The configuration file could not be read.");

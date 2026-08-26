@@ -142,7 +142,7 @@ function renderWithData(children: preact.ComponentChildren) {
       <AppDataProvider>{children}</AppDataProvider>
     </ServerStatusProvider>,
   );
-  act(() => statusStream().emit("status", serverStatus));
+  act(() => statusStream().emit("message", serverStatus));
   return view;
 }
 

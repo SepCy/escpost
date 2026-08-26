@@ -325,7 +325,10 @@ printer's state and address, the processed job count, and `config_path`, the
 resolved `printers.toml` the process reads and writes; a path that cannot be
 resolved degrades to an empty string rather than failing the endpoint that
 reports server health. `GET /api/status/events` sends that same complete
-snapshot when a client connects and after its runtime values change.
+snapshot as a standard SSE `message` event when a client connects and after
+its runtime values change. Persistent streams that mirror one snapshot
+resource use the default event type; named events are reserved for streams
+that carry several payload shapes.
 `JobStore` exposes the watch-backed runtime projection that drives both status
 routes. In the browser,
 `ServerStatusProvider` owns the status stream's reconnection and stale-status
@@ -359,8 +362,9 @@ network, with its connection facts and the configured names it already matches),
 enumeration failure with its stage, reason, `permission_denied` flag, and
 `can_grant_usb_permissions` — a platform fact stating whether this host has the
 Linux-only `printers grant-usb-permissions` subcommand at all). The stream ends
-with a `completed` marker carrying an empty payload, or with `error` carrying a
-message when the scan failed after the stream had opened; a failure before it
+with a `completed` marker carrying an empty payload, or with `failed` carrying
+a message when the scan failed after the stream had opened. EventSource's
+native `error` event is reserved for a connection failure; a failure before it
 opens is an ordinary JSON API error instead, and each such failure keeps its
 own code: a subnet wider than the explicit limit is `invalid_query` with
 `400`, a network-only scan on a machine with no automatically scannable

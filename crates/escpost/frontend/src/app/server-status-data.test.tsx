@@ -54,7 +54,7 @@ describe("ServerStatusProvider", () => {
 
     expect(screen.getByText("checking:null:none")).toBeTruthy();
     act(() => {
-      source.emit("status", { virtual_printer: null, jobs_processed: 4, config_path: "/tmp/printers.toml" });
+      source.emit("message", { virtual_printer: null, jobs_processed: 4, config_path: "/tmp/printers.toml" });
     });
     expect(screen.getByText("ready:4:none")).toBeTruthy();
     act(() => {
@@ -62,7 +62,7 @@ describe("ServerStatusProvider", () => {
     });
     expect(screen.getByText("disconnected:4:Unable to reach the ESCPost server.")).toBeTruthy();
     act(() => {
-      source.emit("status", { virtual_printer: null, jobs_processed: 5, config_path: "/tmp/printers.toml" });
+      source.emit("message", { virtual_printer: null, jobs_processed: 5, config_path: "/tmp/printers.toml" });
     });
     expect(screen.getByText("ready:5:none")).toBeTruthy();
   });
@@ -80,10 +80,10 @@ describe("ServerStatusProvider", () => {
     renderProvider();
     const source = FakeEventSource.instances[0]!;
     act(() => {
-      source.emit("status", { virtual_printer: null, jobs_processed: 4, config_path: "/tmp/printers.toml" });
+      source.emit("message", { virtual_printer: null, jobs_processed: 4, config_path: "/tmp/printers.toml" });
     });
     act(() => {
-      source.emit("status", { virtual_printer: null, jobs_processed: -1, config_path: "/tmp/printers.toml" });
+      source.emit("message", { virtual_printer: null, jobs_processed: -1, config_path: "/tmp/printers.toml" });
     });
 
     expect(screen.getByText("disconnected:4:The server returned invalid status data.")).toBeTruthy();

@@ -135,7 +135,7 @@ pub(super) async fn events(State(state): State<WebState>) -> Response {
 
 fn status_event(metadata: &ServerStatusMetadata, runtime: &JobRuntimeStatus) -> Event {
     let snapshot = ServerStatusSnapshot::new(metadata, runtime);
-    Event::default().event("status").data(
+    Event::default().data(
         serde_json::to_string(&snapshot)
             .expect("server status snapshots contain only serializable fields"),
     )

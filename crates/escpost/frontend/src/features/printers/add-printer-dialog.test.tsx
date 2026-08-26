@@ -143,7 +143,7 @@ function renderDialog(printer: DiscoveredPrinter | null, options: {
       </AppDataProvider>
     </ServerStatusProvider>,
   );
-  act(() => FakeEventSource.instance?.emit("status", {
+  act(() => FakeEventSource.instance?.emit("message", {
     ...status,
     config_path: options.configPath ?? status.config_path,
   }));

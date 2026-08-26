@@ -86,13 +86,10 @@ function listen<T>(source: EventSource, name: string, handle: (payload: T) => vo
   });
 }
 
-// The server's `error` event carries `{ "message": string }`; a genuine
-// connection failure (the browser's own generic `error` event, dispatched
-// when the stream drops without one of these) carries no such payload. Both
-// arrive through the same `EventSource` "error" listener, so this extracts
-// the server's wording when there is one and falls back to a generic message
-// otherwise.
-function errorMessage(event: Event): string {
+// A server-owned failure carries `{ "message": string }`. Keep parsing it
+// separate from EventSource's native `error`, which has no application
+// payload and means only that the connection itself failed.
+function failedMessage(event: Event): string {
   const data = (event as MessageEvent).data as string | undefined;
   if (typeof data === "string") {
     try {
@@ -113,10 +110,10 @@ function errorMessage(event: Event): string {
  * Cancellation is not an endpoint: closing the `EventSource` drops the HTTP
  * response, which drops the scan future on the server, which aborts every
  * outstanding probe. The returned closer is therefore the only cancellation
- * mechanism, and it is also invoked internally on `completed` and on `error`
- * — `EventSource` reconnects automatically by default, and a stream that
- * ended normally would otherwise be reopened by the browser, silently
- * starting a second scan.
+ * mechanism, and it is also invoked internally on `completed`, `failed`, and
+ * connection `error` — `EventSource` reconnects automatically by default, and
+ * a stream that completed or failed would otherwise be reopened by the
+ * browser, silently starting a second scan.
  */
 export function openDiscoveryStream(query: DiscoveryQuery, handlers: DiscoveryHandlers): () => void {
   // A scan that chose nothing at all sends no query string rather than a bare
@@ -133,9 +130,13 @@ export function openDiscoveryStream(query: DiscoveryQuery, handlers: DiscoveryHa
     source.close();
     handlers.onCompleted();
   });
-  source.addEventListener("error", (event) => {
+  source.addEventListener("failed", (event) => {
     source.close();
-    handlers.onError(errorMessage(event));
+    handlers.onError(failedMessage(event));
+  });
+  source.addEventListener("error", () => {
+    source.close();
+    handlers.onError("The discovery stream ended unexpectedly.");
   });
 
   return () => source.close();

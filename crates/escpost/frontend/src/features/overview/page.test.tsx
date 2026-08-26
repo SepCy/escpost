@@ -52,7 +52,7 @@ function renderOverview(children: preact.ComponentChildren, snapshot: ServerStat
       <AppDataProvider>{children}</AppDataProvider>
     </ServerStatusProvider>,
   );
-  act(() => FakeEventSource.instance?.emit("status", snapshot));
+  act(() => FakeEventSource.instance?.emit("message", snapshot));
   return view;
 }
 

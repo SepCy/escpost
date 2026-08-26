@@ -28,7 +28,9 @@ use serde::Serialize;
 
 use super::super::cli::{DiscoverPrintersArgs, InventoryTransport};
 use super::super::http::ConnectionResponse;
-use super::super::inventory::{NusbInventory, UsbEnumerationFailure, UsbFailureStage};
+use super::super::inventory::{
+    NusbInventory, UsbEnumerationFailure, UsbFailureStage, UsbInventory,
+};
 use super::super::list::{ConnectionFacts, NetworkConnectionFacts, UsbConnectionFacts};
 use super::{DiscoveryEvent, DiscoveryScope, NetworkDiscovery, UsbDiscovery};
 use crate::application::ApplicationError;
@@ -181,10 +183,16 @@ async fn discover(
     let scope = scope(&parameters)?;
     let prepared = super::prepare(None, scope).map_err(rejected_discovery)?;
 
+    Ok(discovery_response(prepared, NusbInventory))
+}
+
+fn discovery_response(
+    prepared: super::PreparedDiscovery,
+    mut inventory: impl UsbInventory + Send + 'static,
+) -> Response {
     let queue: Queue = Arc::new(Mutex::new(VecDeque::new()));
     let sink = Arc::clone(&queue);
     let scan = Box::pin(async move {
-        let mut inventory = NusbInventory;
         let outcome = super::execute(
             prepared,
             |event| {
@@ -205,7 +213,7 @@ async fn discover(
         let closing = match outcome {
             Ok(_) => Event::default().event("completed").data("{}"),
             Err(error) => Event::default()
-                .event("error")
+                .event("failed")
                 .data(serde_json::json!({ "message": error.to_string() }).to_string()),
         };
         sink.lock()
@@ -227,7 +235,7 @@ async fn discover(
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    Ok(response)
+    response
 }
 
 /// Why `prepare` refused, in HTTP terms.
@@ -439,7 +447,59 @@ fn usb_failure_event(failure: &UsbEnumerationFailure) -> UsbFailureEvent {
 mod tests {
     use std::time::Duration;
 
+    use axum::body::to_bytes;
+
     use super::*;
+    use crate::application;
+    use crate::features::printers::inventory::{UsbDeviceIdentity, UsbPrinter};
+    use crate::features::printers::test_support::temporary_configuration;
+
+    struct FailingInventory;
+
+    impl UsbInventory for FailingInventory {
+        fn list(&mut self) -> application::Result<Vec<UsbPrinter>> {
+            Err(ApplicationError::LoadProfiles(
+                "forced test failure".to_owned(),
+            ))
+        }
+
+        fn identities(&mut self) -> application::Result<Vec<UsbDeviceIdentity>> {
+            unreachable!("USB discovery should not request metadata-only identities")
+        }
+    }
+
+    #[tokio::test]
+    async fn a_failure_after_the_stream_opens_uses_the_failed_event_contract() {
+        let configuration = temporary_configuration("http-failed-event", "");
+        let prepared =
+            super::super::prepare(Some(configuration.path().to_owned()), DiscoveryScope::Usb)
+                .expect("discovery should prepare before the injected inventory failure");
+
+        let response = discovery_response(prepared, FailingInventory);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("the finite discovery stream should be readable");
+        let body = std::str::from_utf8(&body).expect("SSE frames should be UTF-8");
+
+        let failed = body
+            .split("\n\n")
+            .find(|event| event.lines().any(|line| line == "event: failed"))
+            .expect("the stream should end with a server-owned failed event");
+        assert!(
+            !body.lines().any(|line| line == "event: error"),
+            "application failures must not use EventSource's native error event"
+        );
+        let data = failed
+            .lines()
+            .find_map(|line| line.strip_prefix("data: "))
+            .expect("the failed event should contain a JSON payload");
+        let payload: serde_json::Value =
+            serde_json::from_str(data).expect("the failed event data should be JSON");
+        assert!(
+            payload["message"].is_string(),
+            "the failed event should carry a string message"
+        );
+    }
 
     #[test]
     fn advertised_defaults_match_the_command_line_defaults() {

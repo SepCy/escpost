@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { CommandPanel } from "./command-panel";
 import { groupJobCommands } from "./model";
+import { revealWithin } from "./reveal";
 import { SheetPreview } from "./sheet-preview";
 import { useCurrentJob } from "./use-current-job";
 
@@ -15,27 +16,16 @@ function readPaperMargin() {
   }
 }
 
-function revealWithin(element: Element | undefined, container: HTMLElement | null, horizontal: boolean) {
-  if (!element || !container) return;
-  const item = element.getBoundingClientRect();
-  const bounds = container.getBoundingClientRect();
-  const bottom = bounds.top + container.clientHeight;
-  const right = bounds.left + container.clientWidth;
-  let top = 0;
-  let left = 0;
-  if (item.top < bounds.top) top = item.top - bounds.top;
-  else if (item.bottom > bottom) top = item.bottom - bottom;
-  if (horizontal && item.left < bounds.left) left = item.left - bounds.left;
-  else if (horizontal && item.right > right) left = item.right - right;
-  if (top !== 0 || left !== 0) container.scrollBy?.({ top, left });
-}
-
 export function JobsPage() {
   const resource = useCurrentJob();
   const job = resource.data?.job ?? null;
   const grouped = useMemo(() => job ? groupJobCommands(job) : null, [job]);
+  const data = resource.data;
   const [previewedGroupId, setPreviewedGroupId] = useState<string | null>(null);
   const [pinnedGroupId, setPinnedGroupId] = useState<string | null>(null);
+  // The character of the previewed group the pointer rests on, by its place in
+  // the group. A byte and a printed character share that place.
+  const [previewedCharacter, setPreviewedCharacter] = useState<number | null>(null);
   const [paperMargin, setPaperMargin] = useState(readPaperMargin);
   const [marginFlash, setMarginFlash] = useState(false);
   const sheetWorkspace = useRef<HTMLElement | null>(null);
@@ -49,6 +39,7 @@ export function JobsPage() {
     if (selectionJobId.current !== null && selectionJobId.current !== nextJobId) {
       setPreviewedGroupId(null);
       setPinnedGroupId(null);
+      setPreviewedCharacter(null);
     }
     selectionJobId.current = nextJobId;
     annotations.current.clear();
@@ -81,7 +72,10 @@ export function JobsPage() {
   }, []);
   const endPreview = useCallback((id: string) => {
     setPreviewedGroupId((current) => current === id ? null : current);
+    setPreviewedCharacter(null);
   }, []);
+  const previewCharacter = useCallback((index: number) => setPreviewedCharacter(index), []);
+  const endCharacterPreview = useCallback(() => setPreviewedCharacter(null), []);
   const pinFromCommand = useCallback((id: string) => {
     setPinnedGroupId(id);
     revealWithin(annotations.current.get(id), sheetWorkspace.current, true);
@@ -106,22 +100,35 @@ export function JobsPage() {
   };
 
   return (
-    <section aria-labelledby="jobs-heading" class="space-y-5">
+    <section aria-labelledby="jobs-heading" class="flex flex-col gap-5 xl:min-h-0 xl:flex-1">
       <h1 id="jobs-heading" class="sr-only">Print jobs</h1>
 
-      <JobStatus
-        resource={resource}
-        paperMargin={paperMargin}
-        onPaperMarginChange={changePaperMargin}
-      />
+      {!(job && grouped) && (
+        <JobStatus
+          resource={resource}
+          paperMargin={paperMargin}
+          onPaperMarginChange={changePaperMargin}
+        />
+      )}
 
       {job && grouped && (
-        <div class="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        <div class="grid min-w-0 gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_24rem]">
+          {/* The status covers the sheets alone, thus the bytes beside them
+              start at the top of the page. */}
+          <div data-sheet-column class="flex min-w-0 flex-col gap-5 xl:min-h-0">
+          <JobStatus
+            resource={resource}
+            paperMargin={paperMargin}
+            onPaperMarginChange={changePaperMargin}
+          />
           <div
             ref={(element) => { sheetWorkspace.current = element; }}
             role="region"
             aria-label="Rendered receipt sheets"
-            class="min-w-0 overflow-auto rounded-box border border-base-300 bg-base-200 p-4 xl:max-h-[calc(100vh-8rem)]"
+            // The sheets take what the column has left once the status has
+            // its share, thus no number here stands for the height of another
+            // element.
+            class="min-w-0 overflow-auto rounded-box border border-base-300 bg-base-200 p-4 xl:min-h-0 xl:flex-1"
           >
             <div class="flex flex-wrap items-start justify-start gap-8">
               {grouped.sheets.map((sheet) => (
@@ -134,6 +141,9 @@ export function JobsPage() {
                   marginFlash={marginFlash}
                   previewedGroupId={previewedGroupId}
                   pinnedGroupId={pinnedGroupId}
+                  previewedCharacter={previewedCharacter}
+                  onPreviewCharacter={previewCharacter}
+                  onPreviewCharacterEnd={endCharacterPreview}
                   register={registerAnnotation}
                   onPreview={previewFromAnnotation}
                   onPreviewEnd={endPreview}
@@ -146,11 +156,18 @@ export function JobsPage() {
               )}
             </div>
           </div>
+          </div>
           {grouped.groups.length > 0 && (
             <CommandPanel
               groups={grouped.groups}
+              byteCount={grouped.byteCount}
+              inputUrl={data?.receiving ? undefined : job.input_url}
+              styleDefaults={job.style_defaults}
               previewedGroupId={previewedGroupId}
               pinnedGroupId={pinnedGroupId}
+              previewedCharacter={previewedCharacter}
+              onPreviewCharacter={previewCharacter}
+              onPreviewCharacterEnd={endCharacterPreview}
               panelRef={(element) => { commandPanel.current = element; }}
               register={registerCommand}
               onPreview={previewFromCommand}
@@ -193,9 +210,6 @@ function JobStatus({ resource, paperMargin, onPaperMarginChange }: {
             onChange={(event) => onPaperMarginChange(event.currentTarget.checked)}
           />
         </label>
-        {job?.input_url && !data?.receiving && (
-          <a class="btn btn-ghost btn-sm" href={job.input_url} download>Download raw input</a>
-        )}
       </div>
       {resource.loading && !data && <div class="skeleton h-20 w-full" aria-label="Loading current job" />}
       {resource.error && (

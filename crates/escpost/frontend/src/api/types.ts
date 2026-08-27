@@ -144,11 +144,44 @@ export type CommandEffect =
   | { type: "motion"; before: Position; after: Position }
   | { type: "paint"; bounds: Region };
 
+/** The printer state that decides how a text byte reaches the paper. */
+export type TextStyle = {
+  font: "A" | "B";
+  emphasized: boolean;
+  underline_thickness: number;
+  width_magnification: number;
+  height_magnification: number;
+  reversed: boolean;
+  justification: "left" | "center" | "right";
+  code_page: number;
+  encoding?: string;
+  international_character_set: string;
+  right_side_character_spacing_dots: number;
+  line_spacing_dots: number;
+};
+
+/** The style a printer profile starts a job with. */
+export type StyleDefaults = {
+  line_spacing_dots: number;
+  code_page: number;
+  international_character_set: string;
+};
+
 export type JobCommand = {
   byte_start: number;
   byte_end: number;
   name: string;
   detail: string;
+  /** The bytes that name the command, as uppercase hexadecimal. */
+  code_bytes: string;
+  /** The first parameter bytes, as uppercase hexadecimal. */
+  capped_parameter_bytes: string;
+  /** How many parameter bytes the command has in total. */
+  total_parameter_bytes: number;
+  /** True when the command itself fixes how many parameter bytes follow. */
+  fixed_parameters: boolean;
+  /** The style after this command, sent only where the command changed it. */
+  text_style?: TextStyle;
   paint_lifecycle?: "buffered" | "committed";
   annotation?: { label: string; content: string };
   effects: CommandEffect[];
@@ -168,6 +201,7 @@ export type CurrentJob = {
   completed_at_unix_ms?: number;
   completion?: "closed" | "timeout";
   antialias: boolean;
+  style_defaults: StyleDefaults;
   warnings: string[];
   input_url?: string;
   sheets: JobSheet[];

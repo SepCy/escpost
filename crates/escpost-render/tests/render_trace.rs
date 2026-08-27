@@ -1,8 +1,8 @@
 mod support;
 
 use escpost_render::{
-    CommandCode, DecodedCommand, Effect, Justification, PaintLifecycle, Position, StateChange,
-    render_with_trace,
+    DecodedCommand, Effect, Justification, PaintLifecycle, Position, StateChange,
+    TRACED_COMMAND_BYTES, TextFont, render_with_trace,
 };
 use support::test_profile;
 
@@ -158,7 +158,15 @@ fn raster_image_trace_uses_the_complete_logical_image_area() {
     };
 
     assert_eq!(command.byte_range, 0..input.len());
-    assert_eq!(command.command, DecodedCommand::RasterImage);
+    assert_eq!(
+        command.command,
+        DecodedCommand::RasterImage {
+            width_dots: 8,
+            height_dots: 2,
+            horizontal_scale: 1,
+            vertical_scale: 1
+        }
+    );
     let [Effect::Paint { bounds }] = command.effects.as_slice() else {
         panic!("the raster image should expose its logical bounds");
     };
@@ -181,10 +189,7 @@ fn qr_trace_attributes_bounds_to_the_print_command_only() {
     };
 
     assert_eq!(store.byte_range, 0..9);
-    assert_eq!(
-        store.command,
-        DecodedCommand::Unmodeled(CommandCode::Gs(b'('))
-    );
+    assert_eq!(store.command, DecodedCommand::StoreQrData(1));
     assert!(store.effects.is_empty());
     assert_eq!(command.byte_range, 9..17);
     assert_eq!(command.command, DecodedCommand::QrCode(vec![b'A']));
@@ -212,7 +217,10 @@ fn commands_are_grouped_under_the_sheet_active_when_they_execute() {
     );
     assert_eq!(
         traced.trace.sheets[0].commands[2].command,
-        DecodedCommand::Unmodeled(CommandCode::Gs(b'V'))
+        DecodedCommand::CutPaper {
+            full: true,
+            feed: None
+        }
     );
     assert_eq!(traced.trace.sheets[1].commands.len(), 2);
     assert_eq!(
@@ -236,4 +244,117 @@ fn a_profile_suppressed_line_feed_has_no_motion_effect() {
         line_feed.effects.is_empty(),
         "a profile-suppressed LF must not claim motion"
     );
+}
+
+#[test]
+fn a_code_table_command_names_the_encoding_the_profile_maps_it_to() {
+    let profile = test_profile();
+
+    let traced =
+        render_with_trace(&[0x1b, b't', 2], &profile).expect("traced rendering should succeed");
+
+    assert_eq!(
+        traced.trace.sheets[0].commands[0].command,
+        DecodedCommand::SelectCodeTable {
+            table: 2,
+            encoding: Some("CP850".to_owned())
+        }
+    );
+}
+
+#[test]
+fn a_command_keeps_its_own_bytes_for_the_command_list() {
+    let profile = test_profile();
+
+    let traced =
+        render_with_trace(&[0x1b, b'a', 1, b'A'], &profile).expect("tracing should succeed");
+
+    assert_eq!(traced.trace.sheets[0].commands[0].bytes, [0x1b, b'a', 1]);
+    assert_eq!(traced.trace.sheets[0].commands[1].bytes, [b'A']);
+}
+
+#[test]
+fn a_long_payload_keeps_only_the_start_of_its_bytes() {
+    let profile = test_profile();
+    let width_bytes = 8usize;
+    let height_dots = 16usize;
+    let mut input = vec![
+        0x1d,
+        b'v',
+        b'0',
+        0,
+        width_bytes as u8,
+        0,
+        height_dots as u8,
+        0,
+    ];
+    input.resize(input.len() + width_bytes * height_dots, 0x5a);
+
+    let traced = render_with_trace(&input, &profile).expect("the raster image should render");
+    let command = &traced.trace.sheets[0].commands[0];
+
+    assert_eq!(command.byte_range, 0..input.len());
+    assert_eq!(command.bytes.len(), TRACED_COMMAND_BYTES);
+    assert_eq!(command.bytes[..8], input[..8]);
+}
+
+#[test]
+fn the_first_command_carries_the_style_the_printer_starts_with() {
+    let profile = test_profile();
+
+    let traced = render_with_trace(b"A", &profile).expect("tracing should succeed");
+    let style = traced.trace.sheets[0].commands[0]
+        .style
+        .as_ref()
+        .expect("the first command carries the style the job starts with");
+
+    assert_eq!(style.font, TextFont::A);
+    assert!(!style.emphasized);
+    assert_eq!(style.underline_thickness, 0);
+    assert_eq!(style.width_magnification, 1);
+    assert_eq!(style.height_magnification, 1);
+    assert!(!style.reversed);
+    assert_eq!(style.justification, Justification::Left);
+}
+
+#[test]
+fn a_style_rides_only_on_the_command_that_changed_it() {
+    let profile = test_profile();
+    let input = [b'A', 0x1b, b'E', 1, b'B', 0x1b, b'E', 1, b'C'];
+
+    let traced = render_with_trace(&input, &profile).expect("tracing should succeed");
+    let commands = &traced.trace.sheets[0].commands;
+
+    // The first command holds the style the job starts with.
+    assert!(commands[0].style.is_some());
+    // ESC E turns emphasis on, thus it carries the style it produced.
+    assert_eq!(
+        commands[1].style.as_ref().map(|style| style.emphasized),
+        Some(true)
+    );
+    // A text byte changes no style of its own.
+    assert!(commands[2].style.is_none());
+    // The second ESC E asks for emphasis that is already on.
+    assert!(commands[3].style.is_none());
+    assert!(commands[4].style.is_none());
+}
+
+#[test]
+fn a_style_carries_the_whole_state_that_prints_a_character() {
+    let profile = test_profile();
+    // ESC ! sets font, emphasis, height and width at once; ESC a centres.
+    let input = [0x1b, b'!', 0x39, 0x1b, b'a', 1, b'A'];
+
+    let traced = render_with_trace(&input, &profile).expect("tracing should succeed");
+    let commands = &traced.trace.sheets[0].commands;
+    let style = commands[1]
+        .style
+        .as_ref()
+        .expect("ESC a changes the justification");
+
+    assert_eq!(style.font, TextFont::B);
+    assert!(style.emphasized);
+    assert_eq!(style.height_magnification, 2);
+    assert_eq!(style.width_magnification, 2);
+    assert_eq!(style.justification, Justification::Center);
 }

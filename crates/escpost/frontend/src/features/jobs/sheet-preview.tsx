@@ -1,6 +1,6 @@
 import type { CommandEffect } from "../../api/types";
 import { activateAnnotation, webUrl } from "./annotation";
-import { commandGroupView, motionTerminals, type CommandGroup, type GroupedSheet } from "./model";
+import { motionTerminals, runBoxes, type CommandGroup, type GroupedSheet } from "./model";
 
 type Props = {
   sheet: GroupedSheet;
@@ -10,6 +10,9 @@ type Props = {
   marginFlash: boolean;
   previewedGroupId: string | null;
   pinnedGroupId: string | null;
+  previewedCharacter: number | null;
+  onPreviewCharacter: (index: number) => void;
+  onPreviewCharacterEnd: () => void;
   register: (id: string, element: SVGElement | null) => void;
   onPreview: (id: string) => void;
   onPreviewEnd: (id: string) => void;
@@ -76,6 +79,9 @@ function TraceOverlay(props: Props) {
           markerId={markerId}
           previewed={props.previewedGroupId === group.id}
           pinned={props.pinnedGroupId === group.id}
+          previewedCharacter={props.previewedGroupId === group.id ? props.previewedCharacter : null}
+          onPreviewCharacter={props.onPreviewCharacter}
+          onPreviewCharacterEnd={props.onPreviewCharacterEnd}
           register={props.register}
           onPreview={props.onPreview}
           onPreviewEnd={props.onPreviewEnd}
@@ -88,6 +94,9 @@ function TraceOverlay(props: Props) {
 
 type TraceGroupProps = {
   group: CommandGroup;
+  previewedCharacter: number | null;
+  onPreviewCharacter: (index: number) => void;
+  onPreviewCharacterEnd: () => void;
   groupIndex: number;
   sheetGroups: CommandGroup[];
   markerId: string;
@@ -100,7 +109,7 @@ type TraceGroupProps = {
 };
 
 function TraceGroup(props: TraceGroupProps) {
-  const view = commandGroupView(props.group);
+  const view = props.group.view;
   const paints = view.effects.filter(
     (effect): effect is Extract<CommandEffect, { type: "paint" }> => effect.type === "paint",
   );
@@ -108,6 +117,9 @@ function TraceGroup(props: TraceGroupProps) {
     (effect): effect is Extract<CommandEffect, { type: "motion" }> => effect.type === "motion",
   );
   if (paints.length === 0 && motions.length === 0) return null;
+  // A character and its byte share a place in the group. That holds only while
+  // every command of the group paints exactly once.
+  const pairing = view.characterPairing && paints.length === props.group.commands.length;
   const stateClass = props.pinned ? "trace-pinned" : props.previewed ? "trace-previewed" : "";
   const activate = () => props.onPin(props.group.id);
   return (
@@ -116,7 +128,7 @@ function TraceGroup(props: TraceGroupProps) {
       class={`trace-group ${stateClass}`}
       tabIndex={0}
       role="button"
-      aria-label={`Highlight ${view.name} group at bytes ${view.byteStart} to ${view.byteEnd}`}
+      aria-label={`Highlight ${view.name} group at bytes ${view.firstByte} to ${view.lastByte}`}
       aria-pressed={props.pinned}
       onPointerEnter={() => props.onPreview(props.group.id)}
       onPointerLeave={() => props.onPreviewEnd(props.group.id)}
@@ -130,17 +142,88 @@ function TraceGroup(props: TraceGroupProps) {
         }
       }}
     >
-      {paints.map((paint, index) => (
-        <g key={`paint-${index}`}>
-          <rect class="trace-region" {...paint.bounds} />
-          {view.annotation && (props.previewed || props.pinned) && (
-            <AnnotationLabel annotation={view.annotation} bounds={paint.bounds} />
-          )}
-        </g>
-      ))}
+      {/* A run of characters shows one box per printed line. A single
+          character shows its own box only while the pointer rests on it, the
+          way the row marks the byte that printed it. */}
+      {pairing
+        ? (
+          <>
+            {runBoxes(paints.map((paint) => paint.bounds)).map((box, index) => (
+              <rect key={`run-${index}`} class="trace-region" pointer-events="none" {...box} />
+            ))}
+            {props.previewedCharacter !== null && paints[props.previewedCharacter] && (
+              <CharacterLabel
+                hex={view.parameterBytes[props.previewedCharacter]?.hex ?? ""}
+                bounds={paints[props.previewedCharacter].bounds}
+              />
+            )}
+            {paints.map((paint, index) => (
+              <rect
+                key={`character-${index}`}
+                class={`trace-character ${
+                  props.previewedCharacter === index ? "trace-character-active" : ""
+                }`}
+                onPointerEnter={() => {
+                  props.onPreview(props.group.id);
+                  props.onPreviewCharacter(index);
+                }}
+                onPointerLeave={props.onPreviewCharacterEnd}
+                {...paint.bounds}
+              />
+            ))}
+          </>
+        )
+        : paints.map((paint, index) => (
+          <g key={`paint-${index}`}>
+            <rect class="trace-region" {...paint.bounds} />
+            {view.annotation && (props.previewed || props.pinned) && (
+              <AnnotationLabel annotation={view.annotation} bounds={paint.bounds} />
+            )}
+            {view.printsImage && (props.previewed || props.pinned) && (
+              <SizeLabel bounds={paint.bounds} />
+            )}
+          </g>
+        ))}
       {motions.map((motion, index) => (
         <MotionDecoration key={`motion-${index}`} groups={props.sheetGroups} groupIndex={props.groupIndex} motion={motion} markerId={props.markerId} />
       ))}
+    </g>
+  );
+}
+
+/** Names the dots an image covers, below the image on the sheet. */
+function SizeLabel({ bounds }: {
+  bounds: Extract<CommandEffect, { type: "paint" }>["bounds"];
+}) {
+  const size = `${bounds.width} × ${bounds.height} dots`;
+  const labelWidth = Math.max(28, size.length * 7 + 12);
+  const labelX = bounds.x + bounds.width / 2 - labelWidth / 2;
+  const labelY = bounds.y + bounds.height + 11;
+  return (
+    // The label lies below the image, over whatever the printer put there,
+    // thus it never takes the pointer from it.
+    <g class="trace-label trace-size-label" pointer-events="none">
+      <rect x={labelX} y={labelY - 9} width={labelWidth} height="18" rx="2" />
+      <text x={labelX + labelWidth / 2} y={labelY} dy="0.35em" text-anchor="middle">{size}</text>
+    </g>
+  );
+}
+
+/** Names the byte of the character the pointer rests on, beside it on the
+ * sheet, the way a QR code names its content. */
+function CharacterLabel({ hex, bounds }: {
+  hex: string;
+  bounds: Extract<CommandEffect, { type: "paint" }>["bounds"];
+}) {
+  const labelWidth = Math.max(24, hex.length * 8 + 10);
+  const labelX = bounds.x + bounds.width / 2 - labelWidth / 2;
+  const labelY = bounds.y + bounds.height + 11;
+  return (
+    // The label lies over whatever the printer put below this character, thus
+    // it never takes the pointer from it.
+    <g class="trace-label trace-character-label" pointer-events="none">
+      <rect x={labelX} y={labelY - 9} width={labelWidth} height="18" rx="2" />
+      <text x={labelX + labelWidth / 2} y={labelY} dy="0.35em" text-anchor="middle">{hex}</text>
     </g>
   );
 }

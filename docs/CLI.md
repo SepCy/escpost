@@ -387,7 +387,9 @@ redraws the name, status, transport, connection, and profile rows as complete
 inventory snapshots arrive. While active, it re-reads the selected
 configuration and checks availability every five seconds. Network failures use
 the same two-probe confirmation as a one-shot listing, so a transient refused
-or timed-out connection is not immediately reported as unavailable.
+or timed-out connection is not immediately reported as unavailable. Every
+completed check refreshes the displayed timestamp, including when the printer
+rows and warning are unchanged.
 
 In monitor mode, `--transport usb|network` is a presentation filter for the
 table; the monitor still collects the complete configured inventory. Edit the

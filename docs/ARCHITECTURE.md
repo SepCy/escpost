@@ -338,12 +338,12 @@ The application owns one subscriber-driven `PrinterMonitor`, not one polling
 loop per browser. Its first subscriber starts an immediate collection and an
 active five-second collection cycle; additional subscribers share the same
 snapshots. It re-reads the resolved printer registration on every collection,
-publishes an initial snapshot and later changed inventory or warning snapshots,
-and stops probing as soon as the final subscription closes. A returning
-subscriber receives the retained last snapshot first, followed by a forced
-fresh collection. A successful backend printer registration wakes an active
-monitor so its next authoritative snapshot reflects the new configuration
-without waiting for the normal interval.
+publishes every completed collection so its timestamp records the latest check
+even when the inventory and warning are unchanged, and stops probing as soon as
+the final subscription closes. A returning subscriber receives the retained
+last snapshot first, followed by a fresh collection. A successful backend
+printer registration wakes an active monitor so its next authoritative snapshot
+reflects the new configuration without waiting for the normal interval.
 
 In the browser, the app-scoped `PrinterInventoryProvider` owns the one
 `EventSource` and replaces its cached complete snapshot atomically. It keeps

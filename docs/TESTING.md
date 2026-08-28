@@ -156,11 +156,11 @@ and traversal rejection. They also cover the read-only `/api/status`,
 `/api/printers/list`, `/api/printers/list/events`, `/api/profiles/list`, and
 current-job resource contracts. Printer-monitor tests use deterministic
 collectors and clocks to cover first and last subscriber lifecycle, retained
-snapshot then forced-fresh resumption, five-second collection, idle shutdown,
-and registration-triggered refresh. The printer SSE contract tests verify that
-the stream sends complete inventory snapshots as unnamed default `message`
-events, matching the one-shot resource shape rather than introducing an
-SSE-only envelope,
+snapshot then fresh resumption, five-second collection with fresh timestamps
+for unchanged results, idle shutdown, and registration-triggered refresh. The
+printer SSE contract tests verify that the stream sends complete inventory
+snapshots as unnamed default `message` events, matching the one-shot resource
+shape rather than introducing an SSE-only envelope,
 while confirming that unknown API routes stay JSON rather than falling back to
 HTML. They also cover the discovery routes: `/api/printers/discover/networks`
 lists detected and skipped adapters, and `/api/printers/discover` streams

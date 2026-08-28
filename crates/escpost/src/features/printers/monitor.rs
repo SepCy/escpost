@@ -138,12 +138,10 @@ impl PrinterMonitor {
     }
 
     async fn run(self, generation: u64, refresh: Arc<Notify>) {
-        let mut forced = true;
         loop {
-            if !self.collect_and_publish(generation, forced).await {
+            if !self.collect_and_publish(generation).await {
                 return;
             }
-            forced = false;
             tokio::select! {
                 _ = tokio::time::sleep(COLLECTION_INTERVAL) => {}
                 _ = refresh.notified() => {}
@@ -151,7 +149,7 @@ impl PrinterMonitor {
         }
     }
 
-    async fn collect_and_publish(&self, generation: u64, forced: bool) -> bool {
+    async fn collect_and_publish(&self, generation: u64) -> bool {
         let _collection = self.inner.collection.lock().await;
         let active = {
             let state = self
@@ -193,10 +191,7 @@ impl PrinterMonitor {
         if state.subscribers == 0 || state.generation != generation {
             return false;
         }
-        let previous = self.inner.snapshots.borrow().clone();
-        if should_publish(previous.as_ref(), &snapshot, forced) {
-            self.inner.snapshots.send_replace(Some(snapshot));
-        }
+        self.inner.snapshots.send_replace(Some(snapshot));
         true
     }
 }
@@ -252,14 +247,6 @@ fn snapshot_from_response(response: list::Response, updated_at: OffsetDateTime) 
         warning: None,
         printers: response.printers,
     }
-}
-
-fn should_publish(previous: Option<&Snapshot>, next: &Snapshot, forced: bool) -> bool {
-    forced
-        || previous.is_none()
-        || previous.is_some_and(|previous| {
-            previous.warning != next.warning || previous.printers != next.printers
-        })
 }
 
 #[cfg(test)]
@@ -427,7 +414,7 @@ mod tests {
         }
         let waiting_monitor = monitor.clone();
         let waiting = tokio::spawn(async move {
-            let _ = waiting_monitor.collect_and_publish(1, true).await;
+            let _ = waiting_monitor.collect_and_publish(1).await;
         });
 
         tokio::task::yield_now().await;
@@ -487,7 +474,7 @@ mod tests {
             state.generation = 2;
         }
 
-        let _ = monitor.collect_and_publish(1, true).await;
+        let _ = monitor.collect_and_publish(1).await;
 
         assert!(!receiver.has_changed().unwrap());
         assert_eq!(
@@ -510,16 +497,19 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn unchanged_ordinary_ticks_emit_nothing() {
+    async fn unchanged_ordinary_ticks_emit_a_fresh_timestamp() {
         let collector = ScriptedCollector::new([success("kitchen"), success("kitchen")]);
         let monitor = test_monitor(collector.clone());
         let mut subscription = monitor.subscribe();
 
-        subscription.next().await.unwrap();
+        let initial = subscription.next().await.unwrap();
         tokio::time::advance(std::time::Duration::from_secs(5)).await;
         wait_for_calls(&collector, 2).await;
 
-        assert!(!subscription.receiver.has_changed().unwrap());
+        assert!(subscription.receiver.has_changed().unwrap());
+        let refreshed = subscription.next().await.unwrap();
+        assert_eq!(refreshed.printers, initial.printers);
+        assert!(refreshed.updated_at > initial.updated_at);
     }
 
     #[tokio::test(start_paused = true)]
@@ -575,18 +565,22 @@ mod tests {
     }
 
     #[tokio::test(start_paused = true)]
-    async fn repeated_identical_failure_is_silent() {
+    async fn repeated_identical_failure_emits_a_fresh_timestamp() {
         let collector = ScriptedCollector::new([success("kitchen"), failure(), failure()]);
         let monitor = test_monitor(collector.clone());
         let mut subscription = monitor.subscribe();
 
         subscription.next().await.unwrap();
         tokio::time::advance(std::time::Duration::from_secs(5)).await;
-        subscription.next().await.unwrap();
+        let failed = subscription.next().await.unwrap();
         tokio::time::advance(std::time::Duration::from_secs(5)).await;
         wait_for_calls(&collector, 3).await;
 
-        assert!(!subscription.receiver.has_changed().unwrap());
+        assert!(subscription.receiver.has_changed().unwrap());
+        let refreshed = subscription.next().await.unwrap();
+        assert_eq!(refreshed.printers, failed.printers);
+        assert_eq!(refreshed.warning, failed.warning);
+        assert!(refreshed.updated_at > failed.updated_at);
     }
 
     #[tokio::test(start_paused = true)]

@@ -61,6 +61,7 @@ services:
   # shape discovery expects of a real printer on a real segment.
   dummy-printer:
     image: escpost-development
+    stop_signal: SIGINT
     build:
       context: .
       args:

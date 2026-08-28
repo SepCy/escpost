@@ -12,6 +12,7 @@ export type PrinterInventoryResource =
 
 const PrinterInventoryContext = createContext<PrinterInventoryResource | null>(null);
 const FLASH_DURATION = 1_200;
+const RETRY_DELAY_MS = 2_000;
 
 function nextFlashes(previous: PrintersResponse | null, next: PrintersResponse, current: PrinterFlashes): PrinterFlashes {
   if (!previous) return current;
@@ -28,13 +29,18 @@ function nextFlashes(previous: PrintersResponse | null, next: PrintersResponse, 
   return flashes;
 }
 
-export function PrinterInventoryProvider({ children }: { children: preact.ComponentChildren }) {
+export function PrinterInventoryProvider({ children, retryDelayMs = RETRY_DELAY_MS }: {
+  children: preact.ComponentChildren;
+  retryDelayMs?: number;
+}) {
   const [resource, setResource] = useState<PrinterInventoryResource>({
     phase: "checking", snapshot: null, error: null, printerFlashes: {},
   });
+  const [attempt, setAttempt] = useState(0);
   const timeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
+    let retry: ReturnType<typeof setTimeout> | undefined;
     const close = openPrinterInventoryStream({
       onSnapshot: (snapshot) => {
         setResource((current) => {
@@ -60,13 +66,18 @@ export function PrinterInventoryProvider({ children }: { children: preact.Compon
         setResource((current) => ({
           phase: "disconnected", snapshot: current.snapshot, error, printerFlashes: current.printerFlashes,
         }));
+        retry ??= setTimeout(() => setAttempt((current) => current + 1), retryDelayMs);
       },
     });
     return () => {
+      clearTimeout(retry);
       close();
-      for (const timeout of timeouts.current.values()) clearTimeout(timeout);
-      timeouts.current.clear();
     };
+  }, [attempt, retryDelayMs]);
+
+  useEffect(() => () => {
+    for (const timeout of timeouts.current.values()) clearTimeout(timeout);
+    timeouts.current.clear();
   }, []);
 
   return <PrinterInventoryContext.Provider value={resource}>{children}</PrinterInventoryContext.Provider>;

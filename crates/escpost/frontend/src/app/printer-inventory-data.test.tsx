@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, jest, test } from "bun:test";
-import { act, cleanup, render, screen } from "@testing-library/preact";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/preact";
 import { PrinterInventoryProvider, usePrinterInventory } from "./printer-inventory-data";
 
 class FakeEventSource {
@@ -31,10 +31,12 @@ function Probe() {
   return <p>{`${resource.phase}:${resource.snapshot?.printers.map((printer) => printer.name).join(",") ?? "null"}:${resource.error?.message ?? "none"}:${JSON.stringify(resource.printerFlashes)}:${resource.snapshot?.warning ?? "none"}`}</p>;
 }
 
-function renderProvider() {
+function renderProvider(retryDelayMs?: number) {
   FakeEventSource.instances = [];
   globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
-  return render(<PrinterInventoryProvider><Probe /></PrinterInventoryProvider>);
+  return render(
+    <PrinterInventoryProvider retryDelayMs={retryDelayMs}><Probe /></PrinterInventoryProvider>,
+  );
 }
 
 afterEach(() => { cleanup(); jest.useRealTimers(); globalThis.EventSource = originalEventSource; });
@@ -91,5 +93,30 @@ describe("PrinterInventoryProvider", () => {
     const source = FakeEventSource.instances[0]!;
     view.unmount();
     expect(source.closed).toBe(true);
+  });
+
+  test("opens the stream again after the browser gives up on it", async () => {
+    renderProvider(0);
+    const first = FakeEventSource.instances[0]!;
+    act(() => first.emit("message", snapshot([kitchen()])));
+
+    act(() => first.emit("error"));
+    expect(screen.getByText("disconnected:Kitchen:Printer monitoring disconnected; retrying automatically.:{}:none")).toBeTruthy();
+
+    await waitFor(() => expect(FakeEventSource.instances).toHaveLength(2));
+    expect(first.closed).toBe(true);
+    act(() => FakeEventSource.instances[1]!.emit("message", snapshot([])));
+
+    expect(screen.getByText("ready::none:{}:none")).toBeTruthy();
+  });
+
+  test("stops trying once the reader leaves the page", async () => {
+    const view = renderProvider(0);
+    act(() => FakeEventSource.instances[0]!.emit("error"));
+    view.unmount();
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(FakeEventSource.instances).toHaveLength(1);
   });
 });

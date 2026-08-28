@@ -331,9 +331,9 @@ describe("DiscoveryPanel", () => {
     });
 
     expect(screen.getByText("No new printers")).toBeTruthy();
-    expect(screen.getByText("All 2 discovered printers are already configured. They are listed below with live status.")).toBeTruthy();
+    expect(screen.getByText("Everything found is already configured; see live status below.")).toBeTruthy();
 
-    // One printer is not "all 1 printers are".
+    // The guidance does not change with the number of configured results.
     rerender({
       phase: "done",
       completed: 508,
@@ -341,7 +341,7 @@ describe("DiscoveryPanel", () => {
       printers: [networkPrinter("10.42.0.71", ["kitchen"])],
     });
 
-    expect(screen.getByText("The one printer discovered is already configured. It is listed below with live status.")).toBeTruthy();
+    expect(screen.getByText("Everything found is already configured; see live status below.")).toBeTruthy();
   });
 
   test("hands the Add button the discovered printer its row was built from", () => {

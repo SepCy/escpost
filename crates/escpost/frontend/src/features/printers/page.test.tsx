@@ -162,6 +162,50 @@ describe("PrintersPage", () => {
     expect(card?.closest("article")?.classList.contains("printer-row-found")).toBe(true);
   });
 
+  test("a scan re-finding an unavailable configured printer marks it connected and flashes its inventory row", async () => {
+    renderPage();
+    act(() => FakeEventSource.forUrl("/api/printers/list/events")?.emit("message", inventory([
+      { name: "Kitchen", transport: "network", availability: "unavailable", profile: null, connection: { type: "network", host: "10.0.0.8", port: 9100 } },
+    ])));
+    const scan = await screen.findByRole("button", { name: "Scan" });
+    await waitFor(() => expect(scan.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(scan);
+
+    act(() => FakeEventSource.forUrlPrefix("/api/printers/discover")?.emit("printer", {
+      transport: "network", configured_names: ["Kitchen"], configured_profile: null, interface: "eth0",
+      connection: { type: "network", host: "10.0.0.8", port: 9100 },
+    }));
+
+    expect(screen.getAllByText("Connected")).toHaveLength(2);
+    const [row, card] = screen.getAllByText("Kitchen");
+    expect(row?.closest("tr")?.classList.contains("printer-row-found")).toBe(true);
+    expect(card?.closest("article")?.classList.contains("printer-row-found")).toBe(true);
+    expect(screen.getByText("1 printer found (0 new)")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Add 10.0.0.8:9100" })).toBeNull();
+  });
+
+  test("a scan re-finding an already-connected configured printer still flashes its inventory row", async () => {
+    renderPage();
+    act(() => FakeEventSource.forUrl("/api/printers/list/events")?.emit("message", inventory([
+      { name: "Kitchen", transport: "network", availability: "connected", profile: null, connection: { type: "network", host: "10.0.0.8", port: 9100 } },
+    ])));
+    const [settledRow, settledCard] = screen.getAllByText("Kitchen");
+    expect(settledRow?.closest("tr")?.classList.contains("printer-row-found")).toBe(false);
+    expect(settledCard?.closest("article")?.classList.contains("printer-row-found")).toBe(false);
+    const scan = await screen.findByRole("button", { name: "Scan" });
+    await waitFor(() => expect(scan.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(scan);
+
+    act(() => FakeEventSource.forUrlPrefix("/api/printers/discover")?.emit("printer", {
+      transport: "network", configured_names: ["Kitchen"], configured_profile: null, interface: "eth0",
+      connection: { type: "network", host: "10.0.0.8", port: 9100 },
+    }));
+
+    const [row, card] = screen.getAllByText("Kitchen");
+    expect(row?.closest("tr")?.classList.contains("printer-row-found")).toBe(true);
+    expect(card?.closest("article")?.classList.contains("printer-row-found")).toBe(true);
+  });
+
   test("keeps discovery results after cancelling a scan", async () => {
     renderPage();
     act(() => FakeEventSource.forUrl("/api/printers/list/events")?.emit("message", inventory([])));

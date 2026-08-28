@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, jest, test } from "bun:test";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/preact";
-import { PrinterInventoryProvider, usePrinterInventory } from "./printer-inventory-data";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
+import { PrinterInventoryProvider, usePrinterInventory, useReportDiscoveredPrinters } from "./printer-inventory-data";
 
 class FakeEventSource {
   static instances: FakeEventSource[] = [];
@@ -28,7 +28,11 @@ const kitchen = (availability: "connected" | "unavailable" = "connected") => ({
 
 function Probe() {
   const resource = usePrinterInventory();
-  return <p>{`${resource.phase}:${resource.snapshot?.printers.map((printer) => printer.name).join(",") ?? "null"}:${resource.error?.message ?? "none"}:${JSON.stringify(resource.printerFlashes)}:${resource.snapshot?.warning ?? "none"}`}</p>;
+  const reportDiscoveredPrinters = useReportDiscoveredPrinters();
+  return <>
+    <p>{`${resource.phase}:${resource.snapshot?.printers.map((printer) => printer.name).join(",") ?? "null"}:${resource.error?.message ?? "none"}:${JSON.stringify(resource.printerFlashes)}:${resource.snapshot?.warning ?? "none"}`}</p>
+    <button type="button" onClick={() => reportDiscoveredPrinters(["Kitchen"])}>Report Kitchen</button>
+  </>;
 }
 
 function renderProvider(retryDelayMs?: number) {
@@ -85,6 +89,23 @@ describe("PrinterInventoryProvider", () => {
     act(() => source.emit("message", snapshot([kitchen("connected")] )));
     expect(screen.getByText("ready:Kitchen:none:{\"Kitchen\":\"found\"}:none")).toBeTruthy();
     act(() => { jest.advanceTimersByTime(1_200); });
+    expect(screen.getByText("ready:Kitchen:none:{}:none")).toBeTruthy();
+  });
+
+  test("restarts a discovery flash's 1.2-second window when the printer is found again", () => {
+    jest.useFakeTimers();
+    renderProvider();
+    act(() => FakeEventSource.instances[0]!.emit("message", snapshot([kitchen()])));
+
+    fireEvent.click(screen.getByRole("button", { name: "Report Kitchen" }));
+    act(() => { jest.advanceTimersByTime(1_000); });
+    fireEvent.click(screen.getByRole("button", { name: "Report Kitchen" }));
+    act(() => { jest.advanceTimersByTime(200); });
+    expect(screen.getByText("ready:Kitchen:none:{\"Kitchen\":\"found\"}:none")).toBeTruthy();
+
+    act(() => { jest.advanceTimersByTime(999); });
+    expect(screen.getByText("ready:Kitchen:none:{\"Kitchen\":\"found\"}:none")).toBeTruthy();
+    act(() => { jest.advanceTimersByTime(1); });
     expect(screen.getByText("ready:Kitchen:none:{}:none")).toBeTruthy();
   });
 

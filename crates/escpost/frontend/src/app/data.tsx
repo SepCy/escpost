@@ -4,6 +4,7 @@ import { getProfiles } from "../api/client";
 import { openDiscoveryStream } from "../api/discovery-stream";
 import type { DiscoveryQuery, UsbDiscoveryFailure } from "../api/discovery-stream";
 import type { AddPrinterBody, DiscoveredPrinter, ProfilesResponse } from "../api/types";
+import { useReportDiscoveredPrinters } from "./printer-inventory-data";
 
 type ResourcePhase = "loading" | "ready" | "refreshing" | "error";
 type ScanPhase = "idle" | "running" | "done" | "stopped" | "error";
@@ -49,6 +50,7 @@ function registeredAs(discovered: DiscoveredPrinter, connection: AddPrinterBody[
 }
 
 export function AppDataProvider({ children }: { children: preact.ComponentChildren }) {
+  const reportDiscoveredPrinters = useReportDiscoveredPrinters();
   const [profiles, setProfiles] = useState<ProfileResource>(initialProfiles);
   const [scan, setScan] = useState<ScanState>(initialScan);
   const [scanQuery, setScanQuery] = useState<DiscoveryQuery>(initialScanQuery);
@@ -64,7 +66,8 @@ export function AppDataProvider({ children }: { children: preact.ComponentChildr
 
   const handleDiscoveredPrinter = useCallback((printer: DiscoveredPrinter) => {
     setScan((current) => ({ ...current, printers: [...current.printers, printer] }));
-  }, []);
+    if (printer.configured_names.length > 0) reportDiscoveredPrinters(printer.configured_names);
+  }, [reportDiscoveredPrinters]);
 
   const startScan = useCallback((query: DiscoveryQuery) => {
     closeScan();

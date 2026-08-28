@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import { useState } from "preact/hooks";
 import type { DiscoveryQuery } from "../../api/discovery-stream";
@@ -96,7 +96,7 @@ function gone(element: Element | null) {
   return element === null;
 }
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); jest.useRealTimers(); });
 
 describe("DiscoveryCard", () => {
   test("publishes no subnets when every known network is checked, so the scan runs in automatic mode", async () => {
@@ -361,6 +361,49 @@ describe("DiscoveryCard", () => {
     expect(await screen.findByLabelText("10.42.0.0/24")).toBeTruthy();
     expect(gone(screen.queryByLabelText("Detecting networks"))).toBe(true);
     expectScope({ usb: true, network: true, subnets: [], port: 9100, timeoutMs: 1000 });
+  });
+
+  test("Refresh replaces the known networks while preserving the configured scope", async () => {
+    const refreshed: DiscoveryNetworksResponse = {
+      ...twoNetworks,
+      networks: [
+        { subnet: "10.42.0.0/24", interface: "enx0", hosts: 253 },
+        { subnet: "172.20.0.0/24", interface: "tun0", hosts: 252 },
+      ],
+    };
+    const responses = [json(twoNetworks), json(refreshed)];
+    globalThis.fetch = (() => Promise.resolve(responses.shift()!)) as unknown as typeof globalThis.fetch;
+    render(<Options query={noScanYet} />);
+    fireEvent.click(disclosure());
+    // Mount is deliberately immediate; only a reader asking for Refresh gets
+    // the minimum visible loading interval.
+    fireEvent.click(await screen.findByLabelText("10.42.0.0/24"));
+    fireEvent.input(screen.getByLabelText("RAW TCP port"), { target: { value: "9101" } });
+
+    jest.useFakeTimers();
+    const refresh = screen.getByRole("button", { name: "Refresh network list" }) as HTMLButtonElement;
+    fireEvent.click(refresh);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByLabelText("Detecting networks")).toBeTruthy();
+    expect(refresh.disabled).toBe(true);
+    expect(gone(screen.queryByLabelText("172.20.0.0/24"))).toBe(true);
+    await act(async () => { jest.advanceTimersByTime(999); await Promise.resolve(); });
+    expect(screen.getByLabelText("Detecting networks")).toBeTruthy();
+    await act(async () => { jest.advanceTimersByTime(1); await Promise.resolve(); });
+
+    const added = screen.getByLabelText("172.20.0.0/24") as HTMLInputElement;
+    expect(gone(screen.queryByLabelText("192.168.1.0/24"))).toBe(true);
+    expect((screen.getByLabelText("10.42.0.0/24") as HTMLInputElement).checked).toBe(false);
+    expect(added.checked).toBe(true);
+    expect((screen.getByLabelText("RAW TCP port") as HTMLInputElement).value).toBe("9101");
+    expectScope({
+      usb: true,
+      network: true,
+      subnets: ["172.20.0.0/24"],
+      port: 9101,
+      timeoutMs: 1000,
+    });
   });
 
   // A failed detection refuses the one button that starts a scan, so its

@@ -86,6 +86,11 @@ const FIELD_LABEL = "text-xs font-medium text-base-content/60";
 // row dims its text rather than itself, so nothing dims the control twice.
 const CHECKBOX = "checkbox checkbox-xs border-base-content/40 disabled:opacity-100";
 
+// Fast local refreshes can finish before the browser paints their skeleton.
+// Hold only button-triggered refreshes long enough for that feedback to read;
+// mount, Reset, and Retry should still show their responses immediately.
+const MANUAL_REFRESH_FEEDBACK_MS = 1000;
+
 // Slashes and dots are legal in an id but hostile to anything that resolves
 // one as a selector, so a subnet becomes an id the plain way.
 function checkboxId(value: string) {
@@ -124,9 +129,9 @@ function checkboxId(value: string) {
  * renders nothing at all until there is a scan, and the bar simply moves up
  * to meet the accordion — no placeholder, no gap.
  *
- * The networks are fetched once per mount, and again on Reset: adapters
- * change with a cable or a VPN, so the server stays the authority on which
- * networks exist while `query` says which of them were chosen.
+ * The networks are fetched once per mount, and again on Reset or Refresh:
+ * adapters change with a cable or a VPN, so the server stays the authority on
+ * which networks exist while `query` says which of them were chosen.
  */
 export function DiscoveryCard({ query, open, onOpenChange, results, actions }: {
   query: DiscoveryQuery;
@@ -188,23 +193,44 @@ export function DiscoveryCard({ query, open, onOpenChange, results, actions }: {
   };
 
   // Whether the next networks response should be seeded from the recorded
-  // scope. True for a mount and for Retry — both are the card arriving at a
-  // scan it has not configured yet — and false for exactly one reload, the
-  // one Reset asks for.
+  // scope. True for a mount and a Retry after initial detection failed, when
+  // the card has not configured itself yet. False for Reset or Refresh and
+  // remains false if either request fails, so their Retry still preserves the
+  // controls.
   const reseed = useRef(true);
+  const holdRefreshFeedback = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
+    const holdFeedback = holdRefreshFeedback.current;
+    holdRefreshFeedback.current = false;
+    let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+    let releaseFeedback: (() => void) | undefined;
+    const feedback = holdFeedback
+      ? new Promise<void>((resolve) => {
+          releaseFeedback = resolve;
+          feedbackTimer = setTimeout(resolve, MANUAL_REFRESH_FEEDBACK_MS);
+        })
+      : null;
     setResource({ data: null, error: null });
     void getDiscoveryNetworks(controller.signal)
-      .then((data) => {
+      .then(async (data) => {
+        if (feedback) {
+          await feedback;
+        }
+        if (controller.signal.aborted) {
+          return;
+        }
         setResource({ data, error: null });
         if (reseed.current) {
           seed(data);
         }
         reseed.current = true;
       })
-      .catch((error: unknown) => {
+      .catch(async (error: unknown) => {
+        if (feedback) {
+          await feedback;
+        }
         if (controller.signal.aborted) {
           return;
         }
@@ -213,7 +239,13 @@ export function DiscoveryCard({ query, open, onOpenChange, results, actions }: {
           error: error instanceof Error ? error : new Error("Unable to detect this machine's networks."),
         });
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (feedbackTimer !== undefined) {
+        clearTimeout(feedbackTimer);
+      }
+      releaseFeedback?.();
+    };
   }, [reloads]);
 
   const data = resource.data;
@@ -328,6 +360,12 @@ export function DiscoveryCard({ query, open, onOpenChange, results, actions }: {
     setUnchecked((current) => current.includes(subnet)
       ? current.filter((entry) => entry !== subnet)
       : [...current, subnet]);
+  };
+
+  const refresh = () => {
+    reseed.current = false;
+    holdRefreshFeedback.current = true;
+    setReloads((count) => count + 1);
   };
 
   // Back to the scope of a scan with no options set, which is the scope
@@ -474,7 +512,17 @@ export function DiscoveryCard({ query, open, onOpenChange, results, actions }: {
                   )}
                 </div>
               )}
-              <p class="text-xs text-base-content/60">Detected from this machine's interfaces.</p>
+              <p class="text-xs text-base-content/60">
+                Detected from this machine's interfaces.{" "}
+                <button
+                  type="button"
+                  class="link link-primary font-medium disabled:cursor-not-allowed disabled:no-underline disabled:opacity-50"
+                  disabled={data === null}
+                  onClick={refresh}
+                >
+                  Refresh network list
+                </button>
+              </p>
             </div>
 
             <div class="space-y-1">

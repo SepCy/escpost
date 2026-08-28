@@ -1,5 +1,4 @@
 import { useState } from "preact/hooks";
-import type { DiscoveryQuery } from "../../api/discovery-stream";
 import type { AddPrinterBody, DiscoveredPrinter } from "../../api/types";
 import { useAppData } from "../../app/data";
 import { AddPrinterDialog } from "./add-printer-dialog";
@@ -21,14 +20,6 @@ export function PrintersPage() {
   const [registering, setRegistering] = useState<{ printer: DiscoveredPrinter | null } | null>(null);
 
   const running = scan.phase === "running";
-
-  // Starting shuts the form: it has done its job, and the progress and
-  // results it produces need the room. This is the only place a scan starts,
-  // so it is the only place that has to remember.
-  const beginScan = (next: DiscoveryQuery) => {
-    setOptionsOpen(false);
-    startScan(next);
-  };
 
   const handleAdded = (name: string, connection: AddPrinterBody["connection"]) => {
     setRegistering(null);
@@ -110,7 +101,7 @@ export function PrintersPage() {
                 type="button"
                 class="btn btn-primary btn-sm"
                 disabled={scope === null}
-                onClick={() => scope && beginScan(scope)}
+                onClick={() => scope && startScan(scope)}
               >
                 {scan.phase === "idle" ? "Scan" : "Rescan"}
               </button>

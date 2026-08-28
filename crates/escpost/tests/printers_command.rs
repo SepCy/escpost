@@ -1615,6 +1615,58 @@ fn printers_add_discover_registers_the_single_discovered_printer() {
     fs::remove_dir_all(directory).expect("the test directory should be removable");
 }
 
+/// The fixed scan preamble and the live progress bar share stderr. A real
+/// terminal is required here: indicatif deliberately hides bars when stderr
+/// is piped, which would make an ordinary `Command::output` test blind to a
+/// stale row. Linux's util-linux `script` supplies the PTY; vt100 replays its
+/// control sequences so the assertion sees the screen a person sees rather
+/// than its raw bytes.
+#[cfg(target_os = "linux")]
+#[test]
+fn printers_add_discover_leaves_no_stale_progress_row() {
+    let listener = TcpListener::bind("127.0.0.2:0").expect("an ephemeral port should bind");
+    let port = listener
+        .local_addr()
+        .expect("the listener should report its address")
+        .port();
+    let directory = temporary_directory("add-discover-progress");
+    let config = directory.join("printers.toml");
+    let command = format!(
+        "{} --non-interactive printers --config {} add kitchen --transport network --discover --subnet 127.0.0.2/32 --port {port}",
+        env!("CARGO_BIN_EXE_escpost"),
+        config.display(),
+    );
+
+    let output = Command::new("script")
+        .args([
+            "--quiet",
+            "--return",
+            "--flush",
+            "--command",
+            &command,
+            "/dev/null",
+        ])
+        .env("TERM", "xterm-256color")
+        .output()
+        .expect("the PTY-hosted escpost command should finish");
+    let mut terminal = vt100::Parser::new(50, 160, 0);
+    terminal.process(&output.stdout);
+    let screen = terminal.screen().contents();
+
+    assert!(output.status.success(), "command failed:\n{screen}");
+    assert!(
+        screen.contains(&format!(
+            "Scanning 1 network on port {port} (1 address):\n  - 127.0.0.2/32"
+        )),
+        "the permanent scan announcement must remain visible:\n{screen}"
+    );
+    assert!(
+        !screen.contains("Scanning for network printers"),
+        "the cleared live bar must leave no stale scan row:\n{screen}"
+    );
+    fs::remove_dir_all(directory).expect("the test directory should be removable");
+}
+
 #[cfg(unix)]
 #[test]
 fn printers_add_discover_fails_when_nothing_is_listening() {

@@ -526,7 +526,7 @@ async fn discover_printer_for_add(
                 scan_targets,
                 skipped,
                 ..
-            } => {
+            } => bar.suspend(|| {
                 let scan = scope
                     .network_scan()
                     .expect("add discovery always prepares a network scope");
@@ -540,7 +540,7 @@ async fn discover_printer_for_add(
                 if scan.uses_automatic_subnets() {
                     eprintln!("Tip: pass --subnet <CIDR> to scan a different network.");
                 }
-            }
+            }),
             // Discovery for `add` is always network-only, so USB events
             // never fire here; the final `Response` is what selection reads.
             DiscoveryEvent::UsbPrinter(_)

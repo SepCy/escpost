@@ -61,6 +61,7 @@ rustix.workspace = true
 # Dev-only, so it never reaches the shipped binary.
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+vt100.workspace = true
 
 [lints]
 workspace = true

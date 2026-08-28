@@ -2,7 +2,7 @@ import { afterEach, describe, expect, jest, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import type { UsbDiscoveryFailure } from "../../api/discovery-stream";
 import type { DiscoveredPrinter, UsbConnection } from "../../api/types";
-import type { ScanState } from "../../app/data";
+import type { ScanState } from "../../app/printer-discovery-data";
 import { DiscoveryPanel } from "./discovery-panel";
 
 const idle: ScanState = {

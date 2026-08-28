@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import { addPrinter } from "../../api/client";
 import type { AddPrinterBody, DiscoveredPrinter, UsbConnection } from "../../api/types";
-import { useAppData } from "../../app/data";
+import { useProfileData } from "../../app/profile-data";
 import { usePrinterInventory } from "../../app/printer-inventory-data";
 import { useServerStatus } from "../../app/server-status-data";
 import { endpointHex, usbHex } from "./usb";
@@ -107,7 +107,7 @@ export function AddPrinterDialog({ printer, onClose, onAdded }: {
   onClose: () => void;
   onAdded: (name: string, connection: AddPrinterBody["connection"]) => void;
 }) {
-  const { profiles, ensureProfiles } = useAppData();
+  const { profiles, ensureProfiles } = useProfileData();
   const inventory = usePrinterInventory();
   const status = useServerStatus();
   const connection = printer?.connection ?? null;

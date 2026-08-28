@@ -306,10 +306,11 @@ labeled cards on narrow screens. Print jobs renders the current job directly;
 job history is a later capability. Printers discovers and registers printers as
 well as listing them, which makes it the first page that writes. Its inventory
 stream is owned by the app-scoped `PrinterInventoryProvider`, while discovery
-scan state lives in the application data provider rather than the page
+scan state lives in the app-scoped `PrinterDiscoveryProvider` rather than the page
 component. In-app navigation therefore neither opens another inventory stream
-nor drops the retained inventory rows; the shell's global status block shows a
-scan's progress from any page.
+nor drops the retained inventory rows or an active scan; the shell's global
+status block shows a scan's progress from any page. The profile catalog is
+loaded lazily and retained by the independent `ProfileDataProvider`.
 
 Feature-local HTTP adapters call the same application operations as the CLI.
 Read-only routes mirror CLI paths: `GET /api/printers/list` and

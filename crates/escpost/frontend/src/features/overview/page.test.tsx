@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, render, screen, within } from "@testing-library/preact";
-import { AppDataProvider } from "../../app/data";
 import { PrinterInventoryProvider } from "../../app/printer-inventory-data";
 import { ServerStatusProvider } from "../../app/server-status-data";
 import type { ServerStatusSnapshot } from "../../api/types";
@@ -26,7 +25,7 @@ function renderOverview(
 ) {
   FakeEventSource.instances = [];
   globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
-  render(<ServerStatusProvider><PrinterInventoryProvider><AppDataProvider><OverviewPage /></AppDataProvider></PrinterInventoryProvider></ServerStatusProvider>);
+  render(<ServerStatusProvider><PrinterInventoryProvider><OverviewPage /></PrinterInventoryProvider></ServerStatusProvider>);
   act(() => FakeEventSource.forUrl("/api/status/events")?.emit("message", status));
   const source = FakeEventSource.forUrl("/api/printers/list/events")!;
   if (emitInventory) act(() => source.emit("message", { updated_at: "2026-08-26T14:32:10Z", warning, printers }));

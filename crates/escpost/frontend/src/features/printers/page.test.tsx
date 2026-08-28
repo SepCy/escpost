@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, jest, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/preact";
 import { useState } from "preact/hooks";
-import { AppDataProvider } from "../../app/data";
+import { PrinterDiscoveryProvider } from "../../app/printer-discovery-data";
 import { PrinterInventoryProvider } from "../../app/printer-inventory-data";
+import { ProfileDataProvider } from "../../app/profile-data";
 import { ServerStatusProvider } from "../../app/server-status-data";
 import { PrintersPage } from "./page";
 
@@ -47,7 +48,7 @@ function renderPage() {
   globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
   fetchMock = jest.fn(pageFetch);
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
-  render(<ServerStatusProvider><PrinterInventoryProvider><AppDataProvider><PrintersPage /></AppDataProvider></PrinterInventoryProvider></ServerStatusProvider>);
+  render(<ServerStatusProvider><PrinterInventoryProvider><PrinterDiscoveryProvider><ProfileDataProvider><PrintersPage /></ProfileDataProvider></PrinterDiscoveryProvider></PrinterInventoryProvider></ServerStatusProvider>);
   act(() => FakeEventSource.forUrl("/api/status/events")?.emit("message", { virtual_printer: null, jobs_processed: 0, config_path: "/tmp/printers.toml" }));
 }
 
@@ -64,7 +65,7 @@ function renderToggleablePage() {
   globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
   fetchMock = jest.fn(pageFetch);
   globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
-  render(<ServerStatusProvider><PrinterInventoryProvider><AppDataProvider><ToggleablePrintersPage /></AppDataProvider></PrinterInventoryProvider></ServerStatusProvider>);
+  render(<ServerStatusProvider><PrinterInventoryProvider><PrinterDiscoveryProvider><ProfileDataProvider><ToggleablePrintersPage /></ProfileDataProvider></PrinterDiscoveryProvider></PrinterInventoryProvider></ServerStatusProvider>);
   act(() => FakeEventSource.forUrl("/api/status/events")?.emit("message", { virtual_printer: null, jobs_processed: 0, config_path: "/tmp/printers.toml" }));
   act(() => FakeEventSource.forUrl("/api/printers/list/events")?.emit("message", inventory([])));
 }

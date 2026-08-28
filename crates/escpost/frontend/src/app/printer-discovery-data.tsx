@@ -1,12 +1,10 @@
 import { createContext } from "preact";
 import { useCallback, useContext, useEffect, useRef, useState } from "preact/hooks";
-import { getProfiles } from "../api/client";
 import { openDiscoveryStream } from "../api/discovery-stream";
 import type { DiscoveryQuery, UsbDiscoveryFailure } from "../api/discovery-stream";
-import type { AddPrinterBody, DiscoveredPrinter, ProfilesResponse } from "../api/types";
+import type { AddPrinterBody, DiscoveredPrinter } from "../api/types";
 import { useReportDiscoveredPrinters } from "./printer-inventory-data";
 
-type ResourcePhase = "loading" | "ready" | "refreshing" | "error";
 type ScanPhase = "idle" | "running" | "done" | "stopped" | "error";
 
 export type ScanState = {
@@ -18,12 +16,7 @@ export type ScanState = {
   error: string | null;
 };
 
-export type ProfileResource = { data: ProfilesResponse | null; error: Error | null; phase: ResourcePhase };
-
-type AppData = {
-  profiles: ProfileResource;
-  ensureProfiles: () => Promise<void>;
-  refreshProfiles: () => Promise<void>;
+type PrinterDiscoveryData = {
   scan: ScanState;
   scanQuery: DiscoveryQuery;
   startScan: (query: DiscoveryQuery) => void;
@@ -31,10 +24,9 @@ type AppData = {
   markScanResultConfigured: (name: string, connection: AddPrinterBody["connection"]) => void;
 };
 
-const AppDataContext = createContext<AppData | null>(null);
-const initialProfiles: ProfileResource = { data: null, error: null, phase: "loading" };
 const initialScanQuery: DiscoveryQuery = { usb: true, network: true, subnets: [] };
 const initialScan: ScanState = { phase: "idle", completed: 0, total: 0, printers: [], failures: [], error: null };
+const PrinterDiscoveryContext = createContext<PrinterDiscoveryData | null>(null);
 
 function registeredAs(discovered: DiscoveredPrinter, connection: AddPrinterBody["connection"]) {
   const found = discovered.connection;
@@ -49,14 +41,10 @@ function registeredAs(discovered: DiscoveredPrinter, connection: AddPrinterBody[
     && (connection.serial_number === null || found.serial_number === connection.serial_number);
 }
 
-export function AppDataProvider({ children }: { children: preact.ComponentChildren }) {
+export function PrinterDiscoveryProvider({ children }: { children: preact.ComponentChildren }) {
   const reportDiscoveredPrinters = useReportDiscoveredPrinters();
-  const [profiles, setProfiles] = useState<ProfileResource>(initialProfiles);
   const [scan, setScan] = useState<ScanState>(initialScan);
   const [scanQuery, setScanQuery] = useState<DiscoveryQuery>(initialScanQuery);
-  const profileData = useRef<ProfilesResponse | null>(null);
-  const profileRequest = useRef<Promise<void> | null>(null);
-  const profileAbort = useRef<AbortController | null>(null);
   const scanCloser = useRef<(() => void) | null>(null);
 
   const closeScan = useCallback(() => {
@@ -99,33 +87,13 @@ export function AppDataProvider({ children }: { children: preact.ComponentChildr
     });
   }, []);
 
-  const refreshProfiles = useCallback(async () => {
-    if (profileRequest.current) return profileRequest.current;
-    const controller = new AbortController();
-    profileAbort.current = controller;
-    setProfiles((current) => ({ data: current.data, error: null, phase: current.data ? "refreshing" : "loading" }));
-    const request = getProfiles(controller.signal)
-      .then((data) => { profileData.current = data; setProfiles({ data, error: null, phase: "ready" }); })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
-        setProfiles({ data: profileData.current, error: error instanceof Error ? error : new Error("Unable to load profile catalog."), phase: profileData.current ? "ready" : "error" });
-      })
-      .finally(() => { if (profileAbort.current === controller) profileAbort.current = null; profileRequest.current = null; });
-    profileRequest.current = request;
-    return request;
-  }, []);
+  useEffect(() => () => { closeScan(); }, [closeScan]);
 
-  const ensureProfiles = useCallback(async () => {
-    if (!profileData.current) return refreshProfiles();
-  }, [refreshProfiles]);
-
-  useEffect(() => () => { closeScan(); profileAbort.current?.abort(); }, [closeScan]);
-
-  return <AppDataContext.Provider value={{ profiles, ensureProfiles, refreshProfiles, scan, scanQuery, startScan, cancelScan, markScanResultConfigured }}>{children}</AppDataContext.Provider>;
+  return <PrinterDiscoveryContext.Provider value={{ scan, scanQuery, startScan, cancelScan, markScanResultConfigured }}>{children}</PrinterDiscoveryContext.Provider>;
 }
 
-export function useAppData() {
-  const data = useContext(AppDataContext);
-  if (!data) throw new Error("useAppData must be used within AppDataProvider.");
+export function usePrinterDiscovery() {
+  const data = useContext(PrinterDiscoveryContext);
+  if (!data) throw new Error("usePrinterDiscovery must be used within PrinterDiscoveryProvider.");
   return data;
 }

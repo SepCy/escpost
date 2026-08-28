@@ -5,7 +5,7 @@ import { locationStub } from "preact-iso/prerender";
 import { App } from "../app";
 import type { DiscoveryQuery } from "../api/discovery-stream";
 import type { VirtualPrinterStatus } from "../api/types";
-import { AppDataProvider, useAppData } from "./data";
+import { PrinterDiscoveryProvider, usePrinterDiscovery } from "./printer-discovery-data";
 import { PrinterInventoryProvider } from "./printer-inventory-data";
 import { ServerStatusProvider } from "./server-status-data";
 import { AppShell } from "./shell";
@@ -106,7 +106,7 @@ const scanQuery: DiscoveryQuery = { usb: true, network: true, subnets: [], port:
 // around a child that reaches for `startScan` the way that page eventually
 // will.
 function ScanProbe() {
-  const { startScan } = useAppData();
+  const { startScan } = usePrinterDiscovery();
   return <button type="button" onClick={() => startScan(scanQuery)}>Scan</button>;
 }
 
@@ -115,11 +115,11 @@ async function renderShell(path: string) {
   const view = render(
     <ServerStatusProvider>
       <PrinterInventoryProvider>
-        <AppDataProvider>
-        <LocationProvider>
-          <AppShell><ScanProbe /></AppShell>
-        </LocationProvider>
-        </AppDataProvider>
+        <PrinterDiscoveryProvider>
+          <LocationProvider>
+            <AppShell><ScanProbe /></AppShell>
+          </LocationProvider>
+        </PrinterDiscoveryProvider>
       </PrinterInventoryProvider>
     </ServerStatusProvider>,
   );

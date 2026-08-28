@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, jest, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/preact";
 import type { AddPrinterBody, DiscoveredPrinter, UsbConnection } from "../../api/types";
-import { AppDataProvider } from "../../app/data";
 import { PrinterInventoryProvider } from "../../app/printer-inventory-data";
+import { ProfileDataProvider } from "../../app/profile-data";
 import { ServerStatusProvider } from "../../app/server-status-data";
 import { AddPrinterDialog } from "./add-printer-dialog";
 
@@ -102,8 +102,8 @@ function networkPrinter(): DiscoveredPrinter {
   };
 }
 
-// Renders the dialog inside the application data provider it reads the
-// configured names and the profile catalog from, and records what it posts.
+// Renders the dialog inside the inventory and profile providers it reads the
+// configured names and profile catalog from, and records what it posts.
 // `add` overrides the registration response, which otherwise echoes the
 // posted name back the way the endpoint does.
 // Absence as a boolean. `expect(node).toBeNull()` prints the entire happy-dom
@@ -141,9 +141,9 @@ function renderDialog(printer: DiscoveredPrinter | null, options: {
   }) as typeof globalThis.fetch;
   const view = render(
     <ServerStatusProvider>
-      <PrinterInventoryProvider><AppDataProvider>
+      <PrinterInventoryProvider><ProfileDataProvider>
         <AddPrinterDialog printer={printer} onClose={onClose} onAdded={onAdded} />
-      </AppDataProvider></PrinterInventoryProvider>
+      </ProfileDataProvider></PrinterInventoryProvider>
     </ServerStatusProvider>,
   );
   act(() => FakeEventSource.forUrl("/api/status/events")?.emit("message", {
@@ -157,9 +157,9 @@ function renderDialog(printer: DiscoveredPrinter | null, options: {
   // supposed to have but which must not silently register the wrong route.
   const hand = (next: DiscoveredPrinter | null) => view.rerender(
     <ServerStatusProvider>
-      <PrinterInventoryProvider><AppDataProvider>
+      <PrinterInventoryProvider><ProfileDataProvider>
         <AddPrinterDialog printer={next} onClose={onClose} onAdded={onAdded} />
-      </AppDataProvider></PrinterInventoryProvider>
+      </ProfileDataProvider></PrinterInventoryProvider>
     </ServerStatusProvider>,
   );
   return { view, hand, posted, onClose, onAdded };

@@ -53,10 +53,10 @@
    fades — a flash rather than a blink, which a straight `from`/`to` decay
    cannot be, since it peaks in the first frame.
 
-   1200ms is `FLASH_DURATION` in `discovery-panel.tsx` and `app/data.tsx`,
-   which is how long the class stays applied. Matching them means the fade
-   finishes exactly as the class is removed, rather than leaving the row
-   classed and inert for half a second. */
+   1200ms is `FLASH_DURATION` in `discovery-panel.tsx` and
+   `app/printer-inventory-data.tsx`, which is how long the class stays applied.
+   Matching them means the fade finishes exactly as the class is removed,
+   rather than leaving the row classed and inert for half a second. */
 .printer-row-found {
   animation: printer-row-found 1200ms ease-out;
 }

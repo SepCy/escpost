@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/preact";
 import { useState } from "preact/hooks";
-import { AppDataProvider } from "../../app/data";
+import { ProfileDataProvider } from "../../app/profile-data";
 import { ProfilesPage } from "./page";
 
 const profiles = [
@@ -40,7 +40,7 @@ function json(body: unknown, status = 200) {
 
 function renderPage(fetch: typeof globalThis.fetch) {
   globalThis.fetch = fetch;
-  return render(<AppDataProvider><ProfilesPage /></AppDataProvider>);
+  return render(<ProfileDataProvider><ProfilesPage /></ProfileDataProvider>);
 }
 
 function ProfileToggle() {
@@ -133,7 +133,7 @@ describe("ProfilesPage", () => {
       return Promise.resolve(json({ printers: [] }));
     }) as typeof globalThis.fetch;
 
-    render(<AppDataProvider><ProfileToggle /></AppDataProvider>);
+    render(<ProfileDataProvider><ProfileToggle /></ProfileDataProvider>);
     expect(await screen.findAllByText("CALIBRATED")).toHaveLength(2);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Toggle profiles" })); });
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Toggle profiles" })); });
@@ -151,7 +151,7 @@ describe("ProfilesPage", () => {
       return Promise.resolve(json({ printers: [] }));
     }) as typeof globalThis.fetch;
 
-    render(<AppDataProvider><DeferredProfiles /></AppDataProvider>);
+    render(<ProfileDataProvider><DeferredProfiles /></ProfileDataProvider>);
     await screen.findByRole("button", { name: "Visit profiles" });
     expect(profileRequests).toBe(0);
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Visit profiles" })); });

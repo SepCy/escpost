@@ -1,4 +1,4 @@
-import { useAppData } from "./data";
+import { usePrinterDiscovery } from "./printer-discovery-data";
 import { useServerStatus } from "./server-status-data";
 
 // The shell's only global status surface: server reachability, plus whatever
@@ -7,7 +7,7 @@ import { useServerStatus } from "./server-status-data";
 // job arrives whichever page you happen to be on — so this is where their
 // progress stays visible.
 export function ServerStatus({ compact = false }: { compact?: boolean }) {
-  const { scan } = useAppData();
+  const { scan } = usePrinterDiscovery();
   const { phase, snapshot, error } = useServerStatus();
   const label = phase === "ready" ? "Ready" : phase === "disconnected" ? "Disconnected" : "Checking…";
   const scanning = scan.phase === "running";

@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import type { AddPrinterBody, DiscoveredPrinter } from "../../api/types";
-import { useAppData } from "../../app/data";
+import { usePrinterDiscovery } from "../../app/printer-discovery-data";
 import { AddPrinterDialog } from "./add-printer-dialog";
 import { DiscoveryCard } from "./discovery-card";
 import { DiscoveryPanel } from "./discovery-panel";
@@ -11,7 +11,7 @@ export function PrintersPage() {
   // provider because this component does not survive a route change while the
   // scan does — `Rescan` after a detour must repeat the sweep that was
   // configured, not the default one.
-  const { scan, scanQuery, startScan, cancelScan, markScanResultConfigured } = useAppData();
+  const { scan, scanQuery, startScan, cancelScan, markScanResultConfigured } = usePrinterDiscovery();
   const [optionsOpen, setOptionsOpen] = useState(false);
   // `null` while nothing is being registered, and `{ printer: null }` for the
   // manual dialog — `AddPrinterDialog` closes the native element in its

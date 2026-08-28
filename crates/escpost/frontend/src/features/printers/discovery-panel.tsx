@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { UsbDiscoveryFailure } from "../../api/discovery-stream";
 import type { DiscoveredPrinter, UsbConnection } from "../../api/types";
-import type { ScanState } from "../../app/data";
+import type { ScanState } from "../../app/printer-discovery-data";
 import { countOf } from "./counts";
 import { endpointHex, usbHex } from "./usb";
 
@@ -69,7 +69,8 @@ function failureSentence(failure: UsbDiscoveryFailure) {
  *
  * Only printers that are not yet configured become rows. Already-configured
  * hits are counted here and reported by flashing the row they already occupy
- * in the inventory below, which the application data provider drives.
+ * in the inventory below, which `PrinterDiscoveryProvider` reports to the
+ * inventory provider.
  *
  * It renders into the discovery card rather than owning one, between the
  * scan options above it and the controls below: the section around that

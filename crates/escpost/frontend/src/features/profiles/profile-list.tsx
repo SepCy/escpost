@@ -1,6 +1,6 @@
 import { Fragment } from "preact";
 import type { Profile } from "../../api/types";
-import { useAppData } from "../../app/data";
+import { useProfileData } from "../../app/profile-data";
 
 const columns = ["PROFILE", "VENDOR", "MODEL", "CAL", "PAPER", "PRINT", "DOTS", "DPI", "CUT", "BC", "QR"] as const;
 
@@ -40,7 +40,7 @@ function fields(profile: Profile) {
 }
 
 export function ProfileList() {
-  const { profiles, refreshProfiles } = useAppData();
+  const { profiles, refreshProfiles } = useProfileData();
   const profileData = profiles.data?.profiles;
 
   if (!profileData) {

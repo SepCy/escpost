@@ -10,8 +10,12 @@ export type PrinterInventoryResource =
   | { phase: "ready"; snapshot: PrintersResponse; error: null; printerFlashes: PrinterFlashes }
   | { phase: "disconnected"; snapshot: PrintersResponse | null; error: Error; printerFlashes: PrinterFlashes };
 
-const PrinterInventoryContext = createContext<PrinterInventoryResource | null>(null);
-const ReportDiscoveredPrintersContext = createContext<(names: string[]) => void>(() => {});
+type PrinterInventoryData = {
+  resource: PrinterInventoryResource;
+  reportDiscoveredPrinters: (names: string[]) => void;
+};
+
+const PrinterInventoryContext = createContext<PrinterInventoryData | null>(null);
 const FLASH_DURATION = 1_200;
 const RETRY_DELAY_MS = 2_000;
 
@@ -110,20 +114,22 @@ export function PrinterInventoryProvider({ children, retryDelayMs = RETRY_DELAY_
   }, []);
 
   return (
-    <PrinterInventoryContext.Provider value={resource}>
-      <ReportDiscoveredPrintersContext.Provider value={reportDiscoveredPrinters}>
-        {children}
-      </ReportDiscoveredPrintersContext.Provider>
+    <PrinterInventoryContext.Provider value={{ resource, reportDiscoveredPrinters }}>
+      {children}
     </PrinterInventoryContext.Provider>
   );
 }
 
+function usePrinterInventoryData() {
+  const data = useContext(PrinterInventoryContext);
+  if (!data) throw new Error("Printer inventory data must be used within PrinterInventoryProvider.");
+  return data;
+}
+
 export function usePrinterInventory(): PrinterInventoryResource {
-  const resource = useContext(PrinterInventoryContext);
-  if (!resource) throw new Error("usePrinterInventory must be used within PrinterInventoryProvider.");
-  return resource;
+  return usePrinterInventoryData().resource;
 }
 
 export function useReportDiscoveredPrinters() {
-  return useContext(ReportDiscoveredPrintersContext);
+  return usePrinterInventoryData().reportDiscoveredPrinters;
 }

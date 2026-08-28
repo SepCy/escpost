@@ -1,9 +1,9 @@
-import { useAppData } from "../../app/data";
+import { useProfileData } from "../../app/profile-data";
 import { useEffect } from "preact/hooks";
 import { ProfileList } from "./profile-list";
 
 export function ProfilesPage() {
-  const { ensureProfiles } = useAppData();
+  const { ensureProfiles } = useProfileData();
   useEffect(() => {
     void ensureProfiles();
   }, [ensureProfiles]);

@@ -65,35 +65,29 @@ no toolchain to install.
 
 ## The local half
 
-### 1. escpost, and a printer to send to
+### 1. Start everything
 
 ```bash
-docker compose up escpost frontend
+docker compose up
 ```
 
-That starts three things: the print API on **9000**, a virtual RAW TCP printer
-on **9100** that captures jobs instead of printing them, and the workbench on
-**5173**, where captured jobs are rendered so you can see what a receipt would
-have looked like.
+The first run compiles escpost, so give it a few minutes. After that you have:
 
-Then register the virtual printer, so escpost has something to print to:
+| | |
+|---|---|
+| **9000** | the print API, and the workbench in a release build |
+| **9100** | a virtual RAW TCP printer, which captures jobs instead of printing them |
+| **5173** | the workbench in development, where captured jobs are rendered |
+| **8081** | the pages you print from |
 
-```bash
-docker compose run --rm escpost printers add TM-T20 \
-  --transport network --host 127.0.0.1 --port 9100 --profile REFERENCE
-```
-
-Check it:
+It also registers a printer called `TM-T20` pointing at the virtual one, and
+builds the extension into `extension/dist`. Check both:
 
 ```bash
 curl -s http://127.0.0.1:9000/api/printers/list
 ```
 
-### 2. The extension
-
-```bash
-docker compose run --rm extension-build
-```
+### 2. Load the extension
 
 In Chrome: `chrome://extensions`, turn on **Developer mode**, choose **Load
 unpacked**, and select `extension/dist`.
@@ -101,14 +95,10 @@ unpacked**, and select `extension/dist`.
 Chrome will ask for two named hosts and nothing else. The extension puts nothing
 on any page until you allow that page.
 
-### 3. Pages to print from
+### 3. Print from a page
 
-```bash
-cd extension && python3 -m http.server 8081
-```
-
-Two pages, standing in for the two kinds of merchant site. Both run their checks
-on load and report which leg of the chain works.
+Two pages are already being served, standing in for the two kinds of merchant
+site. Both run their checks on load and report which leg of the chain works.
 
 | | |
 |---|---|
@@ -146,6 +136,9 @@ docker compose run --rm \
   -e ESCPOST_API_BASE=http://localhost:8000 \
   extension-build
 ```
+
+That is the one time you rebuild by hand. `up` builds the extension with the
+production base, which is right for the local half and wrong for this one.
 
 Reload the extension, then sign in from the popup. **There is no mailbox to
 check**: with no SMTP configured the link is printed to the API log, the same
@@ -185,6 +178,10 @@ offers the reload.
 **A dev build is not shippable.** `ESCPOST_API_BASE` exists for local testing.
 The tests assert the production origin and will fail against a dev build, which
 is deliberate.
+
+**The extension build is a one-shot.** `up` runs it once. Edit the extension
+afterwards and rerun `docker compose run --rm extension-build`, the same way you
+rerun cargo.
 
 **To run the suites:** `docker compose run --rm extension-test` for the
 extension and the package, `docker compose run --rm test cargo test --workspace`

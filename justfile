@@ -32,7 +32,7 @@ test: frontend-build
 run *args:
     cargo run -q -p escpost -- {{args}}
 
-# Run the complete development stack with host toolchains.
+# Run the native development stack, with Rust auto-restart when Watchexec exists.
 dev: frontend-install
     scripts/native-dev
 

@@ -5,12 +5,67 @@ set -eu
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository"
 
+local_watchexec="$repository/target/dev-tools/bin/watchexec"
+watchexec_path=
+
+if command -v watchexec >/dev/null 2>&1; then
+    watchexec_path=$(command -v watchexec)
+elif [ -x "$local_watchexec" ]; then
+    watchexec_path=$local_watchexec
+elif [ -t 0 ]; then
+    printf '%s\n' \
+        'Watchexec is not installed, so Rust changes will not restart the server.' \
+        'Install it user-wide with `cargo install watchexec-cli`, or install it locally at:' \
+        '  ./target/dev-tools/bin/watchexec' \
+        >&2
+    printf '%s' 'Install Watchexec locally now? [y/N] ' >&2
+    if IFS= read -r answer; then
+        case "$answer" in
+            y | Y | yes | Yes | YES)
+                if cargo install \
+                    --root "$repository/target/dev-tools" \
+                    watchexec-cli \
+                    --locked; then
+                    watchexec_path=$local_watchexec
+                else
+                    printf '%s\n' \
+                        'Watchexec installation failed; continuing without Rust auto-restart.' \
+                        >&2
+                fi
+                ;;
+        esac
+    fi
+fi
+
 cargo build -p escpost
 
-cargo run -q -p escpost -- serve \
+set -- cargo run -q -p escpost -- serve \
     --listen 127.0.0.1:9100 \
     --web-listen 127.0.0.1:9000 \
-    --no-web-app &
+    --no-web-app
+
+if [ -n "$watchexec_path" ]; then
+    printf '%s\n' 'Rust auto-restart enabled with watchexec.'
+    "$watchexec_path" \
+        --restart \
+        --watch "$repository/Cargo.toml" \
+        --watch "$repository/Cargo.lock" \
+        --watch "$repository/crates/escpost/Cargo.toml" \
+        --watch "$repository/crates/escpost/build.rs" \
+        --watch "$repository/crates/escpost/src" \
+        --watch "$repository/crates/escpost-profiles/Cargo.toml" \
+        --watch "$repository/crates/escpost-profiles/profiles" \
+        --watch "$repository/crates/escpost-profiles/src" \
+        --watch "$repository/crates/escpost-render/Cargo.toml" \
+        --watch "$repository/crates/escpost-render/assets" \
+        --watch "$repository/crates/escpost-render/src" \
+        -- "$@" &
+else
+    printf '%s\n' \
+        'Rust auto-restart disabled; Vite HMR remains enabled.' \
+        >&2
+    "$@" &
+fi
 backend_pid=$!
 
 (

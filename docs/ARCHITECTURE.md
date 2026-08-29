@@ -507,7 +507,9 @@ Docker workflow: Vite updates the frontend in place, while Watchexec rebuilds
 and restarts the complete Rust process after backend changes. The frontend
 source tree is outside the Rust watch set. `./escpost serve` and
 `docker compose up` start this workflow; `just dev` provides the equivalent
-flow for hosts with Rust and Bun. Production builds and Rust tests serve only
+flow for hosts with Rust and Bun. Native Vite always provides frontend HMR;
+when Watchexec is available, the native workflow also rebuilds and restarts the
+Rust server after backend changes. Production builds and Rust tests serve only
 embedded assets; set `ESCPOST_WATCH=0` for a production-like Compose run.
 
 Automatic listeners will continue to bind to loopback. Explicit `--web-listen`

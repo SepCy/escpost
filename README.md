@@ -155,6 +155,10 @@ The native build compiles the frontend first and produces
 cargo install --path crates/escpost
 ```
 
+`just dev` provides Vite HMR and uses Watchexec, when available, to restart the
+Rust server after backend changes. If Watchexec is missing, it offers to install
+it locally under `target/dev-tools`.
+
 Additional tasks:
 
 - `just docker-cargo-clean` clears the shared container build cache.

@@ -34,6 +34,17 @@ pub(crate) struct ServeArgs {
     #[arg(long, value_name = "ADDRESS", num_args = 0..=1)]
     pub(crate) listen: Option<Option<SocketAddr>>,
 
+    /// Read printer configuration from this exact file rather than the default
+    /// location. Print jobs posted to the web API resolve their printer through it.
+    #[arg(long, value_name = "FILE")]
+    pub(crate) config: Option<std::path::PathBuf>,
+
+    /// Accept print jobs only from this browser extension id. By default any
+    /// extension is accepted, because a reinstall changes the id and pinning
+    /// the wrong one locks the extension out with no recovery.
+    #[arg(long, value_name = "ID")]
+    pub(crate) extension_id: Option<String>,
+
     /// Start the web and API server. Without an address, the first free loopback port
     /// from 9000 through 9099 is used.
     #[arg(long, value_name = "ADDRESS", num_args = 0..=1)]
@@ -169,6 +180,7 @@ pub(crate) async fn run(arguments: ServeArgs, non_interactive: bool) -> Result<(
                 raw_address,
                 open_browser,
                 !arguments.no_web_app,
+                api_state(&arguments),
             )
             .await
         }
@@ -309,6 +321,17 @@ async fn finalize(
         }
         // A panic or cancellation in the render task leaves no job to preview.
         Err(_) => {}
+    }
+}
+
+/// The print surface shares this server, so every command that serves the web
+/// API also accepts print jobs. No extension id is pinned: a reinstall changes
+/// the id, and pinning the wrong one locks the extension out with no recovery.
+fn api_state(arguments: &ServeArgs) -> crate::features::api::ApiState {
+    crate::features::api::ApiState {
+        config: arguments.config.clone(),
+        extension_id: arguments.extension_id.clone(),
+        ..Default::default()
     }
 }
 

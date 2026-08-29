@@ -33,7 +33,7 @@ pub(crate) enum Command {
     /// Send a known ESC/POS byte stream unchanged to a configured printer.
     Print(PrintArgs),
 
-    /// Capture RAW TCP print jobs and preview them in the web app.
+    /// Serve the web API and web app, and capture RAW TCP jobs for preview.
     Serve(ServeArgs),
 
     /// List available printers and manage discovery or pairing.

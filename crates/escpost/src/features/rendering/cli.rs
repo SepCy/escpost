@@ -162,7 +162,7 @@ pub(crate) async fn run(arguments: RenderArgs, non_interactive: bool) -> Result<
                 jobs.clone(),
             )?;
         }
-        crate::cli::web::serve(listener, jobs, None, arguments.browser, true).await?;
+        crate::cli::web::serve(listener, jobs, None, arguments.browser, true, api_state()).await?;
     }
     Ok(())
 }
@@ -194,6 +194,13 @@ fn resolve_profile(
         .with_help_message("Use REFERENCE when no physical printer is known")
         .prompt()
         .map_err(|error| CliError::ProfilePrompt(error.to_string()))
+}
+
+/// The print surface shares this server, so every command that serves the web
+/// API also accepts print jobs. No extension id is pinned: a reinstall changes
+/// the id, and pinning the wrong one locks the extension out with no recovery.
+fn api_state() -> crate::features::api::ApiState {
+    crate::features::api::ApiState::default()
 }
 
 #[cfg(test)]

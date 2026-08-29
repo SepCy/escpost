@@ -53,7 +53,7 @@ enum HttpTransport {
 }
 
 async fn list_printers(
-    State(_state): State<WebState>,
+    State(state): State<WebState>,
     query: Result<Query<ListQuery>, QueryRejection>,
 ) -> Result<
     (
@@ -63,8 +63,10 @@ async fn list_printers(
     ApiError,
 > {
     let Query(query) = query.map_err(|_| ApiError::invalid_query())?;
+    // The config comes from the server rather than being hardcoded, so a
+    // server told to read one printers.toml does not list from another.
     let snapshot = monitor::collect_once(list::Request {
-        config: None,
+        config: state.printer_config.clone(),
         transport: query.transport.map(transport),
     })
     .await
@@ -159,6 +161,19 @@ impl TryFrom<monitor::Snapshot> for ListResponse {
     }
 }
 
+/// The catalog's own id for a configured profile, or `None` when the configured
+/// value resolves to nothing.
+///
+/// `printers.toml` holds whatever the operator typed and the inventory copies it
+/// through unchecked, so without this the API can advertise a profile that does
+/// not exist, which is what broke HTML rendering for every job until the server
+/// began repairing it at registration.
+fn canonical_profile(configured: Option<&str>) -> Option<String> {
+    crate::profiles::load(configured?)
+        .ok()
+        .map(|profile| profile.id.clone())
+}
+
 #[derive(Serialize)]
 struct PrinterResponse {
     name: String,
@@ -198,7 +213,7 @@ impl From<Printer> for PrinterResponse {
             name: printer.name,
             transport: transport_label(printer.transport),
             availability: availability_label(printer.availability),
-            profile: printer.profile,
+            profile: canonical_profile(printer.profile.as_deref()),
             connection: ConnectionResponse::from(printer.connection),
         }
     }

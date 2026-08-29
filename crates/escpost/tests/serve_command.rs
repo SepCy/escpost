@@ -14,8 +14,7 @@ fn serve_help_contract_is_unchanged() {
     assert!(output.status.success());
     assert_eq!(
         String::from_utf8(output.stdout).expect("serve help should be UTF-8"),
-        "\
-Capture RAW TCP print jobs and preview them in the web app
+        r#"Serve the web API and web app, and capture RAW TCP jobs for preview
 
 Usage: escpost serve [OPTIONS]
 
@@ -23,6 +22,8 @@ Options:
       --non-interactive          Never prompt for missing values
       --profile <PROFILE>        Printer profile used to render captured jobs [default: REFERENCE]
       --listen [<ADDRESS>]       Start the virtual IP printer. Without an address, the first free loopback port from 9100 through 9109 is used
+      --config <FILE>            Read printer configuration from this exact file rather than the default location. Print jobs posted to the web API resolve their printer through it
+      --extension-id <ID>        Accept print jobs only from this browser extension id. By default any extension is accepted, because a reinstall changes the id and pinning the wrong one locks the extension out with no recovery
       --web-listen [<ADDRESS>]   Start the web and API server. Without an address, the first free loopback port from 9000 through 9099 is used
       --idle-timeout <SECONDS>   Complete a held-open connection's job after this many seconds of silence. Use 0 to disable and end a job only when the connection closes [default: 20]
       --scale <N>                Preview pixel density: 1 to 3 subpixels per dot. 1 is dot resolution [default: 3]
@@ -30,7 +31,7 @@ Options:
       --no-open                  Do not open the web app in the default browser on startup. Auto-open is also skipped with --non-interactive, without a terminal, or when the BROWSER=none or CI environment variables are set
       --no-web-app               Serve the API but not the web application. Needs --web-listen. Use it when no web application is necessary, or when a Vite development server serves the web application and sends each /api request to this server
   -h, --help                     Print help
-"
+"#
     );
 }
 

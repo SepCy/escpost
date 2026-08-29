@@ -24,6 +24,10 @@ pub(crate) struct WebState {
     jobs: JobStore,
     status_metadata: status::ServerStatusMetadata,
     pub(crate) printer_monitor: crate::features::printers::monitor::PrinterMonitor,
+    /// Where printer configuration is read from, when the operator named a
+    /// file. The listing and the print route have to agree on this, or a
+    /// server told to use one printers.toml would list from another.
+    pub(crate) printer_config: Option<std::path::PathBuf>,
 }
 
 /// Current wall-clock time in Unix epoch milliseconds, for job completion.
@@ -45,6 +49,7 @@ pub(crate) async fn serve(
     jobs: JobStore,
     virtual_printer_address: Option<SocketAddr>,
     web_app: bool,
+    api_state: crate::features::api::ApiState,
 ) -> std::io::Result<()> {
     let status_metadata = status::ServerStatusMetadata::resolve(virtual_printer_address);
     let mut router = Router::new()
@@ -61,11 +66,16 @@ pub(crate) async fn serve(
             .route("/assets/{*path}", get(frontend::asset))
             .route("/{*path}", get(frontend::index));
     }
-    let router = router.with_state(WebState {
-        jobs,
-        status_metadata,
-        printer_monitor: crate::features::printers::monitor::PrinterMonitor::new(None),
-    });
+    let router = router
+        .with_state(WebState {
+            jobs,
+            status_metadata,
+            printer_monitor: crate::features::printers::monitor::PrinterMonitor::new(None),
+            printer_config: api_state.config.clone(),
+        })
+        // Merged after the web state is applied, so both halves are stateless
+        // routers by the time they meet.
+        .merge(crate::features::api::router(api_state));
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await

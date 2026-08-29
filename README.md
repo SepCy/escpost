@@ -64,6 +64,49 @@ escpost serve --listen --web-listen
   <img src="docs/assets/readme/web-preview.svg" alt="Placeholder for the ESCPost browser workbench" width="100%">
 </p>
 
+## Print from a browser or a local program
+
+The same server that serves the workbench also accepts print jobs, so an
+operator runs one escpost rather than two.
+
+```bash
+escpost serve --web-listen 127.0.0.1:9000
+```
+
+It binds loopback only, needs no account, no key and no configuration beyond
+`printers.toml`, and makes no outbound network request of any kind.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/printers/list` | configured printers, their availability, profile and connection facts |
+| `POST /api/print` | print bytes to a named printer |
+
+Print with JSON and base64:
+
+```bash
+curl -X POST http://127.0.0.1:9000/api/print \
+  -H 'Content-Type: application/json' \
+  -d '{"printer":"counter","data":"G0BIaQo="}'
+```
+
+Or post the bytes directly, which avoids base64 for a program that already
+holds them:
+
+```bash
+curl -X POST 'http://127.0.0.1:9000/api/print?printer=counter' \
+  -H 'Content-Type: application/octet-stream' \
+  --data-binary @receipt.bin
+```
+
+`POST /api/print` refuses requests carrying an `Origin` header from an ordinary
+web page. A local program sends no `Origin` and is accepted, as is a browser
+extension. The listing endpoints are unguarded, as they already were: they
+report inventory and send nothing to hardware.
+
+`serve` also opens a virtual RAW TCP printer for developing receipts, at
+`--listen`. Pass only `--web-listen` to run the API and the workbench without
+one, which is what a till wants.
+
 ## Supported ESC/POS features
 
 ESCPost currently implements all commonly used ESC/POS commands, including

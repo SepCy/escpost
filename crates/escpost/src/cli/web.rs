@@ -22,6 +22,7 @@ pub(crate) async fn serve(
     virtual_printer_address: Option<SocketAddr>,
     open_browser: bool,
     web_app: bool,
+    api_state: crate::features::api::ApiState,
 ) -> Result<(), CliError> {
     let address = listener.local_addr().map_err(CliError::ServeWeb)?;
     let url = format!("http://{address}/");
@@ -32,7 +33,7 @@ pub(crate) async fn serve(
         eprintln!("warning: could not open the browser ({error}); open {url} manually");
     }
 
-    transport::serve(listener, jobs, virtual_printer_address, web_app)
+    transport::serve(listener, jobs, virtual_printer_address, web_app, api_state)
         .await
         .map_err(CliError::ServeWeb)
 }

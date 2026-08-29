@@ -40,6 +40,36 @@ services:
         condition: service_healthy
     command: ["sh", "-c", "bun install --frozen-lockfile && bun run dev"]
 
+  # The extension and the npm package, built without bun on the host. The
+  # workspace root is the working directory because they are one bun workspace:
+  # the extension imports the package by relative path rather than by version.
+  extension-build:
+    image: oven/bun:1.4.0
+    network_mode: host
+    working_dir: /workspace
+    user: "0:0"
+    profiles:
+      - tools
+    entrypoint: /workspace/scripts/extension-entrypoint
+    volumes:
+      - .:/workspace
+      - workspace-node-modules:/workspace/node_modules
+    command: ["sh", "-c", "bun install --frozen-lockfile && bun run build"]
+
+  # Same image and the same volume, for running the suites.
+  extension-test:
+    image: oven/bun:1.4.0
+    network_mode: host
+    working_dir: /workspace
+    user: "0:0"
+    profiles:
+      - tools
+    entrypoint: /workspace/scripts/extension-entrypoint
+    volumes:
+      - .:/workspace
+      - workspace-node-modules:/workspace/node_modules
+    command: ["sh", "-c", "bun install --frozen-lockfile && bun run typecheck && bun run test"]
+
   test:
     <<: *development-service
     profiles:
@@ -174,6 +204,7 @@ networks:
         - subnet: 172.31.42.0/24
 
 volumes:
+  workspace-node-modules:
   escpost-config:
   cargo-home:
   cargo-target:

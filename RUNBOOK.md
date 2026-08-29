@@ -10,6 +10,23 @@ leaves the machine. **HTML is rendered by Receiptful**, which needs an account
 and a second repository, and is metered. Do the first half first. It works on
 its own and proves most of the chain.
 
+## What this is, in pull requests
+
+The work arrives upstream as three, and this branch is all of them together so
+it can be run. It is not itself a pull request.
+
+| | | |
+|---|---|---|
+| [#26](https://github.com/receiptful/escpost/pull/26) | `POST /api/print` on the existing web API | the Rust side |
+| [#28](https://github.com/receiptful/escpost/pull/28) | `@escpost/browser`, and its `qz-tray.js` drop-in | the npm package |
+| [#29](https://github.com/receiptful/escpost/pull/29) | the extension, stacked on #28 | the browser side |
+
+Review them in that order. #28 before #29, because #29 sits on it and shows both
+commits until it merges.
+
+The account and HTML rendering half lives in the receiptful repository, as
+[!77](https://gitlab.com/duala-digital/receiptful/-/merge_requests/77).
+
 ## What talks to what
 
 ```

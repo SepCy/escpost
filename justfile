@@ -53,8 +53,12 @@ generate-profile-pack:
 python-test:
     scripts/python-binding-test
 
-# Publish escpost-render and escpost-profiles first, because escpost needs
-# them at the versions in this workspace.
-[doc("Publish the CLI to crates.io with the web app built in.")]
+# Publish the crates in dependency order and wait for each one to reach the
+# registry index before publishing its dependents.
+[doc("Verify every release crate without uploading to crates.io.")]
+publish-dry-run: frontend-build
+    cargo publish --workspace --exclude escpost-python --locked --dry-run
+
+[doc("Publish every release crate to crates.io in dependency order.")]
 publish: frontend-build
-    cargo publish -p escpost
+    cargo publish --workspace --exclude escpost-python --locked

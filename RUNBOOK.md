@@ -56,10 +56,12 @@ that leaves the machine, and the only one that is metered.
 
 ## What you need
 
-- Docker, for escpost
-- [bun](https://bun.sh), for the extension and the package
+- Docker
 - Chrome or any Chromium browser
 - No printer. A virtual one is included.
+
+Nothing else. The Rust and the JavaScript both build in containers, so there is
+no toolchain to install.
 
 ## The local half
 
@@ -90,8 +92,7 @@ curl -s http://127.0.0.1:9000/api/printers/list
 ### 2. The extension
 
 ```bash
-bun install
-cd extension && bun run build
+docker compose run --rm extension-build
 ```
 
 In Chrome: `chrome://extensions`, turn on **Developer mode**, choose **Load
@@ -141,7 +142,9 @@ it moves three things at once: the API the worker calls, the host permission,
 and the content script that receives the sign-in token.
 
 ```bash
-cd extension && ESCPOST_API_BASE=http://localhost:8000 bun run build
+docker compose run --rm \
+  -e ESCPOST_API_BASE=http://localhost:8000 \
+  extension-build
 ```
 
 Reload the extension, then sign in from the popup. **There is no mailbox to
@@ -182,3 +185,8 @@ offers the reload.
 **A dev build is not shippable.** `ESCPOST_API_BASE` exists for local testing.
 The tests assert the production origin and will fail against a dev build, which
 is deliberate.
+
+**To run the suites:** `docker compose run --rm extension-test` for the
+extension and the package, `docker compose run --rm test cargo test --workspace`
+for the Rust. Both are behind the tools profile, so neither is dragged in by
+`docker compose up`.

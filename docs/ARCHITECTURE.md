@@ -495,8 +495,8 @@ Persistence remains a later opt-in capability.
 
 The frontend toolchain and dependency graph are pinned by the Bun container
 image and lockfile. Vite emits content-hashed JavaScript and CSS assets. Docker
-and native Just workflows build the production bundle before Cargo; the Cargo
-build fails with an actionable error when that bundle is absent and never
+tests and native Just workflows build the production bundle before Cargo; the
+Cargo build fails with an actionable error when that bundle is absent and never
 invokes Bun itself. Generated `dist/` and `node_modules/` directories remain
 untracked. Release artifacts remain a single executable and require neither Bun
 nor external web assets at runtime.
@@ -506,10 +506,9 @@ requests to the running escpost server. `docker compose up` is the canonical
 Docker workflow: Vite updates the frontend in place, while Watchexec rebuilds
 and restarts the complete Rust process after backend changes. The frontend
 source tree is outside the Rust watch set. `./escpost serve` and
-`just docker-web-dev` alias this workflow; `just native-web-dev` provides the
-equivalent flow for hosts with Rust and Bun. Production builds and Rust tests
-serve only embedded assets; set `ESCPOST_WATCH=0` for a production-like Compose
-run.
+`docker compose up` start this workflow; `just web-dev` provides the equivalent
+flow for hosts with Rust and Bun. Production builds and Rust tests serve only
+embedded assets; set `ESCPOST_WATCH=0` for a production-like Compose run.
 
 Automatic listeners will continue to bind to loopback. Explicit `--web-listen`
 addresses will remain supported; non-loopback bindings will retain the exposure

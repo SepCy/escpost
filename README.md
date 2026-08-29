@@ -98,27 +98,35 @@ reusable library APIs.
 
 ## Development
 
-Build, test, and run either natively or in Docker. Both workflows build the
-embedded frontend before compiling the Rust binary:
+Docker Compose is the canonical development workflow and requires neither Rust
+nor Bun on the host. Start the complete backend and frontend stack with:
 
-- **Native** requires host Rust and Bun toolchains and produces a host binary.
-  Use it for host-only behavior such as opening the browser automatically.
-- **Docker** provides the reproducible environment used by tests and CI and
-  requires neither toolchain on the host. It is the canonical workflow.
+```bash
+docker compose up
+```
 
-The [`justfile`](justfile) wraps both workflows:
+Backend source changes restart the Rust process. Vite serves the frontend at
+`http://127.0.0.1:5173/` with hot reload and proxies API requests to the
+backend. To provide a discoverable RAW TCP printer without physical hardware,
+run this in another terminal:
 
-| Task | Docker | Native |
-|---|---|---|
-| Build the CLI | `just docker-build` | `just native-build` |
-| Run the tests | `just docker-test` | `just native-test` |
-| Run the CLI | `just docker-run serve --no-open` | `just native-run serve` |
-| Run Axum and Vite | `docker compose up` | `just native-web-dev` |
+```bash
+docker compose up dummy-printer
+```
 
-`docker compose up` is the complete development stack. `./escpost serve` and
-`just docker-web-dev` are aliases for it. Backend source changes restart the
-Rust process; Vite serves the frontend at `http://127.0.0.1:5173/` with hot
-reload. The workbench provides five read-only routes:
+Use the root wrapper to run the containerized CLI with USB access:
+
+```bash
+./escpost printers list
+```
+
+Run the Rust workspace tests in the same reproducible environment:
+
+```bash
+docker compose run --rm test cargo test --workspace
+```
+
+The workbench provides five read-only routes:
 
 - `/` — Overview
 - `/jobs` — current print job, sheets, command trace, and annotations
@@ -129,9 +137,19 @@ reload. The workbench provides five read-only routes:
 For a production-like run of the embedded frontend without development
 watchers, use `docker compose run --rm -e ESCPOST_WATCH=0 escpost serve`.
 
-Run `just --list` to see every recipe. Without `just`, each recipe is a short
-wrapper around `docker compose` or `cargo` and can be run directly. The native
-build produces `target/release/escpost`. To install that checkout on `PATH`:
+Native development requires Rust and Bun on the host. `just` is optional, but
+we recommend installing it to run the repository tasks below; their underlying
+commands can also be invoked directly:
+
+| Task | Command |
+|---|---|
+| Build the release CLI | `just build` |
+| Run the tests | `just test` |
+| Run the CLI | `just run serve` |
+| Run Axum and Vite | `just web-dev` |
+
+The native build compiles the frontend first and produces
+`target/release/escpost`. To install that checkout on `PATH`:
 
 ```bash
 cargo install --path crates/escpost
@@ -139,9 +157,10 @@ cargo install --path crates/escpost
 
 Additional tasks:
 
-- `just pack` regenerates the canonical printer-profile pack.
+- `just docker-cargo-clean` clears the shared container build cache.
+- `just generate-profile-pack` regenerates the canonical printer-profile pack.
 - `just python-test` builds and exercises the Python binding.
-- `./escpost` remains the containerized CLI entry point with USB access.
+- `just --list` shows every recipe.
 
 ## Documentation
 

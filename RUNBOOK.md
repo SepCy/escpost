@@ -10,6 +10,50 @@ leaves the machine. **HTML is rendered by Receiptful**, which needs an account
 and a second repository, and is metered. Do the first half first. It works on
 its own and proves most of the chain.
 
+## What talks to what
+
+```
+  a web page
+      |
+      |  escpost.print({ printer, data })        the SDK, @escpost/browser
+      |  qz.print(config, data)                  QZ's own client, or our shim
+      |
+      |  window.postMessage
+      v
+  relay.js                        injected only into sites you have allowed
+      |                           isolated from the page's own JavaScript
+      |  chrome.runtime
+      v
+  the service worker              holds the session, caches renders,
+      |                           finds which port escpost is on
+      |  POST http://127.0.0.1:9000/api/print
+      v
+  escpost                         one server: the print API and the workbench
+      |
+      |  USB, or TCP to a network printer
+      v
+  the printer
+```
+
+Three shapes of page arrive at the same relay:
+
+| the page | what reaches it |
+|---|---|
+| imports the SDK | `relay.js` alone |
+| swapped in `@escpost/browser/qz` | `relay.js` alone |
+| ships the real `qz-tray.js` and cannot change | `relay.js`, plus a replaced `WebSocket` |
+
+An HTML job takes one detour. The worker sends the markup to Receiptful, gets
+ESC/POS bytes back, then continues down the same path. That is the only step
+that leaves the machine, and the only one that is metered.
+
+```
+  the service worker
+      |  html
+      v
+  Receiptful  ---- ESC/POS bytes ---->  back to the worker, then to escpost
+```
+
 ## What you need
 
 - Docker, for escpost
@@ -56,21 +100,32 @@ unpacked**, and select `extension/dist`.
 Chrome will ask for two named hosts and nothing else. The extension puts nothing
 on any page until you allow that page.
 
-### 3. A page to print from
+### 3. Pages to print from
 
 ```bash
-cd extension/dev/manual-page && python3 -m http.server 8081
+cd extension && python3 -m http.server 8081
 ```
 
-Open **http://127.0.0.1:8081/**. It stands in for a merchant's site and runs its
-own checks on load.
+Two pages, standing in for the two kinds of merchant site. Both run their checks
+on load and report which leg of the chain works.
 
-**It will fail the first time, and that is correct.** The site is not allowed
+| | |
+|---|---|
+| **/dev/manual-page/** | a page with no QZ client, driving escpost's own injected surface |
+| **/dev/qz-tray-page/** | a till that ships the real `qz-tray.js` and cannot be changed |
+
+**They will fail the first time, and that is correct.** The site is not allowed
 yet, so nothing was injected and there is no `qz` to call.
 
 Click the escpost icon, allow the site, and use the reload button the popup
-offers. The checks should then all pass, and a receipt should appear in the
+offers. The checks should then pass, and a receipt should appear in the
 workbench at **http://127.0.0.1:5173/app/** under Print jobs.
+
+The second page is the interesting one. Its first check is that `WebSocket` was
+replaced before `qz-tray.js` evaluated, because the client captures `WebSocket`
+as it loads and a patch arriving afterwards patches nothing. That timing is what
+makes an unmodifiable till work, and a browser is the only place it can be
+proved.
 
 ## The HTML half
 

@@ -53,12 +53,18 @@ generate-profile-pack:
 python-test:
     scripts/python-binding-test
 
+# Cargo treats ignored packaged `dist/` as dirty; this check makes `--allow-dirty` safe.
+[private]
+prepare-publish:
+    @test -z "$(git status --porcelain --untracked-files=all)" || { echo "Refusing to publish from a dirty worktree."; git status --short; exit 1; }
+    just frontend-build
+
 # Publish the crates in dependency order and wait for each one to reach the
 # registry index before publishing its dependents.
 [doc("Verify every release crate without uploading to crates.io.")]
-publish-dry-run: frontend-build
-    cargo publish --workspace --exclude escpost-python --locked --dry-run
+publish-dry-run: prepare-publish
+    cargo publish --workspace --exclude escpost-python --locked --allow-dirty --dry-run
 
 [doc("Publish every release crate to crates.io in dependency order.")]
-publish: frontend-build
-    cargo publish --workspace --exclude escpost-python --locked
+publish: prepare-publish
+    cargo publish --workspace --exclude escpost-python --locked --allow-dirty

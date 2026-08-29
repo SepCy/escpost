@@ -1,9 +1,6 @@
 # Native development workflows and repository maintenance utilities. Container
 # development uses Docker Compose directly; see README.md.
 
-# Containerized cargo, via the compose `test` service.
-docker_cargo := "docker compose run --rm test cargo"
-
 # List available recipes.
 default:
     @just --list
@@ -50,7 +47,7 @@ set-version version:
 
 # Regenerate crates/escpost-profiles/profiles/.generated/profiles.json.
 generate-profile-pack:
-    {{docker_cargo}} run -q -p escpost-profiles --bin compile-profile-pack -- crates/escpost-profiles/profiles/.escpos-printer-db/dist/capabilities.json crates/escpost-profiles/profiles crates/escpost-profiles/profiles/.generated/profiles.json
+    docker compose run --rm --entrypoint cargo escpost run -q -p escpost-profiles --bin compile-profile-pack -- crates/escpost-profiles/profiles/.escpos-printer-db/dist/capabilities.json crates/escpost-profiles/profiles crates/escpost-profiles/profiles/.generated/profiles.json
 
 # Build and test the Python render binding.
 python-test:

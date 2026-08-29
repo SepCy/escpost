@@ -13,7 +13,7 @@ categories = ["graphics", "parser-implementations"]
 
 [dependencies]
 encoding_rs.workspace = true
-escpost-profiles = { version = "0.1.0", path = "../escpost-profiles" }
+escpost-profiles.workspace = true
 fontdue.workspace = true
 oem_cp.workspace = true
 png.workspace = true
@@ -21,7 +21,7 @@ qrcode.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-escpost-profiles = { version = "0.1.0", path = "../escpost-profiles" }
+escpost-profiles.workspace = true
 serde.workspace = true
 toml.workspace = true
 

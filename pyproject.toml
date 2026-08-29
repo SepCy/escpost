@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "escpost"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Dot-accurate ESC/POS receipt renderer with a Python binding"
 readme = "README.md"
 requires-python = ">=3.11"

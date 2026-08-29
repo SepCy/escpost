@@ -22,7 +22,6 @@ docker-cargo-clean:
 # Run the test suite in the container.
 docker-test:
     {{docker_cargo}} test --workspace --exclude escpost-python
-    scripts/test-development-wrapper
 
 # Run the CLI in the container, e.g. `just docker-run serve --no-open`.
 docker-run *args:
@@ -49,7 +48,6 @@ native-build: frontend-build
 # Run the test suite on the host.
 native-test: frontend-build
     cargo test --workspace --exclude escpost-python
-    scripts/test-development-wrapper
 
 # A debug build reads the web app from disk at run time. Use `frontend-build`
 # first if the CLI must serve it.
@@ -62,6 +60,12 @@ native-web-dev: frontend-install
     scripts/native-web-dev
 
 # --- Utilities ---
+
+# Set the lockstep workspace version and refresh Cargo.lock.
+[doc("Set every publishable Rust crate to one release version.")]
+set-version version:
+    python3 scripts/set-workspace-version {{quote(version)}}
+    cargo metadata --format-version 1 --no-deps > /dev/null
 
 # Regenerate crates/escpost-profiles/profiles/.generated/profiles.json.
 pack:

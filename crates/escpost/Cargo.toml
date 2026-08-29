@@ -21,6 +21,18 @@ include = [
     "/src/**/*",
     "/tests/**/*",
     "/frontend/dist/**/*",
+    # The frontend sources ship alongside the bundle above so that a consumer of
+    # the crate can read and re-derive what it embeds. Nothing in the crate
+    # build reads them: `build.rs` and `rust-embed` only ever touch
+    # `frontend/dist/`. Downstream packaging that starts from the crate (the
+    # Homebrew tap) therefore needs no Bun or Node toolchain.
+    "/frontend/src/**/*",
+    "/frontend/index.html",
+    "/frontend/package.json",
+    "/frontend/bun.lock",
+    "/frontend/bunfig.toml",
+    "/frontend/tsconfig.json",
+    "/frontend/vite.config.ts",
     "/build.rs",
     "/README.md",
     "/LICENSE",

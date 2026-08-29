@@ -111,7 +111,7 @@
     await check("W2 the client on this page is QZ's, not escpost's shim", () => {
       // The shim installs only into a page with no qz, and steps aside when the
       // real client evaluates. Its version constant differs from the client's.
-      assert(qz.version !== undefined, "the client reports no version");
+      assert(qz.version === "2.2.6", "got " + qz.version + "; 2.2.4 means the shim won, not the real client");
       return "qz-tray.js " + qz.version;
     });
 

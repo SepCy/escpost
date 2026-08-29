@@ -506,7 +506,7 @@ requests to the running escpost server. `docker compose up` is the canonical
 Docker workflow: Vite updates the frontend in place, while Watchexec rebuilds
 and restarts the complete Rust process after backend changes. The frontend
 source tree is outside the Rust watch set. `./escpost serve` and
-`docker compose up` start this workflow; `just web-dev` provides the equivalent
+`docker compose up` start this workflow; `just dev` provides the equivalent
 flow for hosts with Rust and Bun. Production builds and Rust tests serve only
 embedded assets; set `ESCPOST_WATCH=0` for a production-like Compose run.
 

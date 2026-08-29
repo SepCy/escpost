@@ -146,7 +146,7 @@ commands can also be invoked directly:
 | Build the release CLI | `just build` |
 | Run the tests | `just test` |
 | Run the CLI | `just run serve` |
-| Run Axum and Vite | `just web-dev` |
+| Run the development stack | `just dev` |
 
 The native build compiles the frontend first and produces
 `target/release/escpost`. To install that checkout on `PATH`:

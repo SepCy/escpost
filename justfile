@@ -32,9 +32,9 @@ test: frontend-build
 run *args:
     cargo run -q -p escpost -- {{args}}
 
-# Run the backend and Vite development server with host toolchains.
-web-dev: frontend-install
-    scripts/native-web-dev
+# Run the complete development stack with host toolchains.
+dev: frontend-install
+    scripts/native-dev
 
 # --- Utilities ---
 

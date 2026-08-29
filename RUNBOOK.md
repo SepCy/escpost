@@ -114,13 +114,17 @@ on any page until you allow that page.
 
 ### 3. Print from a page
 
-Two pages are already being served, standing in for the two kinds of merchant
-site. Both run their checks on load and report which leg of the chain works.
+Two pages are already being served on **8081**, standing in for the two kinds of
+merchant site. Both run their checks on load and report which leg of the chain
+works. Open them directly:
 
 | | |
 |---|---|
-| **/dev/manual-page/** | a page with no QZ client, driving escpost's own injected surface |
-| **/dev/qz-tray-page/** | a till that ships the real `qz-tray.js` and cannot be changed |
+| **http://127.0.0.1:8081/dev/manual-page/** | a page with no QZ client, driving escpost's own injected surface |
+| **http://127.0.0.1:8081/dev/qz-tray-page/** | a till that ships the real `qz-tray.js` and cannot be changed |
+
+That server roots at `extension/`, not at `extension/dev/`, so the qz-tray page
+can reach the vendored client under `vendor/`.
 
 **They will fail the first time, and that is correct.** The site is not allowed
 yet, so nothing was injected and there is no `qz` to call.

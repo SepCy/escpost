@@ -27,7 +27,7 @@ test: frontend-build
 # first if the CLI must serve it.
 [doc("Run the CLI on the host, e.g. `just run serve`.")]
 run *args:
-    cargo run -q -p escpost -- {{args}}
+    cargo run -p escpost -- {{args}}
 
 # Run the native development stack, with Rust auto-restart when Watchexec exists.
 dev: frontend-install

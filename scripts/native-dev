@@ -39,7 +39,7 @@ fi
 
 cargo build -p escpost
 
-set -- cargo run -q -p escpost -- serve \
+set -- cargo run -p escpost -- serve \
     --listen 127.0.0.1:9100 \
     --web-listen 127.0.0.1:9000 \
     --no-web-app

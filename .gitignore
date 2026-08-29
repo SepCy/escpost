@@ -30,3 +30,9 @@ __pycache__/
 
 # Superpowers spec/plan design artifacts (process, not product docs)
 docs/superpowers/
+
+# JavaScript workspace build output
+node_modules/
+dist/
+dist-tsc/
+*.tsbuildinfo

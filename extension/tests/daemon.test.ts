@@ -100,3 +100,22 @@ describe("DaemonClient", () => {
     expect(Object.keys(client)).not.toContain("socket");
   });
 });
+
+describe("availability", () => {
+  it("counts a plain-text health response as running", async () => {
+    // /health answers "ok", not JSON. Parsing it as JSON threw, and the
+    // extension told the user to start an escpost that was already running.
+    const fetchMock = vi.fn().mockResolvedValue(new Response("ok", { status: 200 }));
+    const client = new DaemonClient("http://127.0.0.1:9000", fetchMock as unknown as typeof fetch);
+
+    await expect(client.available()).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith("http://127.0.0.1:9000/health", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("is false when nothing answers", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const client = new DaemonClient("http://127.0.0.1:9000", fetchMock as unknown as typeof fetch, { backoffMs: 0 });
+
+    await expect(client.available()).resolves.toBe(false);
+  });
+});

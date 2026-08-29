@@ -96,9 +96,13 @@ export class DaemonClient {
    *  shape below is the shape, and a client that cannot parse it is broken
    *  rather than out of date. */
   async available(): Promise<boolean> {
+    // Not through #send, which parses every body as JSON. /health answers the
+    // plain string "ok", so parsing it threw and this reported a healthy
+    // escpost as absent.
     try {
-      await this.#send("/health", { method: "GET" });
-      return true;
+      const base = typeof this.#base === "string" ? this.#base : await this.#base();
+      const response = await this.#fetch(base + "/health", { method: "GET" });
+      return response.ok;
     } catch {
       return false;
     }
